@@ -1,14 +1,17 @@
-from langchain_core.messages import AIMessage, SystemMessage
+from typing import List
+
+from langchain_core.messages import AIMessage, SystemMessage, BaseMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.constants import START, END
-from langgraph.graph import StateGraph, MessagesState
+from langgraph.graph import StateGraph, add_messages
 from langgraph.graph.state import CompiledStateGraph
+from typing import TypedDict, Annotated
 
 from codeteam.core.pipeline.agent.config import AgentConfig
 
 
-class AgentState(MessagesState):
-    pass
+class AgentState(TypedDict):
+    messages: Annotated[List[BaseMessage], add_messages]
 
 def agent_node(
     state: AgentState,
@@ -26,7 +29,7 @@ def agent_node(
     }
 
 def create_agent_graph() -> CompiledStateGraph:
-    workflow = StateGraph(AgentState) # noqa
+    workflow: StateGraph = StateGraph(AgentState) # noqa
 
     workflow.add_node("agent", agent_node) # noqa
     workflow.add_edge(START, "agent")

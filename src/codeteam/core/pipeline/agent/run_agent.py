@@ -11,6 +11,7 @@ from codeteam.core.pipeline.agent.graph import create_agent_graph, AgentState
 def run_agent(
     system_prompt: str,
     model_name: str,
+    task: str,
     settings: Settings
 ):
     chat_model: BaseChatModel = build_chat_model(
@@ -35,7 +36,7 @@ def run_agent(
     )
 
     initial_state = AgentState(
-        messages = [HumanMessage(content = "Привет! Сделай архитектуру проекта.")]
+        messages = [HumanMessage(content = task)]
     )
     events = agent.stream(initial_state, config = config)
 
