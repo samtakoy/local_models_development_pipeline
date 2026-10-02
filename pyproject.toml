@@ -1,0 +1,28 @@
+[project]
+name = "codeteam-v2"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = "==3.13.9"
+dependencies = [
+    "httpx==0.28.1",
+    "langchain==1.4.3",
+    "langchain-core==1.6.6",
+    "langchain-ollama==1.1.0",
+    "langgraph==1.2.12",
+    "pydantic==2.13.5",
+    "python-dotenv==1.2.4",
+]
+
+
+[project.scripts]
+codeteam = "codeteam.app.cli.main:main"
+
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/codeteam"]
+
