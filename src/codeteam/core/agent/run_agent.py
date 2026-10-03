@@ -4,8 +4,8 @@ from langchain_core.runnables import RunnableConfig
 
 from codeteam.app.settings import Settings
 from codeteam.common.llm import build_chat_model, OllamaConfig, GenerationMode, ReasoningLevel
-from codeteam.core.pipeline.agent.config import AgentConfig
-from codeteam.core.pipeline.agent.graph import create_agent_graph, AgentState
+from codeteam.core.agent.config import AgentConfig
+from codeteam.core.agent.graph import create_agent_graph, AgentState
 
 
 def run_agent(

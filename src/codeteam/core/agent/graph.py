@@ -7,7 +7,7 @@ from langgraph.graph import StateGraph, add_messages
 from langgraph.graph.state import CompiledStateGraph
 from typing import TypedDict, Annotated
 
-from codeteam.core.pipeline.agent.config import AgentConfig
+from codeteam.core.agent.config import AgentConfig
 
 
 class AgentState(TypedDict):

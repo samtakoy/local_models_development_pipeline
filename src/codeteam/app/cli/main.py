@@ -1,6 +1,6 @@
 from codeteam.app.config import load_project_config
 from codeteam.app.settings import load_settings
-from codeteam.core.pipeline.agent.run_agent import run_agent
+from codeteam.core.agent.run_agent import run_agent
 
 
 def main():
