@@ -6,9 +6,9 @@ from langchain_core.runnables import RunnableConfig
 from codeteam.app.settings import Settings
 from codeteam.common.llm import build_chat_model, OllamaConfig, GenerationMode, ReasoningLevel
 from codeteam.core.agent.config import AgentConfig
-from codeteam.core.agent.graph import create_agent_graph, AgentState
+from codeteam.core.agent.graph import create_agent_graph, AgentState, AGENT_CFG_NAME
 from codeteam.core.agent.workspace import Workspace, PRIVATE_ROOT
-from codeteam.core.tools.files import build_read_tools
+from codeteam.core.tools.files import build_read_tools, READ_TOOL_NAME
 
 
 def run_agent(
@@ -42,10 +42,14 @@ def run_agent(
 
     config = RunnableConfig(
         configurable = {
-            "architector": AgentConfig(
+            AGENT_CFG_NAME: AgentConfig(
                 system_prompt = system_prompt,
                 task = task,
-                chat_model = chat_model.bind_tools(tools)
+                chat_model = chat_model.bind_tools(tools),
+                warmup_calls = [
+                    # читаем заранее корневую папку проекта за агента
+                    (READ_TOOL_NAME, {"file_path": "."})
+                ],
             )
         }
     )

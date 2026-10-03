@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 
-from langchain_core.language_models import BaseChatModel
 from langchain_core.runnables import Runnable
 
 
@@ -8,4 +7,7 @@ from langchain_core.runnables import Runnable
 class AgentConfig:
     system_prompt: str
     task: str
-    chat_model: Runnable # BaseChatModel
+    # BaseChatModel
+    chat_model: Runnable
+    # имя инструмента и аргументы - вызываются на этапе инициализации агента
+    warmup_calls: list[tuple[str, dict]]
