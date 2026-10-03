@@ -13,3 +13,6 @@ wheels/
 
 .env
 /docs/flashcards/
+
+# Прогоны агентов
+/runs/

@@ -7,15 +7,18 @@ from codeteam.app.settings import Settings
 from codeteam.common.llm import build_chat_model, OllamaConfig, GenerationMode, ReasoningLevel
 from codeteam.core.agent.config import AgentConfig
 from codeteam.core.agent.graph import create_agent_graph, AgentState, AGENT_CFG_NAME
+from codeteam.core.agent.journal import AgentJournal
 from codeteam.core.agent.workspace import Workspace, PRIVATE_ROOT
 from codeteam.core.tools.files import build_read_tools, READ_TOOL_NAME
 
 
 def run_agent(
+    agent_name: str,
     system_prompt: str,
     model_name: str,
     task: str,
     project_path: str,
+    journal_path: Path,
     settings: Settings
 ):
 
@@ -55,8 +58,13 @@ def run_agent(
     )
 
     initial_state = AgentState(messages = [])
-    events = agent.stream(input = initial_state, config = config)
+    journal = AgentJournal(path = journal_path, agent_name = agent_name, model_name = model_name)
+    try:
+        for event in agent.stream(input = initial_state, config = config):
+            journal.write(event = event)
+    except Exception as error:
+        journal.write_error(error = error)
+        raise
 
-    for event in events:
-        print(event)
+    journal.finish()
 
