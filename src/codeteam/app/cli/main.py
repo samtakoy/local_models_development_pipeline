@@ -12,9 +12,10 @@ def main():
     print(project.path)
     print(project.task)
     run_agent(
-        system_prompt = f"Ты архитектор. Проект лежит в папке {project.path}",
+        system_prompt = f"Ты архитектор.",
         model_name = "qwen3.5:9b",
         task = project.task,
+        project_path = project.path,
         settings = settings
     )
 

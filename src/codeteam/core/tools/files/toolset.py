@@ -34,6 +34,14 @@ def build_file_tools(*, workspace: Workspace) -> list[BaseTool]:
         build_edit_tool(workspace = workspace, seen_files = seen_files),
     ]
 
+def build_read_tools(*, workspace: Workspace) -> list[BaseTool]:
+    ignore_rules = _workspace_ignore_rules(workspace = workspace)
+    return [
+        build_read_tool(workspace = workspace, seen_files = SeenFiles(), ignore_rules = ignore_rules),
+        build_glob_tool(workspace = workspace, ignore_rules = ignore_rules),
+        build_grep_tool(workspace = workspace, ignore_rules = ignore_rules),
+    ]
+
 
 def _workspace_ignore_rules(*, workspace: Workspace) -> IgnoreRules:
     """
