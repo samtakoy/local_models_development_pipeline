@@ -1,4 +1,4 @@
 project = "/Users/samtakot/devs/learnings/llm-eng/homework/test_code/tree-view-proto"
 
 [task]
-question = "Где в проекте точка входа для ручной проверки и какие команды она поддерживает?"
+question = "Опиши архитектуру проекта верхнеуровнево."

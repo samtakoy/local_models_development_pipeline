@@ -6,6 +6,7 @@ from codeteam.app.settings import Settings
 from codeteam.common.llm import build_chat_model, OllamaConfig, GenerationMode, ReasoningLevel
 from codeteam.core.agent.config import AgentConfig
 from codeteam.core.agent.graph import create_agent_graph, AgentState
+from codeteam.core.agent.tools import read_file
 
 
 def run_agent(
@@ -24,21 +25,24 @@ def run_agent(
         reasoning_level = ReasoningLevel.LOW,
     )
 
-    agent = create_agent_graph()
+    tools = [read_file]
+
+    agent = create_agent_graph(tools = tools)
 
     config = RunnableConfig(
         configurable = {
             "architector": AgentConfig(
                 system_prompt = system_prompt,
-                chat_model = chat_model
+                task = task,
+                chat_model = chat_model.bind_tools(tools)
             )
         }
     )
 
     initial_state = AgentState(
-        messages = [HumanMessage(content = task)]
+        messages = []
     )
-    events = agent.stream(initial_state, config = config)
+    events = agent.stream(input = initial_state, config = config)
 
     for event in events:
         print(event)
