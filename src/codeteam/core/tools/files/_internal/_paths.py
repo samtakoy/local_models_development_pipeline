@@ -22,7 +22,7 @@ def resolve_visible_path(*, workspace: Workspace, ignore_rules: IgnoreRules, pat
         ignore_rules: правила пропуска файлов проекта.
         path: путь от агента, абсолютный или относительно папки проекта.
 
-    Возвращает: Существующий путь внутри папок чтения, не скрытый правилами.
+    Возвращает: Существующий путь внутри папок чтения, не закрытый правилами.
         Ошибку для агента поднимает ToolException.
     """
     try:
@@ -40,7 +40,7 @@ def resolve_visible_path(*, workspace: Workspace, ignore_rules: IgnoreRules, pat
 
 def refuse_hidden_path(*, workspace: Workspace, ignore_rules: IgnoreRules, path: Path) -> None:
     """
-    Отказывает, если путь скрыт правилами пропуска проекта.
+    Отказывает, если путь закрыт правилами пропуска проекта.
 
         workspace: рабочее место вызова.
         ignore_rules: правила пропуска файлов проекта.
@@ -48,10 +48,10 @@ def refuse_hidden_path(*, workspace: Workspace, ignore_rules: IgnoreRules, path:
 
     Ошибку для агента поднимает ToolException.
     """
-    if ignore_rules.is_ignored(path = path):
+    if ignore_rules.is_closed(path = path):
         shown_path = workspace.display_path(path = path)
         raise ToolException(
-            f"Ошибка: {shown_path} закрыт: его скрывают правила проекта (служебные имена и .gitignore)"
+            f"Ошибка: {shown_path} закрыт для агента правилами проекта"
         )
 
 

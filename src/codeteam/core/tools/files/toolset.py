@@ -3,13 +3,28 @@
 from langchain_core.tools import BaseTool
 
 from codeteam.common.files import IgnoreRules, load_ignore_rules
-from codeteam.core.agent.workspace import IGNORED_NAMES, Workspace
+from codeteam.core.agent.workspace import CLOSED_NAMES, Workspace
 from codeteam.core.tools.files._internal._seen_files import SeenFiles
 from codeteam.core.tools.files.glob import build_glob_tool
 from codeteam.core.tools.files.grep import build_grep_tool
 from codeteam.core.tools.files.read import build_read_tool
 from codeteam.core.tools.files.edit import build_edit_tool
 from codeteam.core.tools.files.write import build_write_tool
+
+# Служебные папки и файлы, которые поиск glob и grep пропускает на любой глубине;
+# запись в виде правил .gitignore.
+SEARCH_SKIPPED_NAMES = (
+    ".git/",
+    ".venv/",
+    "venv/",
+    "node_modules/",
+    "__pycache__/",
+    ".mypy_cache/",
+    ".pytest_cache/",
+    ".ruff_cache/",
+    ".idea/",
+    ".DS_Store",
+)
 
 
 def build_file_tools(*, workspace: Workspace) -> list[BaseTool]:
@@ -53,6 +68,7 @@ def _workspace_ignore_rules(*, workspace: Workspace) -> IgnoreRules:
     """
     return load_ignore_rules(
         project_dir = workspace.project_dir,
-        ignored_names = IGNORED_NAMES,
+        closed_names = CLOSED_NAMES,
+        search_skipped_names = SEARCH_SKIPPED_NAMES,
         open_dirs = (workspace.private_dir,),
     )

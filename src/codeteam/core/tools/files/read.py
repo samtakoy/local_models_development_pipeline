@@ -36,7 +36,7 @@ READ_DESCRIPTION = """Читает текстовый файл. Первая с�
 Для папки показывает её содержимое.
 Чтобы найти нужный текст в большом файле, используй grep.
 Если не уверен в пути к файлу, найди его через glob по маске.
-Файлы, скрытые правилами проекта не читает и в папке не показывает."""
+Закрытые файлы проекта (.env, личные папки других агентов) не читает и в папке не показывает."""
 
 
 class ReadArguments(BaseModel):
@@ -116,7 +116,7 @@ def _read(
     if path.is_dir():
         entries = [
             entry for entry in list_directory(path = path)
-            if not ignore_rules.is_ignored(path = path / entry.removesuffix("/"))
+            if not ignore_rules.is_closed(path = path / entry.removesuffix("/"))
         ]
         if not entries:
             return f"Папка {shown_path} пуста"
