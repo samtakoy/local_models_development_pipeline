@@ -151,7 +151,7 @@ def build_disabled_bash_tool(*, refusal: str) -> BaseTool:
 
 def _read_restrictions(*, workspace: Workspace) -> ReadRestrictions:
     """
-    Собирает запреты чтения команды: закрытые файлы проекта и личные папки, кроме своей.
+    Собирает запреты чтения команды: закрытые файлы проекта и личные папки, кроме своей и входов.
 
         workspace: рабочее место вызова.
 
@@ -161,7 +161,7 @@ def _read_restrictions(*, workspace: Workspace) -> ReadRestrictions:
         root = workspace.project_dir,
         closed_file_names = CLOSED_FILE_NAMES,
         closed_dirs = (workspace.project_dir / PRIVATE_ROOT,),
-        open_dirs = (workspace.private_dir,),
+        open_dirs = (workspace.private_dir, *workspace.input_dirs),
     )
 
 

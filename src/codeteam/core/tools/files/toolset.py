@@ -62,7 +62,7 @@ def build_read_tools(*, workspace: Workspace) -> list[BaseTool]:
 
 def _workspace_ignore_rules(*, workspace: Workspace) -> IgnoreRules:
     """
-    Собирает правила пропуска проекта; личная папка вызова от правил открыта.
+    Собирает правила пропуска проекта; личная папка вызова и входы от правил открыты.
 
         workspace: рабочее место вызова.
 
@@ -72,5 +72,5 @@ def _workspace_ignore_rules(*, workspace: Workspace) -> IgnoreRules:
         project_dir = workspace.project_dir,
         closed_names = CLOSED_NAMES,
         search_skipped_names = SEARCH_SKIPPED_NAMES,
-        open_dirs = (workspace.private_dir,),
+        open_dirs = (workspace.private_dir, *workspace.input_dirs),
     )

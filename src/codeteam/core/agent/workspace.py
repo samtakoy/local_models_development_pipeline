@@ -29,6 +29,8 @@ class Workspace:
 
         project_dir: общая папка проекта; относительные пути считаются от неё.
         private_dir: личная папка вызова: черновик, журнал, ответ.
+        input_dirs: папки результатов других агентов; открыты для чтения внутри закрытой папки
+            личных папок.
         readable_dirs: папки, где вызову разрешено чтение.
         writable_dirs: папки, где вызову разрешены запись и правка.
         refusal_hint: пояснение к отказу по пути для агента, None — без пояснения.
@@ -36,6 +38,7 @@ class Workspace:
 
     project_dir: Path
     private_dir: Path
+    input_dirs: tuple[Path, ...]
     readable_dirs: tuple[Path, ...]
     writable_dirs: tuple[Path, ...]
     refusal_hint: str | None

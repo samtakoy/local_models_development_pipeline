@@ -24,6 +24,7 @@ def run_agent(
     *,
     role: AgentRole,
     task: str,
+    input_dirs: tuple[Path, ...],
     project_path: str,
     journal_path: Path,
     settings: Settings,
@@ -33,6 +34,7 @@ def run_agent(
 
         role: роль агента.
         task: задача агенту.
+        input_dirs: папки результатов других агентов: агент их читает в разогреве.
         project_path: папка рабочего проекта.
         journal_path: файл журнала агента.
         settings: настройки приложения.
@@ -53,6 +55,9 @@ def run_agent(
     private_dir = project_dir / PRIVATE_ROOT / role.name
     relative_private_dir = private_dir.relative_to(project_dir)
 
+    # Личная папка с папкой черновика создаётся до запуска агента
+    draft_dir(private_dir = private_dir).mkdir(parents = True, exist_ok = True)
+
     # Просмотренный файлы - одинаковые для фазы работы и фазы черновика
     seen_files = SeenFiles()
 
@@ -60,6 +65,7 @@ def run_agent(
     workspace = Workspace(
         project_dir = project_dir,
         private_dir = private_dir,
+        input_dirs = input_dirs,
         readable_dirs = (project_dir,),
         # отдельно укажем папку и файл
         # writable_dirs = (private_dir,),
@@ -79,6 +85,7 @@ def run_agent(
     draft_workspace = Workspace(
         project_dir = project_dir,
         private_dir = private_dir,
+        input_dirs = (),
         readable_dirs = (private_dir,),
         # отдельно укажем папку и файл
         # writable_dirs = (private_dir,),
@@ -122,7 +129,8 @@ def run_agent(
                 chat_model = bound_chat_model,
                 warmup_calls = [
                     # читаем заранее корневую папку проекта за агента
-                    (READ_TOOL_NAME, {"file_path": "."})
+                    (READ_TOOL_NAME, {"file_path": "."}),
+                    *_input_reads(project_dir = project_dir, input_dirs = input_dirs),
                 ],
                 history_token_limit = 30000,
                 history_token_hard_limit = 60000,
@@ -150,3 +158,24 @@ def run_agent(
     journal.finish()
 
     return draft_dir(private_dir = private_dir)
+
+
+def _input_reads(*, project_dir: Path, input_dirs: tuple[Path, ...]) -> list[tuple[str, dict]]:
+    """
+    Собирает вызовы разогрева, читающие результаты других агентов.
+
+        project_dir: папка проекта.
+        input_dirs: папки результатов других агентов.
+
+    Возвращает: Вызовы read: список файлов каждой папки и каждый её файл по порядку имён.
+    """
+    calls = []
+    for input_dir in input_dirs:
+        relative_dir = input_dir.relative_to(project_dir)
+        calls.append((READ_TOOL_NAME, {"file_path": str(relative_dir)}))
+        calls.extend(
+            (READ_TOOL_NAME, {"file_path": str(relative_dir / section.name)})
+            for section in sorted(input_dir.glob("*.md"))
+        )
+
+    return calls
