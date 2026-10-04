@@ -74,7 +74,7 @@ def build_write_tool(
 
 def _write(*, workspace: Workspace, seen_files: SeenFiles, path: Path, content: str) -> str:
     """
-    Записывает файл целиком, существующий — только после свежего чтения.
+    Записывает файл целиком; существующий непустой — только после свежего чтения.
 
         workspace: рабочее место вызова.
         seen_files: файлы, которые видел вызов.
@@ -87,7 +87,8 @@ def _write(*, workspace: Workspace, seen_files: SeenFiles, path: Path, content: 
     if path.is_dir():
         raise ToolException(f"Ошибка: {shown_path} — папка")
 
-    if path.exists():
+    # Пустой файл перезаписывается без чтения: терять в нём нечего
+    if path.exists() and path.stat().st_size > 0:
         stale_reason = seen_files.stale_reason(path = path, shown_path = shown_path)
         if stale_reason is not None:
             raise ToolException(stale_reason)
