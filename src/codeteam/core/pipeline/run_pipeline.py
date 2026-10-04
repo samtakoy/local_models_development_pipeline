@@ -33,6 +33,12 @@ def run_pipeline(*, project: ProjectSettings, run_dir: Path, model_name: str, se
             )
         }
     )
-    initial_state = PipelineState(task = project.task, research_dir = None, plan_dir = None)
+    initial_state = PipelineState(
+        task = project.task,
+        research_dir = None,
+        plan_dir = None,
+        stage_files = [],
+        stage_index = 0,
+    )
 
     return create_pipeline_graph().invoke(input = initial_state, config = config)

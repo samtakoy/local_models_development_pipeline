@@ -1,5 +1,7 @@
 """Граф пайплайна: кто из агентов за кем идёт и что кому передаётся."""
 
+import re
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TypedDict
@@ -12,13 +14,35 @@ from langgraph.graph.state import CompiledStateGraph
 from codeteam.app.settings import Settings
 from codeteam.core.agent.role import AgentRole
 from codeteam.core.agent.run_agent import run_agent
-from codeteam.core.pipeline.prompts import ARCHITECT_TASK, RESEARCHER_TASK
+from codeteam.core.agent.workspace import PRIVATE_ROOT
+from codeteam.core.pipeline.prompts import ARCHITECT_TASK, RESEARCHER_TASK, SENIOR_TASK
 from codeteam.core.roles import load_role_prompt
 
 PIPELINE_CFG_NAME = "pipeline"
 
 RESEARCHER_NODE_ID = "researcher"
 ARCHITECT_NODE_ID = "architect"
+SENIOR_NODE_ID = "senior"
+FINISH_STAGE_NODE_ID = "finish_stage"
+
+# Файл общего решения в черновике архитектора.
+ARCHITECTURE_FILE_NAME = "000_architecture.md"
+
+# Файл этапа в черновике архитектора: номер этапа, тема, .md.
+STAGE_FILE_PATTERN = re.compile(r"^(\d+)_.+\.md$")
+
+# Папка этапа внутри личной папки этапа: копии общего решения и файла этапа, вход сеньора.
+STAGE_TASK_DIR_NAME = "task"
+
+# Номер журнала первого агента этапов: после исследователя и архитектора.
+FIRST_STAGE_JOURNAL_NUMBER = 3
+
+# Агентов на этап: сеньор и разработчик.
+STAGE_AGENT_COUNT = 2
+
+
+class PipelineError(RuntimeError):
+    """Результат агента не годится для продолжения пайплайна."""
 
 
 class PipelineState(TypedDict):
@@ -27,12 +51,16 @@ class PipelineState(TypedDict):
 
         task: задача пользователя.
         research_dir: папка черновика исследователя; None, пока он не отработал.
-        plan_dir: папка черновика архитектора: файлы этапов; None, пока он не отработал.
+        plan_dir: папка черновика архитектора: общее решение и файлы этапов; None, пока он не отработал.
+        stage_files: файлы этапов из черновика архитектора по порядку имён.
+        stage_index: номер текущего этапа в stage_files, с нуля.
     """
 
     task: str
     research_dir: Path | None
     plan_dir: Path | None
+    stage_files: list[Path]
+    stage_index: int
 
 
 @dataclass(frozen = True)
@@ -59,7 +87,7 @@ def researcher_node(state: PipelineState, config: RunnableConfig):
     research_dir = _run_role(
         cfg = cfg,
         name = RESEARCHER_NODE_ID,
-        number = 1,
+        journal_name = f"01_{RESEARCHER_NODE_ID}",
         task = task,
         input_dirs = (),
         private_dir_name = Path(RESEARCHER_NODE_ID),
@@ -80,19 +108,96 @@ def architect_node(state: PipelineState, config: RunnableConfig):
     plan_dir = _run_role(
         cfg = cfg,
         name = ARCHITECT_NODE_ID,
-        number = 2,
+        journal_name = f"02_{ARCHITECT_NODE_ID}",
         task = task,
         input_dirs = (research_dir,),
         private_dir_name = Path(ARCHITECT_NODE_ID),
         extra_writable_dirs = (),
     )
 
-    return {"plan_dir": plan_dir}
+    return {"plan_dir": plan_dir, "stage_files": find_stage_files(plan_dir = plan_dir)}
+
+
+def senior_node(state: PipelineState, config: RunnableConfig):
+    """Запускает сеньора текущего этапа: по общему решению и файлу этапа он пишет план реализации."""
+    cfg: PipelineConfig = config["configurable"][PIPELINE_CFG_NAME]
+    project_dir = Path(cfg.project_path).resolve()
+    stage_index = state["stage_index"]
+    stage_file = state["stage_files"][stage_index]
+    stage_dir_name = _stage_dir_name(stage_file = stage_file)
+    stage_task_dir = _prepare_stage_task_dir(
+        plan_dir = state["plan_dir"],
+        stage_file = stage_file,
+        target_dir = project_dir / PRIVATE_ROOT / stage_dir_name / STAGE_TASK_DIR_NAME,
+    )
+    task = SENIOR_TASK.format(
+        task = state["task"],
+        stage_task_dir = stage_task_dir.relative_to(project_dir),
+        architecture_file = ARCHITECTURE_FILE_NAME,
+        stage_file = stage_file.name,
+    )
+    _run_role(
+        cfg = cfg,
+        name = SENIOR_NODE_ID,
+        journal_name = _stage_journal_name(
+            stage_index = stage_index,
+            role_position = 0,
+            stage_dir_name = stage_dir_name,
+            role_name = SENIOR_NODE_ID,
+        ),
+        task = task,
+        input_dirs = (stage_task_dir,),
+        private_dir_name = stage_dir_name / SENIOR_NODE_ID,
+        extra_writable_dirs = (),
+    )
+
+    return {}
+
+
+def finish_stage_node(state: PipelineState):
+    """Закрывает текущий этап и переходит к следующему."""
+    return {"stage_index": state["stage_index"] + 1}
+
+
+def route_next_stage(state: PipelineState) -> str:
+    """
+    Выбирает, куда идти после архитектора или после этапа.
+
+        state: состояние пайплайна.
+
+    Возвращает: Узел сеньора, если остались этапы; иначе END.
+    """
+    if state["stage_index"] < len(state["stage_files"]):
+        return SENIOR_NODE_ID
+
+    return END
+
+
+def find_stage_files(*, plan_dir: Path) -> list[Path]:
+    """
+    Собирает файлы этапов из черновика архитектора.
+
+        plan_dir: папка черновика архитектора.
+
+    Возвращает: Файлы этапов по порядку имён: все файлы вида <номер>_<тема>.md, кроме общего решения.
+    """
+    if not (plan_dir / ARCHITECTURE_FILE_NAME).is_file():
+        raise PipelineError(f"в черновике архитектора {plan_dir} нет файла {ARCHITECTURE_FILE_NAME}")
+
+    stage_files = sorted(
+        path
+        for path in plan_dir.iterdir()
+        if path.is_file() and path.name != ARCHITECTURE_FILE_NAME and STAGE_FILE_PATTERN.match(path.name)
+    )
+    if not stage_files:
+        raise PipelineError(f"в черновике архитектора {plan_dir} нет файлов этапов")
+
+    return stage_files
 
 
 def create_pipeline_graph() -> CompiledStateGraph:
     """
-    Собирает граф пайплайна: исследователь, затем архитектор.
+    Собирает граф пайплайна: исследователь, архитектор, затем по каждому этапу сеньор.
 
     Возвращает: Граф пайплайна.
     """
@@ -100,19 +205,67 @@ def create_pipeline_graph() -> CompiledStateGraph:
 
     workflow.add_node(RESEARCHER_NODE_ID, researcher_node)
     workflow.add_node(ARCHITECT_NODE_ID, architect_node)
+    workflow.add_node(SENIOR_NODE_ID, senior_node)
+    workflow.add_node(FINISH_STAGE_NODE_ID, finish_stage_node)
 
     workflow.add_edge(START, RESEARCHER_NODE_ID)
     workflow.add_edge(RESEARCHER_NODE_ID, ARCHITECT_NODE_ID)
-    workflow.add_edge(ARCHITECT_NODE_ID, END)
+    workflow.add_conditional_edges(ARCHITECT_NODE_ID, route_next_stage)
+    workflow.add_edge(SENIOR_NODE_ID, FINISH_STAGE_NODE_ID)
+    workflow.add_conditional_edges(FINISH_STAGE_NODE_ID, route_next_stage)
 
     return workflow.compile()
+
+
+def _stage_dir_name(*, stage_file: Path) -> Path:
+    """
+    Строит имя личной папки этапа по файлу этапа.
+
+        stage_file: файл этапа.
+
+    Возвращает: Путь папки этапа внутри папки личных папок: stage_<номер этапа>.
+    """
+    return Path(f"stage_{STAGE_FILE_PATTERN.match(stage_file.name).group(1)}")
+
+
+def _prepare_stage_task_dir(*, plan_dir: Path, stage_file: Path, target_dir: Path) -> Path:
+    """
+    Копирует общее решение архитектора и файл этапа в папку задачи этапа.
+
+        plan_dir: папка черновика архитектора.
+        stage_file: файл этапа.
+        target_dir: папка задачи этапа.
+
+    Возвращает: Папку задачи этапа.
+    """
+    target_dir.mkdir(parents = True, exist_ok = True)
+    shutil.copy2(plan_dir / ARCHITECTURE_FILE_NAME, target_dir / ARCHITECTURE_FILE_NAME)
+    shutil.copy2(stage_file, target_dir / stage_file.name)
+
+    return target_dir
+
+
+def _stage_journal_name(*, stage_index: int, role_position: int, stage_dir_name: Path, role_name: str) -> str:
+    """
+    Строит имя журнала агента этапа.
+
+        stage_index: номер этапа в списке этапов, с нуля.
+        role_position: место роли в этапе, с нуля: сеньор 0, разработчик 1.
+        stage_dir_name: имя личной папки этапа.
+        role_name: имя роли.
+
+    Возвращает: Имя журнала без расширения, например 03_stage_100_senior.
+    """
+    number = FIRST_STAGE_JOURNAL_NUMBER + stage_index * STAGE_AGENT_COUNT + role_position
+
+    return f"{number:02d}_{stage_dir_name}_{role_name}"
 
 
 def _run_role(
     *,
     cfg: PipelineConfig,
     name: str,
-    number: int,
+    journal_name: str,
     task: str,
     input_dirs: tuple[Path, ...],
     private_dir_name: Path,
@@ -123,7 +276,7 @@ def _run_role(
 
         cfg: настройки запуска пайплайна.
         name: имя роли; по нему берётся промпт роли.
-        number: номер агента в прогоне для имени журнала.
+        journal_name: имя журнала агента без расширения.
         task: задача агенту.
         input_dirs: папки результатов других агентов.
         private_dir_name: путь личной папки агента внутри папки личных папок.
@@ -144,6 +297,6 @@ def _run_role(
         project_path = cfg.project_path,
         private_dir_name = private_dir_name,
         extra_writable_dirs = extra_writable_dirs,
-        journal_path = cfg.run_dir / f"{number:02d}_{name}.md",
+        journal_path = cfg.run_dir / f"{journal_name}.md",
         settings = cfg.settings,
     )
