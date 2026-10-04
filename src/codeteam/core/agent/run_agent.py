@@ -111,6 +111,7 @@ def run_agent(
                     (READ_TOOL_NAME, {"file_path": "."})
                 ],
                 history_token_limit = 30000,
+                history_token_hard_limit = 60000,
                 max_resets = 10,
                 limit_notice = limit_notice,
                 reinit_notice = reinit_notice,
@@ -120,7 +121,7 @@ def run_agent(
         }
     )
 
-    initial_state = AgentState(messages = [], reset_count = 0)
+    initial_state = AgentState(messages = [], reset_count = 0, answer_written = False)
     journal = AgentJournal(path = journal_path, agent_name = agent_name, model_name = model_name)
     journal.write_tools(tools = bound_chat_model.kwargs["tools"])
     try:

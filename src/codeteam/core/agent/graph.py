@@ -1,6 +1,7 @@
 import logging
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from pathlib import Path
 
 from langchain_core.messages import SystemMessage, BaseMessage, HumanMessage, AIMessage, ToolMessage, RemoveMessage
 from langchain_core.runnables import RunnableConfig
@@ -22,6 +23,8 @@ class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
     # сколько уже было сбросов истории (компактизаций)
     reset_count: int
+    # менялись ли файлы ответа на последнем шаге инструментов
+    answer_written: bool
 
 AGENT_CFG_NAME = "agent"
 
@@ -99,6 +102,26 @@ def limit_notice_node(
 
     return {"messages": [HumanMessage(content = cfg.limit_notice)]}
 
+def make_tools_node(*, tools: list[BaseTool]) -> Callable:
+    """
+    Собирает узел инструментов, который отмечает, менялись ли файлы ответа.
+
+        tools: инструменты узла.
+
+    Возвращает: Узел графа.
+    """
+    tool_node = ToolNode(tools)
+
+    def tools_node(state: AgentState, config: RunnableConfig):
+        """Выполняет вызовы инструментов и сравнивает файлы ответа до и после."""
+        cfg: AgentConfig = config["configurable"][AGENT_CFG_NAME]
+        before = _answer_snapshot(cfg = cfg)
+        update = tool_node.invoke(state, config)
+
+        return {**update, "answer_written": _answer_snapshot(cfg = cfg) != before}
+
+    return tools_node
+
 def route_after_tools(state: AgentState, config: RunnableConfig) -> str:
     """
     Выбирает узел после выполнения инструментов: продолжение работы или фаза черновика.
@@ -109,7 +132,11 @@ def route_after_tools(state: AgentState, config: RunnableConfig) -> str:
     Возвращает: Имя следующего узла.
     """
     cfg: AgentConfig = config["configurable"][AGENT_CFG_NAME]
-    if _last_input_tokens(messages = state["messages"]) >= cfg.history_token_limit:
+    input_tokens = _last_input_tokens(messages = state["messages"])
+    if input_tokens >= cfg.history_token_hard_limit:
+        return LIMIT_NOTICE_NODE_ID
+
+    if input_tokens >= cfg.history_token_limit and not state["answer_written"]:
         return LIMIT_NOTICE_NODE_ID
 
     return AGENT_NODE_ID
@@ -156,7 +183,7 @@ def create_agent_graph(
 
     workflow.add_node(INIT_NODE_ID, init_node)
     workflow.add_node(AGENT_NODE_ID, agent_node)
-    workflow.add_node(TOOL_NODE_ID, ToolNode(tools))
+    workflow.add_node(TOOL_NODE_ID, make_tools_node(tools = tools))
     workflow.add_node(LIMIT_NOTICE_NODE_ID, limit_notice_node)
     workflow.add_node(DRAFT_AGENT_NODE_ID, agent_node)
     workflow.add_node(DRAFT_TOOL_NODE_ID, ToolNode(draft_tools))
@@ -239,3 +266,16 @@ def _is_unfinished(*, response: AIMessage) -> bool:
         and DONE_PATTERN.search(str(response.content)) is None
         and TODO_PATTERN.search(str(response.content)) is None
     )
+
+def _answer_snapshot(*, cfg: AgentConfig) -> dict[Path, tuple[int, int]]:
+    """
+    Снимает состояние файлов ответа: черновика и контекста.
+
+        cfg: настройки агента.
+
+    Возвращает: Время изменения и размер каждого файла ответа по пути.
+    """
+    private_dir = cfg.project_dir / cfg.relative_private_dir
+    paths = [*draft_dir(private_dir = private_dir).glob("**/*"), context_path(private_dir = private_dir)]
+
+    return {path: (path.stat().st_mtime_ns, path.stat().st_size) for path in paths if path.is_file()}

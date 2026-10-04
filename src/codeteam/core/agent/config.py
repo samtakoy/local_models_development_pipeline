@@ -14,6 +14,8 @@ class AgentConfig:
     warmup_calls: list[tuple[str, dict]]
     # лимит входных токенов
     history_token_limit: int
+    # потолок входных токенов, после которого фаза черновика включается и во время записи ответа
+    history_token_hard_limit: int
     # предел сбросов истории агента в 0
     max_resets: int
     limit_notice: str
