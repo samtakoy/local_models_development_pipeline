@@ -12,7 +12,7 @@ from langgraph.graph.state import CompiledStateGraph
 from codeteam.app.settings import Settings
 from codeteam.core.agent.role import AgentRole
 from codeteam.core.agent.run_agent import run_agent
-from codeteam.core.pipeline.prompts import ARCHITECT_TASK
+from codeteam.core.pipeline.prompts import ARCHITECT_TASK, RESEARCHER_TASK
 from codeteam.core.roles import load_role_prompt
 
 PIPELINE_CFG_NAME = "pipeline"
@@ -55,7 +55,8 @@ class PipelineConfig:
 def researcher_node(state: PipelineState, config: RunnableConfig):
     """Запускает исследователя кода на задаче пользователя."""
     cfg: PipelineConfig = config["configurable"][PIPELINE_CFG_NAME]
-    research_dir = _run_role(cfg = cfg, name = RESEARCHER_NODE_ID, number = 1, task = state["task"], input_dirs = ())
+    task = RESEARCHER_TASK.format(task = state["task"])
+    research_dir = _run_role(cfg = cfg, name = RESEARCHER_NODE_ID, number = 1, task = task, input_dirs = ())
 
     return {"research_dir": research_dir}
 
