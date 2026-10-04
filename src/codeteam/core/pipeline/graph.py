@@ -1,5 +1,6 @@
 """Граф пайплайна: кто из агентов за кем идёт и что кому передаётся."""
 
+import logging
 import re
 import shutil
 from dataclasses import dataclass
@@ -12,17 +13,21 @@ from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from codeteam.app.settings import Settings
+from codeteam.common.git import commit_all
 from codeteam.core.agent.role import AgentRole
 from codeteam.core.agent.run_agent import run_agent
 from codeteam.core.agent.workspace import PRIVATE_ROOT
-from codeteam.core.pipeline.prompts import ARCHITECT_TASK, RESEARCHER_TASK, SENIOR_TASK
+from codeteam.core.pipeline.prompts import ARCHITECT_TASK, DEVELOPER_TASK, RESEARCHER_TASK, SENIOR_TASK
 from codeteam.core.roles import load_role_prompt
+
+logger = logging.getLogger(__name__)
 
 PIPELINE_CFG_NAME = "pipeline"
 
 RESEARCHER_NODE_ID = "researcher"
 ARCHITECT_NODE_ID = "architect"
 SENIOR_NODE_ID = "senior"
+DEVELOPER_NODE_ID = "developer"
 FINISH_STAGE_NODE_ID = "finish_stage"
 
 # Файл общего решения в черновике архитектора.
@@ -54,6 +59,7 @@ class PipelineState(TypedDict):
         plan_dir: папка черновика архитектора: общее решение и файлы этапов; None, пока он не отработал.
         stage_files: файлы этапов из черновика архитектора по порядку имён.
         stage_index: номер текущего этапа в stage_files, с нуля.
+        stage_plan_dir: папка плана сеньора текущего этапа; None, пока он не отработал.
     """
 
     task: str
@@ -61,6 +67,7 @@ class PipelineState(TypedDict):
     plan_dir: Path | None
     stage_files: list[Path]
     stage_index: int
+    stage_plan_dir: Path | None
 
 
 @dataclass(frozen = True)
@@ -136,7 +143,7 @@ def senior_node(state: PipelineState, config: RunnableConfig):
         architecture_file = ARCHITECTURE_FILE_NAME,
         stage_file = stage_file.name,
     )
-    _run_role(
+    stage_plan_dir = _run_role(
         cfg = cfg,
         name = SENIOR_NODE_ID,
         journal_name = _stage_journal_name(
@@ -151,12 +158,45 @@ def senior_node(state: PipelineState, config: RunnableConfig):
         extra_writable_dirs = (),
     )
 
+    return {"stage_plan_dir": stage_plan_dir}
+
+
+def developer_node(state: PipelineState, config: RunnableConfig):
+    """Запускает разработчика текущего этапа: по плану сеньора он пишет код этапа в папке проекта."""
+    cfg: PipelineConfig = config["configurable"][PIPELINE_CFG_NAME]
+    project_dir = Path(cfg.project_path).resolve()
+    stage_index = state["stage_index"]
+    stage_dir_name = _stage_dir_name(stage_file = state["stage_files"][stage_index])
+    stage_plan_dir = state["stage_plan_dir"]
+    _run_role(
+        cfg = cfg,
+        name = DEVELOPER_NODE_ID,
+        journal_name = _stage_journal_name(
+            stage_index = stage_index,
+            role_position = 1,
+            stage_dir_name = stage_dir_name,
+            role_name = DEVELOPER_NODE_ID,
+        ),
+        task = DEVELOPER_TASK.format(stage_plan_dir = stage_plan_dir.relative_to(project_dir)),
+        input_dirs = (stage_plan_dir,),
+        private_dir_name = stage_dir_name / DEVELOPER_NODE_ID,
+        extra_writable_dirs = (project_dir,),
+    )
+
     return {}
 
 
-def finish_stage_node(state: PipelineState):
-    """Закрывает текущий этап и переходит к следующему."""
-    return {"stage_index": state["stage_index"] + 1}
+def finish_stage_node(state: PipelineState, config: RunnableConfig):
+    """Коммитит изменения проекта за текущий этап и переходит к следующему этапу."""
+    cfg: PipelineConfig = config["configurable"][PIPELINE_CFG_NAME]
+    stage_file = state["stage_files"][state["stage_index"]]
+    message = f"codeteam: этап {_stage_number(stage_file = stage_file)} — {_stage_title(stage_file = stage_file)}"
+    if commit_all(project_dir = Path(cfg.project_path).resolve(), message = message):
+        logger.info(f"[git] коммит: {message}")
+    else:
+        logger.warning(f"[git] этап {stage_file.name} не изменил проект, коммита нет")
+
+    return {"stage_index": state["stage_index"] + 1, "stage_plan_dir": None}
 
 
 def route_next_stage(state: PipelineState) -> str:
@@ -197,7 +237,8 @@ def find_stage_files(*, plan_dir: Path) -> list[Path]:
 
 def create_pipeline_graph() -> CompiledStateGraph:
     """
-    Собирает граф пайплайна: исследователь, архитектор, затем по каждому этапу сеньор.
+    Собирает граф пайплайна: исследователь, архитектор, затем по каждому этапу сеньор,
+    разработчик и коммит этапа.
 
     Возвращает: Граф пайплайна.
     """
@@ -206,12 +247,14 @@ def create_pipeline_graph() -> CompiledStateGraph:
     workflow.add_node(RESEARCHER_NODE_ID, researcher_node)
     workflow.add_node(ARCHITECT_NODE_ID, architect_node)
     workflow.add_node(SENIOR_NODE_ID, senior_node)
+    workflow.add_node(DEVELOPER_NODE_ID, developer_node)
     workflow.add_node(FINISH_STAGE_NODE_ID, finish_stage_node)
 
     workflow.add_edge(START, RESEARCHER_NODE_ID)
     workflow.add_edge(RESEARCHER_NODE_ID, ARCHITECT_NODE_ID)
     workflow.add_conditional_edges(ARCHITECT_NODE_ID, route_next_stage)
-    workflow.add_edge(SENIOR_NODE_ID, FINISH_STAGE_NODE_ID)
+    workflow.add_edge(SENIOR_NODE_ID, DEVELOPER_NODE_ID)
+    workflow.add_edge(DEVELOPER_NODE_ID, FINISH_STAGE_NODE_ID)
     workflow.add_conditional_edges(FINISH_STAGE_NODE_ID, route_next_stage)
 
     return workflow.compile()
@@ -225,7 +268,34 @@ def _stage_dir_name(*, stage_file: Path) -> Path:
 
     Возвращает: Путь папки этапа внутри папки личных папок: stage_<номер этапа>.
     """
-    return Path(f"stage_{STAGE_FILE_PATTERN.match(stage_file.name).group(1)}")
+    return Path(f"stage_{_stage_number(stage_file = stage_file)}")
+
+
+def _stage_number(*, stage_file: Path) -> str:
+    """
+    Берёт номер этапа из имени файла этапа.
+
+        stage_file: файл этапа.
+
+    Возвращает: Номер этапа, как он записан в имени файла, например 100.
+    """
+    return STAGE_FILE_PATTERN.match(stage_file.name).group(1)
+
+
+def _stage_title(*, stage_file: Path) -> str:
+    """
+    Берёт заголовок этапа: первую непустую строку файла этапа без знаков заголовка markdown.
+
+        stage_file: файл этапа.
+
+    Возвращает: Заголовок этапа; имя файла, если файл пустой.
+    """
+    for line in stage_file.read_text(encoding = "utf-8").splitlines():
+        title = line.strip().lstrip("#").strip()
+        if title:
+            return title
+
+    return stage_file.name
 
 
 def _prepare_stage_task_dir(*, plan_dir: Path, stage_file: Path, target_dir: Path) -> Path:

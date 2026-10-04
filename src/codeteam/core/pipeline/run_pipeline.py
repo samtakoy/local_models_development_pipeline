@@ -39,6 +39,7 @@ def run_pipeline(*, project: ProjectSettings, run_dir: Path, model_name: str, se
         plan_dir = None,
         stage_files = [],
         stage_index = 0,
+        stage_plan_dir = None,
     )
 
     return create_pipeline_graph().invoke(input = initial_state, config = config)
