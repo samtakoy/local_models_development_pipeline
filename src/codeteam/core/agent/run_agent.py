@@ -46,7 +46,12 @@ def run_agent(
         project_dir = project_dir,
         private_dir = private_dir,
         readable_dirs = (project_dir,),
-        writable_dirs = (private_dir,),
+        # отдельно укажем папку и файл
+        # writable_dirs = (private_dir,),
+        writable_dirs = (
+            draft_dir(private_dir = private_dir),
+            context_path(private_dir = private_dir),
+        ),
         refusal_hint = None
     )
     tools = build_file_tools(workspace = workspace, seen_files = seen_files)
@@ -57,7 +62,12 @@ def run_agent(
         project_dir = project_dir,
         private_dir = private_dir,
         readable_dirs = (private_dir,),
-        writable_dirs = (private_dir,),
+        # отдельно укажем папку и файл
+        # writable_dirs = (private_dir,),
+        writable_dirs = (
+            draft_dir(private_dir = private_dir),
+            context_path(private_dir = private_dir),
+        ),
         refusal_hint = DRAFT_PHASE_HINT.format(
             private_dir = relative_private_dir,
             context_file_path = CONTEXT_FILE_NAME

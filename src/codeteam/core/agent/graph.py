@@ -1,3 +1,5 @@
+import logging
+import re
 from collections.abc import Sequence
 
 from langchain_core.messages import SystemMessage, BaseMessage, HumanMessage, AIMessage, ToolMessage, RemoveMessage
@@ -11,9 +13,10 @@ from langgraph.graph.state import CompiledStateGraph
 from typing import TypedDict, Annotated
 
 from codeteam.core.agent.config import AgentConfig
-from codeteam.core.agent.prompts import draft_dir, context_path
+from codeteam.core.agent.prompts import draft_dir, context_path, DONE_ANSWER, TODO_ANSWER
 from codeteam.core.tools.files import READ_TOOL_NAME
 
+logger = logging.getLogger(__name__)
 
 class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
@@ -69,6 +72,7 @@ def reinit_node(state: AgentState, config: RunnableConfig):
 
     return {"messages": messages, "reset_count": state["reset_count"] + 1}
 
+UNFINISHED_ANSWER_RETRIES = 1
 def agent_node(
     state: AgentState,
     config: RunnableConfig
@@ -76,6 +80,14 @@ def agent_node(
     cfg: AgentConfig = config["configurable"][AGENT_CFG_NAME]
 
     response = cfg.chat_model.invoke(state["messages"])
+    for _ in range(UNFINISHED_ANSWER_RETRIES):
+        if not _is_unfinished(response = response):
+            break
+        logger.info("[agent] ответ без инструмента и без DONE, повторяю запрос")
+        # замечание: тесты показывают что повторные запросы при пустом ответе в текущем решении не дают результата
+        # все равно получим пустой ответ - данная правка сомнительная
+        response = cfg.chat_model.invoke(state["messages"])
+
     return {"messages": [response]}
 
 
@@ -204,3 +216,20 @@ def _last_input_tokens(*, messages: Sequence[BaseMessage]) -> int:
             return message.usage_metadata["input_tokens"]
 
     return 0
+
+DONE_PATTERN = re.compile(rf"\b{DONE_ANSWER}\b")
+TODO_PATTERN = re.compile(rf"\b{TODO_ANSWER}\b")
+
+def _is_unfinished(*, response: AIMessage) -> bool:
+    """
+    Проверяет, что ответ модели не продолжает и не сдаёт работу.
+
+        response: ответ модели.
+
+    Возвращает: True, если в ответе нет ни вызовов инструментов, ни DONE.
+    """
+    return (
+        not response.tool_calls
+        and DONE_PATTERN.search(str(response.content)) is None
+        and TODO_PATTERN.search(str(response.content)) is None
+    )

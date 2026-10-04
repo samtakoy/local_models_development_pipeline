@@ -1,5 +1,8 @@
 from pathlib import Path
 
+DONE_ANSWER = "DONE"
+TODO_ANSWER = "TODO"
+
 """Добавляется в системный промпт, в конец, для каждого агента после описания его роли."""
 AGENT_SYSTEM_INSTRUCTIONS = """
 
@@ -37,6 +40,7 @@ AGENT_SYSTEM_INSTRUCTIONS = """
 
 # Запрещено
 - нельзя отвечать DONE если {context_file_name} работа не доделана и не все вопросы закрыты по задаче и в {context_file_name}
+- запрещено создавать в черновике файлы оглавления, сводки или индекса: можно только файлы разделов ответа
 """
 
 DRAFT_DIR_NAME = "draft"
