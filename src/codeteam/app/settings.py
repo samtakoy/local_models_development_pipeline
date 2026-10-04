@@ -13,7 +13,8 @@ class Settings:
     Настройки приложения.
 
         ollama_base_url: адрес сервера ollama без /v1.
-        runs_dir: каталог папок прогонов: журналы запусков агентов.
+        runs_dir: каталог папок прогонов: журналы запусков агентов; относительный путь считается
+            от папки файла .env.
     """
 
     ollama_base_url: str
@@ -23,16 +24,18 @@ class Settings:
 
 def load_settings() -> Settings:
     """
-    Читает настройки из окружения. Файл .env ищется вверх от текущего каталога.
+    Читает настройки из окружения. Файл .env ищется вверх от текущего каталога; относительные пути
+    из него считаются от папки файла, без файла — от текущего каталога.
 
     Возвращает: Настройки приложения.
     """
-    load_dotenv(find_dotenv(usecwd = True))
+    dotenv_path = Path(find_dotenv(usecwd = True))
+    load_dotenv(dotenv_path)
 
     return Settings(
         ollama_base_url = _require(name = "OLLAMA_BASE_URL"),
         agent_ctx_window = int(os.getenv("AGENT_CTX_WINDOW", 120000)),
-        runs_dir = Path(_require(name = "CODETEAM_RUNS_DIR")),
+        runs_dir = dotenv_path.parent / _require(name = "CODETEAM_RUNS_DIR"),
     )
 
 

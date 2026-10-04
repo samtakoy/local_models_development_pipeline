@@ -1,8 +1,9 @@
 from collections.abc import Sequence
 
-from langchain_core.messages import SystemMessage, BaseMessage, HumanMessage, AIMessage, ToolMessage
+from langchain_core.messages import SystemMessage, BaseMessage, HumanMessage, AIMessage, ToolMessage, RemoveMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
+from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.constants import START, END
 from langgraph.graph import StateGraph, add_messages
@@ -10,32 +11,63 @@ from langgraph.graph.state import CompiledStateGraph
 from typing import TypedDict, Annotated
 
 from codeteam.core.agent.config import AgentConfig
+from codeteam.core.agent.prompts import draft_dir, context_path
+from codeteam.core.tools.files import READ_TOOL_NAME
 
 
 class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
+    # сколько уже было сбросов истории (компактизаций)
+    reset_count: int
 
 AGENT_CFG_NAME = "agent"
 
-def init_node(
-    state: AgentState,
-    config: RunnableConfig
-):
-    """Инициализация истории агента на старте"""
+INIT_NODE_ID = "init"
+AGENT_NODE_ID = "agent"
+TOOL_NODE_ID = "tools"
+LIMIT_NOTICE_NODE_ID = "limit_notice"
+DRAFT_AGENT_NODE_ID = "draft_agent"
+DRAFT_TOOL_NODE_ID = "draft_tools"
+REINIT_NODE_ID = "reinit"
+
+def init_node(state: AgentState, config: RunnableConfig):
+    """Собирает историю агента на старте."""
     cfg: AgentConfig = config["configurable"][AGENT_CFG_NAME]
-    calls = [
-        {"id": f"warmup_{index}", "name": name, "args": args}
-        for index, (name, args) in enumerate(cfg.warmup_calls, start = 1)
-    ]
-    messages: list[BaseMessage] = [
-        SystemMessage(content = cfg.system_prompt),
-        HumanMessage(content = cfg.task)
-    ]
-    if calls:
-        messages.append(AIMessage(content = "", tool_calls = calls))
+
+    messages = _build_init_prompts(cfg = cfg, with_reinit_notice = False)
+    if cfg.warmup_calls:
+        messages.append(_warmup_message(calls = cfg.warmup_calls))
 
     return {"messages": messages}
 
+
+def reinit_node(state: AgentState, config: RunnableConfig):
+    """Пересобирает историю агента после сброса: старт заново и чтение памяти."""
+    cfg: AgentConfig = config["configurable"][AGENT_CFG_NAME]
+
+    memory_calls = [
+        # список разделов черновика и контекст работы
+        (READ_TOOL_NAME, {"file_path": str(draft_dir(private_dir = cfg.relative_private_dir))}),
+        (READ_TOOL_NAME, {"file_path": str(context_path(private_dir = cfg.relative_private_dir))}),
+    ]
+
+    # Разделы черновика целиком, по порядку имён: память дороже по токенам.
+    # Для сравнения с чтением только списка разделов.
+    relative_draft_dir = draft_dir(private_dir = cfg.relative_private_dir)
+    absolute_draft_dir = cfg.project_dir / relative_draft_dir
+    if absolute_draft_dir.is_dir():
+        memory_calls += [
+            (READ_TOOL_NAME, {"file_path": str(relative_draft_dir / section.name)})
+            for section in sorted(absolute_draft_dir.glob("*.md"))
+        ]
+
+    messages = [
+        RemoveMessage(id = REMOVE_ALL_MESSAGES),
+        *_build_init_prompts(cfg = cfg, with_reinit_notice = True),
+        _warmup_message(calls = [*cfg.warmup_calls, *memory_calls]),
+    ]
+
+    return {"messages": messages, "reset_count": state["reset_count"] + 1}
 
 def agent_node(
     state: AgentState,
@@ -46,18 +78,71 @@ def agent_node(
     response = cfg.chat_model.invoke(state["messages"])
     return {"messages": [response]}
 
+
+def limit_notice_node(
+    state: AgentState,
+    config: RunnableConfig
+) -> AgentState:
+    cfg: AgentConfig = config["configurable"][AGENT_CFG_NAME]
+
+    return {"messages": [HumanMessage(content = cfg.limit_notice)]}
+
+def route_after_tools(state: AgentState, config: RunnableConfig) -> str:
+    """
+    Выбирает узел после выполнения инструментов: продолжение работы или фаза черновика.
+
+        state: состояние агента.
+        config: конфигурация запуска с настройками агента.
+
+    Возвращает: Имя следующего узла.
+    """
+    cfg: AgentConfig = config["configurable"][AGENT_CFG_NAME]
+    if _last_input_tokens(messages = state["messages"]) >= cfg.history_token_limit:
+        return LIMIT_NOTICE_NODE_ID
+
+    return AGENT_NODE_ID
+
+def route_after_draft(state: AgentState, config: RunnableConfig) -> str:
+    """
+    Выбирает узел после ответа агента в фазе черновика.
+
+        state: состояние агента.
+        config: конфигурация запуска с настройками агента.
+
+    Возвращает: Имя следующего узла: инструменты черновика, пересборка истории или конец работы.
+    """
+    cfg: AgentConfig = config["configurable"][AGENT_CFG_NAME]
+    if tools_condition(state) == TOOL_NODE_ID:
+        return DRAFT_TOOL_NODE_ID
+
+    if state["reset_count"] >= cfg.max_resets:
+        return END
+
+    return REINIT_NODE_ID
+
+
 def create_agent_graph(
-    *, tools: list[BaseTool]
+    *,
+    tools: list[BaseTool],
+    draft_tools: list[BaseTool],
 ) -> CompiledStateGraph:
-    TOOL_NODE_ID = "tools"
-    AGENT_NODE_ID = "agent"
-    INIT_NODE_ID = "init"
+
+    """
+    TODO от основного агента просто завершает прогон - это не продумано
+    :param tools:
+    :param draft_tools:
+    :return:
+    """
 
     workflow: StateGraph = StateGraph(AgentState) # noqa
 
     workflow.add_node(INIT_NODE_ID, init_node)
     workflow.add_node(AGENT_NODE_ID, agent_node)
     workflow.add_node(TOOL_NODE_ID, ToolNode(tools))
+    workflow.add_node(LIMIT_NOTICE_NODE_ID, limit_notice_node)
+    workflow.add_node(DRAFT_AGENT_NODE_ID, agent_node)
+    workflow.add_node(DRAFT_TOOL_NODE_ID, ToolNode(draft_tools))
+    workflow.add_node(REINIT_NODE_ID, reinit_node)
 
     workflow.add_edge(START, INIT_NODE_ID)
 
@@ -68,6 +153,54 @@ def create_agent_graph(
     )
 
     workflow.add_conditional_edges(AGENT_NODE_ID, tools_condition)
-    workflow.add_edge(TOOL_NODE_ID, AGENT_NODE_ID)
+    # после вызова тулов основного агента - проверка на лимит по токенам
+    workflow.add_conditional_edges(TOOL_NODE_ID, route_after_tools)
+
+    # переходим в режим draft
+    workflow.add_edge(LIMIT_NOTICE_NODE_ID, DRAFT_AGENT_NODE_ID)
+
+    workflow.add_conditional_edges(DRAFT_AGENT_NODE_ID, route_after_draft)
+    workflow.add_edge(DRAFT_TOOL_NODE_ID, DRAFT_AGENT_NODE_ID)
+    workflow.add_conditional_edges(
+        REINIT_NODE_ID,
+        tools_condition,
+        {TOOL_NODE_ID: TOOL_NODE_ID, END: AGENT_NODE_ID}
+    )
+
 
     return workflow.compile()
+
+def _build_init_prompts(*, cfg: AgentConfig, with_reinit_notice: bool) -> list[BaseMessage]:
+    """Собирает стартовые сообщения: системный промпт, задача и сообщение о сбросе."""
+    messages: list[BaseMessage] = [
+        SystemMessage(content = cfg.system_prompt),
+        HumanMessage(content = cfg.task),
+    ]
+    if with_reinit_notice:
+        messages.append(HumanMessage(content = cfg.reinit_notice))
+
+    return messages
+
+def _warmup_message(*, calls: list[tuple[str, dict]]) -> AIMessage:
+    """Собирает сообщение с вызовами разогрева: их выполнит узел tools."""
+    return AIMessage(
+        content = "",
+        tool_calls = [
+            {"id": f"warmup_{index}", "name": name, "args": args}
+            for index, (name, args) in enumerate(calls, start = 1)
+        ],
+    )
+
+def _last_input_tokens(*, messages: Sequence[BaseMessage]) -> int:
+    """
+    Находит число входных токенов последнего ответа модели.
+
+        messages: история агента.
+
+    Возвращает: input_tokens последнего AIMessage с usage_metadata; 0, если модель ещё не отвечала.
+    """
+    for message in reversed(messages):
+        if isinstance(message, AIMessage) and message.usage_metadata:
+            return message.usage_metadata["input_tokens"]
+
+    return 0

@@ -27,12 +27,14 @@ class Workspace:
         private_dir: личная папка вызова: черновик, журнал, ответ.
         readable_dirs: папки, где вызову разрешено чтение.
         writable_dirs: папки, где вызову разрешены запись и правка.
+        refusal_hint: пояснение к отказу по пути для агента, None — без пояснения.
     """
 
     project_dir: Path
     private_dir: Path
     readable_dirs: tuple[Path, ...]
     writable_dirs: tuple[Path, ...]
+    refusal_hint: str | None
 
     def resolve_readable(self, *, path: str) -> Path:
         """
@@ -45,7 +47,9 @@ class Workspace:
         resolved = self._resolve(path = path)
         if not _is_inside_any(path = resolved, roots = self.readable_dirs):
             shown = self._show_folders(folders = self.readable_dirs)
-            raise PathOutsideWorkspace(f"путь {path} вне доступных папок: {shown}")
+            raise PathOutsideWorkspace(
+                self._with_hint(message = f"путь {path} вне доступных папок: {shown}")
+            )
 
         return resolved
 
@@ -60,7 +64,9 @@ class Workspace:
         resolved = self._resolve(path = path)
         if not _is_inside_any(path = resolved, roots = self.writable_dirs):
             shown = self._show_folders(folders = self.writable_dirs)
-            raise PathOutsideWorkspace(f"запись в {path} запрещена, разрешены папки: {shown}")
+            raise PathOutsideWorkspace(
+                self._with_hint(message = f"запись в {path} запрещена, разрешены папки: {shown}")
+            )
 
         return resolved
 
@@ -102,6 +108,19 @@ class Workspace:
             candidate = self.project_dir / candidate
 
         return candidate.resolve()
+
+    def _with_hint(self, *, message: str) -> str:
+        """
+        Добавляет к тексту отказа пояснение рабочего места.
+
+            message: текст отказа.
+
+        Возвращает: Текст отказа с пояснением или без него.
+        """
+        if self.refusal_hint is None:
+            return message
+
+        return f"{message}. {self.refusal_hint}"
 
 
 def _is_inside_any(*, path: Path, roots: tuple[Path, ...]) -> bool:

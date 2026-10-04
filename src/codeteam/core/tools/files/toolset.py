@@ -27,7 +27,7 @@ SEARCH_SKIPPED_NAMES = (
 )
 
 
-def build_file_tools(*, workspace: Workspace) -> list[BaseTool]:
+def build_file_tools(*, workspace: Workspace, seen_files: SeenFiles) -> list[BaseTool]:
     """
     Собирает инструменты read, glob, grep, write и edit для рабочего места вызова.
 
@@ -35,10 +35,10 @@ def build_file_tools(*, workspace: Workspace) -> list[BaseTool]:
     только если вызов читал его и файл с тех пор не менялся.
 
         workspace: рабочее место вызова.
+        seen_files: файлы, которые видел вызов, общие для всех наборов инструментов агента.
 
     Возвращает: Инструменты read, glob, grep, write, edit.
     """
-    seen_files = SeenFiles()
     ignore_rules = _workspace_ignore_rules(workspace = workspace)
 
     return [
