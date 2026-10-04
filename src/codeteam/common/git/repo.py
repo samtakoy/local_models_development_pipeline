@@ -1,0 +1,112 @@
+"""Команды git над репозиторием в папке проекта."""
+
+import subprocess
+from pathlib import Path
+
+
+class GitCommandError(RuntimeError):
+    """Команда git завершилась с ошибкой."""
+
+
+def is_repository(*, project_dir: Path) -> bool:
+    """
+    Проверяет, есть ли в папке проекта свой репозиторий git.
+
+        project_dir: папка проекта.
+
+    Возвращает: True, если в папке проекта есть .git.
+    """
+    return (project_dir / ".git").exists()
+
+
+def init_repository(*, project_dir: Path) -> None:
+    """
+    Создаёт репозиторий git в папке проекта.
+
+        project_dir: папка проекта.
+    """
+    _run_git(project_dir = project_dir, arguments = ["init"])
+
+
+def has_uncommitted_changes(*, project_dir: Path, excluded_pathspecs: tuple[str, ...]) -> bool:
+    """
+    Проверяет, есть ли в рабочей папке незакоммиченные правки и новые файлы.
+
+        project_dir: папка проекта.
+        excluded_pathspecs: исключения в виде pathspec git, например ":(exclude).ct-work".
+
+    Возвращает: True, если git status показывает изменения вне исключений.
+    """
+    output = _run_git(
+        project_dir = project_dir,
+        arguments = ["status", "--porcelain", "--untracked-files=all", "--", ".", *excluded_pathspecs],
+    )
+
+    return output.strip() != ""
+
+
+def commit_all(*, project_dir: Path, message: str) -> bool:
+    """
+    Добавляет в индекс все изменения рабочей папки и коммитит их.
+
+        project_dir: папка проекта.
+        message: сообщение коммита.
+
+    Возвращает: True, если коммит сделан; False, если коммитить нечего.
+    """
+    _run_git(project_dir = project_dir, arguments = ["add", "-A"])
+    if not _has_staged_changes(project_dir = project_dir):
+        return False
+
+    _run_git(project_dir = project_dir, arguments = ["commit", "-m", message])
+
+    return True
+
+
+def commit_paths(*, project_dir: Path, paths: tuple[str, ...], message: str) -> None:
+    """
+    Коммитит только указанные файлы; остальные изменения индекса не попадают в коммит.
+
+        project_dir: папка проекта.
+        paths: пути файлов относительно папки проекта.
+        message: сообщение коммита.
+    """
+    _run_git(project_dir = project_dir, arguments = ["add", "--", *paths])
+    _run_git(project_dir = project_dir, arguments = ["commit", "-m", message, "--", *paths])
+
+
+def _has_staged_changes(*, project_dir: Path) -> bool:
+    """
+    Проверяет, есть ли в индексе изменения для коммита.
+
+        project_dir: папка проекта.
+
+    Возвращает: True, если индекс отличается от последнего коммита.
+    """
+    output = _run_git(project_dir = project_dir, arguments = ["status", "--porcelain", "--untracked-files=no"])
+
+    return any(line[:1] not in (" ", "?") for line in output.splitlines() if line)
+
+
+def _run_git(*, project_dir: Path, arguments: list[str]) -> str:
+    """
+    Запускает команду git в папке проекта.
+
+        project_dir: папка проекта.
+        arguments: аргументы git.
+
+    Возвращает: Вывод команды в stdout.
+    """
+    result = subprocess.run(
+        ["git", *arguments],
+        cwd = project_dir,
+        stdin = subprocess.DEVNULL,
+        capture_output = True,
+        text = True,
+    )
+    if result.returncode != 0:
+        raise GitCommandError(
+            f"git {' '.join(arguments)}: код возврата {result.returncode}\n{result.stdout}{result.stderr}"
+        )
+
+    return result.stdout

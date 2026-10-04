@@ -7,11 +7,12 @@ from langchain_core.runnables import RunnableConfig
 from codeteam.app.settings import Settings
 from codeteam.core.pipeline.graph import PIPELINE_CFG_NAME, PipelineConfig, PipelineState, create_pipeline_graph
 from codeteam.core.pipeline.project import ProjectSettings
+from codeteam.core.pipeline.project_setup import prepare_project
 
 
 def run_pipeline(*, project: ProjectSettings, run_dir: Path, model_name: str, settings: Settings) -> PipelineState:
     """
-    Запускает пайплайн агентов на задаче проекта и ждёт окончания.
+    Готовит папку проекта, запускает пайплайн агентов на задаче проекта и ждёт окончания.
 
         project: проект и задача пользователя.
         run_dir: папка прогона: журналы агентов.
@@ -20,6 +21,8 @@ def run_pipeline(*, project: ProjectSettings, run_dir: Path, model_name: str, se
 
     Возвращает: Итоговое состояние пайплайна: папки результатов агентов.
     """
+    prepare_project(project_dir = Path(project.path).resolve(), run_name = run_dir.name)
+
     config = RunnableConfig(
         configurable = {
             PIPELINE_CFG_NAME: PipelineConfig(
