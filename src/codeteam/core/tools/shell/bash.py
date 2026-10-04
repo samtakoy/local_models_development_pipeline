@@ -1,14 +1,15 @@
 """Инструмент агента bash: команда оболочки в папке проекта.
 
-Команды не учитывают правила пропуска файлов (common.files.ignore) и ограничения чтения рабочего
-места: агент читает любой файл, например `cat .env`. Требует доработки.
+Закрытые файлы и личные папки других агентов команды не читают (на macOS). Ограничения чтения
+рабочего места команды не учитывают: агент читает любой открытый файл, в том числе вне папок
+чтения. Требует доработки.
 """
 
 from langchain_core.tools import BaseTool, StructuredTool, ToolException
 from pydantic import BaseModel, Field
 
-from codeteam.common.shell import run_command
-from codeteam.core.agent.workspace import Workspace
+from codeteam.common.shell import ReadRestrictions, run_command
+from codeteam.core.agent.workspace import CLOSED_FILE_NAMES, PRIVATE_ROOT, Workspace
 
 # Предел времени команды, если агент его не задал, секунды.
 BASH_TIMEOUT_SECONDS = 120
@@ -90,6 +91,7 @@ def build_bash_tool(*, workspace: Workspace) -> BaseTool:
             working_dir = str(workspace.project_dir),
             timeout_seconds = timeout,
             write_roots = workspace.writable_dirs,
+            read_restrictions = _read_restrictions(workspace = workspace),
         )
         if result.exit_code is None:
             raise ToolException(
@@ -135,6 +137,22 @@ def build_disabled_bash_tool(*, refusal: str) -> BaseTool:
         description = BASH_DESCRIPTION,
         args_schema = BashArguments,
         handle_tool_error = True,
+    )
+
+
+def _read_restrictions(*, workspace: Workspace) -> ReadRestrictions:
+    """
+    Собирает запреты чтения команды: закрытые файлы проекта и личные папки, кроме своей.
+
+        workspace: рабочее место вызова.
+
+    Возвращает: Запреты чтения для песочницы.
+    """
+    return ReadRestrictions(
+        root = workspace.project_dir,
+        closed_file_names = CLOSED_FILE_NAMES,
+        closed_dirs = (workspace.project_dir / PRIVATE_ROOT,),
+        open_dirs = (workspace.private_dir,),
     )
 
 

@@ -7,7 +7,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from codeteam.common.shell.macos_sandbox import sandbox_argv
+from codeteam.common.shell.macos_sandbox import ReadRestrictions, sandbox_argv
 
 # Переменные окружения, через которые команда унаследовала бы виртуальное окружение процесса
 # codeteam и его пути импорта: их задают uv run и среда разработки.
@@ -36,23 +36,29 @@ def run_command(
     working_dir: str,
     timeout_seconds: int,
     write_roots: tuple[Path, ...],
+    read_restrictions: ReadRestrictions,
 ) -> CommandResult:
     """
     Запускает команду bash в своей группе процессов; по истечении времени снимает всю группу.
 
     Ввода у команды нет: stdin закрыт. Окружение команды — без виртуального окружения процесса
-    codeteam. На macOS запись разрешена только в write_roots и временные папки системы
-    (macos_sandbox).
+    codeteam. На macOS запись разрешена только в write_roots и временные папки системы, чтение
+    закрытых файлов и папок запрещено (macos_sandbox).
 
         command: команда bash.
         working_dir: папка запуска.
         timeout_seconds: предел времени, секунды.
         write_roots: папки, куда команде разрешена запись.
+        read_restrictions: запреты чтения.
 
     Возвращает: Код возврата и вывод команды.
     """
     process = subprocess.Popen(
-        sandbox_argv(argv = ["bash", "-c", command], write_roots = write_roots),
+        sandbox_argv(
+            argv = ["bash", "-c", command],
+            write_roots = write_roots,
+            read_restrictions = read_restrictions,
+        ),
         cwd = working_dir,
         env = _command_environment(),
         stdin = subprocess.DEVNULL,
