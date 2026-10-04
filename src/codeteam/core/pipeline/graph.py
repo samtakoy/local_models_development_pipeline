@@ -56,7 +56,15 @@ def researcher_node(state: PipelineState, config: RunnableConfig):
     """Запускает исследователя кода на задаче пользователя."""
     cfg: PipelineConfig = config["configurable"][PIPELINE_CFG_NAME]
     task = RESEARCHER_TASK.format(task = state["task"])
-    research_dir = _run_role(cfg = cfg, name = RESEARCHER_NODE_ID, number = 1, task = task, input_dirs = ())
+    research_dir = _run_role(
+        cfg = cfg,
+        name = RESEARCHER_NODE_ID,
+        number = 1,
+        task = task,
+        input_dirs = (),
+        private_dir_name = Path(RESEARCHER_NODE_ID),
+        extra_writable_dirs = (),
+    )
 
     return {"research_dir": research_dir}
 
@@ -74,7 +82,9 @@ def architect_node(state: PipelineState, config: RunnableConfig):
         name = ARCHITECT_NODE_ID,
         number = 2,
         task = task,
-        input_dirs = (research_dir,)
+        input_dirs = (research_dir,),
+        private_dir_name = Path(ARCHITECT_NODE_ID),
+        extra_writable_dirs = (),
     )
 
     return {"plan_dir": plan_dir}
@@ -105,6 +115,8 @@ def _run_role(
     number: int,
     task: str,
     input_dirs: tuple[Path, ...],
+    private_dir_name: Path,
+    extra_writable_dirs: tuple[Path, ...],
 ) -> Path:
     """
     Запускает агента роли и ждёт его результата.
@@ -114,6 +126,8 @@ def _run_role(
         number: номер агента в прогоне для имени журнала.
         task: задача агенту.
         input_dirs: папки результатов других агентов.
+        private_dir_name: путь личной папки агента внутри папки личных папок.
+        extra_writable_dirs: папки записи агента в фазе работы, кроме черновика и файла контекста.
 
     Возвращает: Папку черновика агента.
     """
@@ -128,6 +142,8 @@ def _run_role(
         task = task,
         input_dirs = input_dirs,
         project_path = cfg.project_path,
+        private_dir_name = private_dir_name,
+        extra_writable_dirs = extra_writable_dirs,
         journal_path = cfg.run_dir / f"{number:02d}_{name}.md",
         settings = cfg.settings,
     )

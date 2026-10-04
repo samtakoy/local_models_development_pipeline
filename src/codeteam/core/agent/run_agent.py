@@ -26,6 +26,8 @@ def run_agent(
     task: str,
     input_dirs: tuple[Path, ...],
     project_path: str,
+    private_dir_name: Path,
+    extra_writable_dirs: tuple[Path, ...],
     journal_path: Path,
     settings: Settings,
 ) -> Path:
@@ -36,6 +38,9 @@ def run_agent(
         task: задача агенту.
         input_dirs: папки результатов других агентов: агент их читает в разогреве.
         project_path: папка рабочего проекта.
+        private_dir_name: путь личной папки агента внутри папки личных папок.
+        extra_writable_dirs: папки, где агенту разрешена запись в фазе работы, кроме черновика
+            и файла контекста.
         journal_path: файл журнала агента.
         settings: настройки приложения.
 
@@ -52,7 +57,7 @@ def run_agent(
     )
 
     project_dir = Path(project_path).resolve()
-    private_dir = project_dir / PRIVATE_ROOT / role.name
+    private_dir = project_dir / PRIVATE_ROOT / private_dir_name
     relative_private_dir = private_dir.relative_to(project_dir)
 
     # Личная папка с папкой черновика создаётся до запуска агента
@@ -72,6 +77,7 @@ def run_agent(
         writable_dirs = (
             draft_dir(private_dir = private_dir),
             context_path(private_dir = private_dir),
+            *extra_writable_dirs,
         ),
         refusal_hint = None
     )
