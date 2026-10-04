@@ -22,6 +22,12 @@ class SeenFiles:
         """
         self._hashes[path] = _hash(content = content)
 
+    def forget_all(self) -> None:
+        """
+        Забывает все виденные файлы.
+        """
+        self._hashes.clear()
+
     def stale_reason(self, *, path: Path, shown_path: str) -> str | None:
         """
         Проверяет, можно ли менять существующий файл.

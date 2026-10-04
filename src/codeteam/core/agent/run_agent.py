@@ -15,6 +15,10 @@ from codeteam.core.tools.files import READ_TOOL_NAME, build_file_tools, SeenFile
 from codeteam.core.tools.shell import build_bash_tool, build_disabled_bash_tool
 
 
+# Запас токенов окна модели на её ответ.
+RESPONSE_TOKEN_RESERVE = 16000
+
+
 def run_agent(
     agent_name: str,
     system_prompt: str,
@@ -112,11 +116,13 @@ def run_agent(
                 ],
                 history_token_limit = 30000,
                 history_token_hard_limit = 60000,
+                context_window_limit = settings.agent_ctx_window - RESPONSE_TOKEN_RESERVE,
                 max_resets = 10,
                 limit_notice = limit_notice,
                 reinit_notice = reinit_notice,
                 relative_private_dir = relative_private_dir,
                 project_dir = project_dir,
+                seen_files = seen_files,
             )
         }
     )

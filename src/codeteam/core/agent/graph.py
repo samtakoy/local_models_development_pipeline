@@ -73,6 +73,9 @@ def reinit_node(state: AgentState, config: RunnableConfig):
         _warmup_message(calls = [*cfg.warmup_calls, *memory_calls]),
     ]
 
+    # то что модель читала до очистки истории - больше не актуально
+    cfg.seen_files.forget_all()
+
     return {"messages": messages, "reset_count": state["reset_count"] + 1}
 
 UNFINISHED_ANSWER_RETRIES = 1
@@ -149,9 +152,11 @@ def route_after_draft(state: AgentState, config: RunnableConfig) -> str:
         config: конфигурация запуска с настройками агента.
 
     Возвращает: Имя следующего узла: инструменты черновика, пересборка истории или конец работы.
+        Когда история дошла до края окна модели, инструменты не выполняются.
     """
     cfg: AgentConfig = config["configurable"][AGENT_CFG_NAME]
-    if tools_condition(state) == TOOL_NODE_ID:
+    is_window_full = _last_input_tokens(messages = state["messages"]) >= cfg.context_window_limit
+    if tools_condition(state) == TOOL_NODE_ID and not is_window_full:
         return DRAFT_TOOL_NODE_ID
 
     if state["reset_count"] >= cfg.max_resets:
