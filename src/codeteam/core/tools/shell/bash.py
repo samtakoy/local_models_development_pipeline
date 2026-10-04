@@ -29,6 +29,7 @@ BASH_DESCRIPTION = """Выполняет команду bash в папке пр�
 - чтение файлов: read (не cat, head, tail)
 - правка файлов: edit (не sed, awk)
 - запись файлов: write (не echo > и не cat <<EOF)
+- удаление файлов: delete (не rm)
 - сообщения: пиши текстом в ответе (не echo, printf)
 
 Правила:
@@ -98,6 +99,36 @@ def build_bash_tool(*, workspace: Workspace) -> BaseTool:
             )
 
         return f"Код возврата: {result.exit_code}\n{_tail(output = result.output)}"
+
+    return StructuredTool.from_function(
+        func = bash,
+        name = BASH_TOOL_NAME,
+        description = BASH_DESCRIPTION,
+        args_schema = BashArguments,
+        handle_tool_error = True,
+    )
+
+
+
+def build_disabled_bash_tool(*, refusal: str) -> BaseTool:
+    """
+    Собирает заглушку bash: то же имя и описание, но любая команда получает отказ.
+
+        refusal: текст отказа для агента.
+
+    Возвращает: Инструмент bash, который не выполняет команды.
+    """
+
+    def bash(*, command: str, timeout_seconds: int | None = None) -> str:
+        """
+        Отказывает в выполнении команды.
+
+            command: команда bash.
+            timeout_seconds: предел времени в секундах.
+
+        Возвращает: Ничего не возвращает: отказ для агента поднимает ToolException.
+        """
+        raise ToolException(refusal)
 
     return StructuredTool.from_function(
         func = bash,

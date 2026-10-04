@@ -58,6 +58,17 @@ class AgentJournal:
             encoding = "utf-8",
         )
 
+    def write_tools(self, *, tools: list[dict[str, Any]]) -> None:
+        """
+        Пишет инструменты в том виде, в каком их получает модель.
+
+            tools: описания инструментов из привязанного клиента модели.
+        """
+        names = ", ".join(tool["function"]["name"] for tool in tools)
+        rendered = _code_block(text = json.dumps(tools, ensure_ascii = False, indent = 2))
+        self._append(text = f"\n## Инструменты модели · {names}\n\n{rendered}\n")
+        logger.info(f"[{self._agent_name}] инструменты: {names}")
+
     def write(self, *, event: dict[str, Any]) -> None:
         """
         Пишет шаг графа: раздел на каждый узел события с его сообщениями.

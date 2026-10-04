@@ -145,6 +145,12 @@ def create_agent_graph(
     :param draft_tools:
     :return:
     """
+    tool_names = sorted(tool.name for tool in tools)
+    draft_tool_names = sorted(tool.name for tool in draft_tools)
+    if tool_names != draft_tool_names:
+        raise ValueError(
+            f"составы инструментов фаз различаются: работа {tool_names}, черновик {draft_tool_names}"
+        )
 
     workflow: StateGraph = StateGraph(AgentState) # noqa
 

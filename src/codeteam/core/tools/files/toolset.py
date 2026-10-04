@@ -5,6 +5,7 @@ from langchain_core.tools import BaseTool
 from codeteam.common.files import IgnoreRules, load_ignore_rules
 from codeteam.core.agent.workspace import CLOSED_NAMES, Workspace
 from codeteam.core.tools.files._internal._seen_files import SeenFiles
+from codeteam.core.tools.files.delete import build_delete_tool
 from codeteam.core.tools.files.glob import build_glob_tool
 from codeteam.core.tools.files.grep import build_grep_tool
 from codeteam.core.tools.files.read import build_read_tool
@@ -29,7 +30,7 @@ SEARCH_SKIPPED_NAMES = (
 
 def build_file_tools(*, workspace: Workspace, seen_files: SeenFiles) -> list[BaseTool]:
     """
-    Собирает инструменты read, glob, grep, write и edit для рабочего места вызова.
+    Собирает инструменты read, glob, grep, write, edit и delete для рабочего места вызова.
 
     Инструменты делят виденные файлы: write и edit меняют существующий файл,
     только если вызов читал его и файл с тех пор не менялся.
@@ -37,7 +38,7 @@ def build_file_tools(*, workspace: Workspace, seen_files: SeenFiles) -> list[Bas
         workspace: рабочее место вызова.
         seen_files: файлы, которые видел вызов, общие для всех наборов инструментов агента.
 
-    Возвращает: Инструменты read, glob, grep, write, edit.
+    Возвращает: Инструменты read, glob, grep, write, edit, delete.
     """
     ignore_rules = _workspace_ignore_rules(workspace = workspace)
 
@@ -47,6 +48,7 @@ def build_file_tools(*, workspace: Workspace, seen_files: SeenFiles) -> list[Bas
         build_grep_tool(workspace = workspace, ignore_rules = ignore_rules),
         build_write_tool(workspace = workspace, seen_files = seen_files, ignore_rules = ignore_rules),
         build_edit_tool(workspace = workspace, seen_files = seen_files),
+        build_delete_tool(workspace = workspace, ignore_rules = ignore_rules),
     ]
 
 def build_read_tools(*, workspace: Workspace) -> list[BaseTool]:

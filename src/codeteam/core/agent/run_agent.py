@@ -8,10 +8,11 @@ from codeteam.common.llm import build_chat_model, OllamaConfig, GenerationMode, 
 from codeteam.core.agent.config import AgentConfig
 from codeteam.core.agent.graph import create_agent_graph, AgentState, AGENT_CFG_NAME
 from codeteam.core.agent.journal import AgentJournal
-from codeteam.core.agent.prompts import DRAFT_PHASE_HINT, CONTEXT_FILE_NAME, AGENT_SYSTEM_INSTRUCTIONS, LIMIT_NOTICE, \
+from codeteam.core.agent.prompts import DRAFT_PHASE_HINT, DRAFT_PHASE_BASH_REFUSAL, CONTEXT_FILE_NAME, AGENT_SYSTEM_INSTRUCTIONS, LIMIT_NOTICE, \
     REINIT_NOTICE, draft_dir, context_path
 from codeteam.core.agent.workspace import Workspace, PRIVATE_ROOT
 from codeteam.core.tools.files import READ_TOOL_NAME, build_file_tools, SeenFiles
+from codeteam.core.tools.shell import build_bash_tool, build_disabled_bash_tool
 
 
 def run_agent(
@@ -54,7 +55,10 @@ def run_agent(
         ),
         refusal_hint = None
     )
-    tools = build_file_tools(workspace = workspace, seen_files = seen_files)
+    tools = [
+        *build_file_tools(workspace = workspace, seen_files = seen_files),
+        build_bash_tool(workspace = workspace),
+    ]
 
     # Фаза черновика. Писать можно только в личную папку. Остальные тулы должны быть запрещены
     # TODO запрет должен касаться и тулов вызова других агентов, а также web-code-ресерчей
@@ -74,9 +78,13 @@ def run_agent(
         ),
     )
     # тот де набор инструментов, но с другими ограничениями
-    draft_tools = build_file_tools(workspace = draft_workspace, seen_files = seen_files)
+    draft_tools = [
+        *build_file_tools(workspace = draft_workspace, seen_files = seen_files),
+        build_disabled_bash_tool(refusal = DRAFT_PHASE_BASH_REFUSAL),
+    ]
 
     agent = create_agent_graph(tools = tools, draft_tools = draft_tools)
+    bound_chat_model = chat_model.bind_tools(tools)
 
     system_instructions = AGENT_SYSTEM_INSTRUCTIONS.format(
         draft_dir = draft_dir(private_dir = relative_private_dir),
@@ -97,7 +105,7 @@ def run_agent(
             AGENT_CFG_NAME: AgentConfig(
                 system_prompt = system_prompt + system_instructions,
                 task = task,
-                chat_model = chat_model.bind_tools(tools),
+                chat_model = bound_chat_model,
                 warmup_calls = [
                     # читаем заранее корневую папку проекта за агента
                     (READ_TOOL_NAME, {"file_path": "."})
@@ -114,6 +122,7 @@ def run_agent(
 
     initial_state = AgentState(messages = [], reset_count = 0)
     journal = AgentJournal(path = journal_path, agent_name = agent_name, model_name = model_name)
+    journal.write_tools(tools = bound_chat_model.kwargs["tools"])
     try:
         for event in agent.stream(input = initial_state, config = config):
             journal.write(event = event)
