@@ -53,7 +53,7 @@ class Workspace:
         """
         resolved = self._resolve(path = path)
         if not _is_inside_any(path = resolved, roots = self.readable_dirs):
-            shown = self._show_folders(folders = self.readable_dirs)
+            shown = self.show_folders(folders = self.readable_dirs)
             raise PathOutsideWorkspace(
                 self._with_hint(message = f"путь {path} вне доступных папок: {shown}")
             )
@@ -70,7 +70,7 @@ class Workspace:
         """
         resolved = self._resolve(path = path)
         if not _is_inside_any(path = resolved, roots = self.writable_dirs):
-            shown = self._show_folders(folders = self.writable_dirs)
+            shown = self.show_folders(folders = self.writable_dirs)
             raise PathOutsideWorkspace(
                 self._with_hint(message = f"запись в {path} запрещена, разрешены папки: {shown}")
             )
@@ -90,7 +90,7 @@ class Workspace:
 
         return str(path)
 
-    def _show_folders(self, *, folders: tuple[Path, ...]) -> str:
+    def show_folders(self, *, folders: tuple[Path, ...]) -> str:
         """
         Перечисляет папки для текста ошибки так же, как агент видит пути: относительно проекта.
 

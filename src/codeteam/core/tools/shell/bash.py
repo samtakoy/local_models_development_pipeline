@@ -40,9 +40,19 @@ BASH_DESCRIPTION = """Выполняет команду bash в папке пр�
 - Не разделяй команды переводом строки (внутри кавычек можно).
 
 Ограничения:
+- Каждый вызов — новая оболочка: cd, export и source между вызовами не сохраняются.
+  Нужное окружение и переменные задавай в той же команде через &&.
 - Ввода с клавиатуры нет: команды, которые ждут ввода, не запускай.
 - Длинный вывод обрезается: видны последние 30000 символов.
 - Команда прерывается по истечении timeout_seconds."""
+
+# Часть описания bash о рабочем месте вызова: папка запуска и папки записи.
+BASH_WORKSPACE_DESCRIPTION = """
+
+Рабочее место:
+- Команда запускается в папке проекта {project_dir}: cd в неё не нужен, пути пиши относительно неё.
+- Запись разрешена только в: {writable_dirs} и во временные папки системы.
+  Отказ «Operation not permitted» при записи значит, что путь вне этих папок."""
 
 
 # Код команды, которую остановил сигнал SIGPIPE: следующая команда цепочки перестала читать вывод.
@@ -69,7 +79,8 @@ def build_bash_tool(*, workspace: Workspace) -> BaseTool:
     Собирает инструмент bash для рабочего места вызова.
 
     Команда запускается в папке проекта. На macOS запись разрешена только в папки записи рабочего
-    места и временные папки системы; на других системах bash без ограничений.
+    места и временные папки системы; на других системах bash без ограничений. Описание инструмента
+    называет папку запуска и папки записи рабочего места.
 
         workspace: рабочее место вызова.
 
@@ -110,10 +121,15 @@ def build_bash_tool(*, workspace: Workspace) -> BaseTool:
 
         return "\n".join(lines)
 
+    description = BASH_DESCRIPTION + BASH_WORKSPACE_DESCRIPTION.format(
+        project_dir = workspace.project_dir,
+        writable_dirs = workspace.show_folders(folders = workspace.writable_dirs),
+    )
+
     return StructuredTool.from_function(
         func = bash,
         name = BASH_TOOL_NAME,
-        description = BASH_DESCRIPTION,
+        description = description,
         args_schema = BashArguments,
         handle_tool_error = True,
     )
