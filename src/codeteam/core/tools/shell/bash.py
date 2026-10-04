@@ -45,6 +45,9 @@ BASH_DESCRIPTION = """Выполняет команду bash в папке пр�
 - Команда прерывается по истечении timeout_seconds."""
 
 
+# Код команды, которую остановил сигнал SIGPIPE: следующая команда цепочки перестала читать вывод.
+SIGPIPE_EXIT_CODE = 141
+
 # Имя инструмента команд оболочки.
 BASH_TOOL_NAME = "bash"
 
@@ -99,7 +102,13 @@ def build_bash_tool(*, workspace: Workspace) -> BaseTool:
                 + _tail(output = result.output)
             )
 
-        return f"Код возврата: {result.exit_code}\n{_tail(output = result.output)}"
+        lines = [f"Код возврата: {result.exit_code}"]
+        pipe_line = _pipe_line(pipe_exit_codes = result.pipe_exit_codes)
+        if pipe_line is not None:
+            lines.append(pipe_line)
+        lines.append(_tail(output = result.output))
+
+        return "\n".join(lines)
 
     return StructuredTool.from_function(
         func = bash,
@@ -154,6 +163,25 @@ def _read_restrictions(*, workspace: Workspace) -> ReadRestrictions:
         closed_dirs = (workspace.project_dir / PRIVATE_ROOT,),
         open_dirs = (workspace.private_dir,),
     )
+
+
+def _pipe_line(*, pipe_exit_codes: tuple[int, ...]) -> str | None:
+    """
+    Собирает строку с кодами команд цепочки через |.
+
+        pipe_exit_codes: коды команд последней цепочки.
+
+    Возвращает: Строку с кодами, если в цепочке больше одной команды и хотя бы одна вернула не 0;
+        иначе None.
+    """
+    if len(pipe_exit_codes) < 2 or not any(pipe_exit_codes):
+        return None
+
+    line = "Коды команд цепочки через |: " + " ".join(str(code) for code in pipe_exit_codes)
+    if SIGPIPE_EXIT_CODE in pipe_exit_codes:
+        line += f" ({SIGPIPE_EXIT_CODE} — следующая команда перестала читать вывод, для head это нормально)"
+
+    return line
 
 
 def _tail(*, output: str) -> str:

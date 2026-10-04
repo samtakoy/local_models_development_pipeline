@@ -16,6 +16,16 @@ HOST_ENVIRONMENT_NAMES = ("VIRTUAL_ENV", "PYTHONPATH", "PYTHONHOME", "UV")
 # Начала имён переменных окружения uv процесса codeteam.
 HOST_ENVIRONMENT_PREFIXES = ("UV_",)
 
+# Строка после команды: отправляет коды команд последней цепочки через | в канал с номером
+# {status_fd} и завершает bash с кодом самой команды.
+PIPE_STATUS_SUFFIX = (
+    '\n__ct_pipe_status="${{PIPESTATUS[*]}}" __ct_exit_code=$?; '
+    'echo "$__ct_pipe_status" >&{status_fd}; exit "$__ct_exit_code"'
+)
+
+# Сколько байт кодов цепочки читать из канала: коды занимают одну короткую строку.
+PIPE_STATUS_READ_LIMIT = 4096
+
 
 @dataclass(frozen = True)
 class CommandResult:
@@ -24,10 +34,13 @@ class CommandResult:
 
         exit_code: код возврата; None, если команда прервана по времени.
         output: stdout и stderr вместе.
+        pipe_exit_codes: коды команд последней цепочки через |; пустые, если команда прервана
+            по времени или сама вызвала exit.
     """
 
     exit_code: int | None
     output: str
+    pipe_exit_codes: tuple[int, ...]
 
 
 def run_command(
@@ -51,11 +64,13 @@ def run_command(
         write_roots: папки, куда команде разрешена запись.
         read_restrictions: запреты чтения.
 
-    Возвращает: Код возврата и вывод команды.
+    Возвращает: Код возврата, вывод команды и коды команд её последней цепочки.
     """
+    status_read_fd, status_write_fd = os.pipe()
+    script = command + PIPE_STATUS_SUFFIX.format(status_fd = status_write_fd)
     process = subprocess.Popen(
         sandbox_argv(
-            argv = ["bash", "-c", command],
+            argv = ["bash", "-c", script],
             write_roots = write_roots,
             read_restrictions = read_restrictions,
         ),
@@ -65,7 +80,9 @@ def run_command(
         stdout = subprocess.PIPE,
         stderr = subprocess.STDOUT,
         start_new_session = True,
+        pass_fds = (status_write_fd,),
     )
+    os.close(status_write_fd)
     try:
         raw_output, _ = process.communicate(timeout = timeout_seconds)
         exit_code = process.returncode
@@ -74,7 +91,33 @@ def run_command(
         raw_output, _ = process.communicate()
         exit_code = None
 
-    return CommandResult(exit_code = exit_code, output = raw_output.decode("utf-8", errors = "replace"))
+    return CommandResult(
+        exit_code = exit_code,
+        output = raw_output.decode("utf-8", errors = "replace"),
+        pipe_exit_codes = _read_pipe_exit_codes(status_read_fd = status_read_fd),
+    )
+
+
+def _read_pipe_exit_codes(*, status_read_fd: int) -> tuple[int, ...]:
+    """
+    Читает коды команд цепочки из канала и закрывает его.
+
+    Канал читается без ожидания: команда уже завершилась, а фоновый процесс команды может держать
+    канал открытым.
+
+        status_read_fd: конец канала для чтения.
+
+    Возвращает: Коды команд цепочки; пустые, если команда их не отправила.
+    """
+    os.set_blocking(status_read_fd, False)
+    try:
+        raw_status = os.read(status_read_fd, PIPE_STATUS_READ_LIMIT)
+    except BlockingIOError:
+        raw_status = b""
+    finally:
+        os.close(status_read_fd)
+
+    return tuple(int(code) for code in raw_status.decode("ascii", errors = "replace").split() if code.isdigit())
 
 
 def _command_environment() -> dict[str, str]:
