@@ -8,6 +8,7 @@ from codeteam.common.llm import build_chat_model, OllamaConfig, GenerationMode, 
 from codeteam.core.agent.config import AgentConfig
 from codeteam.core.agent.graph import create_agent_graph, AgentState, AGENT_CFG_NAME
 from codeteam.core.agent.journal import AgentJournal
+from codeteam.core.agent.role import AgentRole
 from codeteam.core.agent.prompts import DRAFT_PHASE_HINT, DRAFT_PHASE_BASH_REFUSAL, CONTEXT_FILE_NAME, AGENT_SYSTEM_INSTRUCTIONS, LIMIT_NOTICE, \
     REINIT_NOTICE, draft_dir, context_path
 from codeteam.core.agent.workspace import Workspace, PRIVATE_ROOT
@@ -20,19 +21,28 @@ RESPONSE_TOKEN_RESERVE = 16000
 
 
 def run_agent(
-    agent_name: str,
-    system_prompt: str,
-    model_name: str,
+    *,
+    role: AgentRole,
     task: str,
     project_path: str,
     journal_path: Path,
-    settings: Settings
-):
+    settings: Settings,
+) -> Path:
+    """
+    Запускает агента роли на задаче и ждёт окончания работы.
 
+        role: роль агента.
+        task: задача агенту.
+        project_path: папка рабочего проекта.
+        journal_path: файл журнала агента.
+        settings: настройки приложения.
+
+    Возвращает: Папку черновика агента: его результат.
+    """
     chat_model: BaseChatModel = build_chat_model(
         config = OllamaConfig(
             base_url = settings.ollama_base_url,
-            model = model_name,
+            model = role.model_name,
             context_window = settings.agent_ctx_window
         ),
         generation_mode = GenerationMode.THINKING,
@@ -40,7 +50,7 @@ def run_agent(
     )
 
     project_dir = Path(project_path).resolve()
-    private_dir = project_dir / PRIVATE_ROOT / agent_name
+    private_dir = project_dir / PRIVATE_ROOT / role.name
     relative_private_dir = private_dir.relative_to(project_dir)
 
     # Просмотренный файлы - одинаковые для фазы работы и фазы черновика
@@ -107,7 +117,7 @@ def run_agent(
     config = RunnableConfig(
         configurable = {
             AGENT_CFG_NAME: AgentConfig(
-                system_prompt = system_prompt + system_instructions,
+                system_prompt = role.system_prompt + system_instructions,
                 task = task,
                 chat_model = bound_chat_model,
                 warmup_calls = [
@@ -128,7 +138,7 @@ def run_agent(
     )
 
     initial_state = AgentState(messages = [], reset_count = 0, answer_written = False)
-    journal = AgentJournal(path = journal_path, agent_name = agent_name, model_name = model_name)
+    journal = AgentJournal(path = journal_path, agent_name = role.name, model_name = role.model_name)
     journal.write_tools(tools = bound_chat_model.kwargs["tools"])
     try:
         for event in agent.stream(input = initial_state, config = config):
@@ -139,3 +149,4 @@ def run_agent(
 
     journal.finish()
 
+    return draft_dir(private_dir = private_dir)
