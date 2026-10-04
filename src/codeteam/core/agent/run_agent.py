@@ -10,7 +10,7 @@ from codeteam.core.agent.graph import create_agent_graph, AgentState, AGENT_CFG_
 from codeteam.core.agent.journal import AgentJournal
 from codeteam.core.agent.role import AgentRole
 from codeteam.core.agent.prompts import DRAFT_PHASE_HINT, DRAFT_PHASE_BASH_REFUSAL, CONTEXT_FILE_NAME, AGENT_SYSTEM_INSTRUCTIONS, LIMIT_NOTICE, \
-    REINIT_NOTICE, draft_dir, context_path
+    REINIT_NOTICE, PROJECT_RULES_FILE_NAME, PROJECT_RULES_INSTRUCTIONS, draft_dir, context_path
 from codeteam.core.agent.workspace import Workspace, PRIVATE_ROOT
 from codeteam.core.tools.files import READ_TOOL_NAME, build_file_tools, SeenFiles
 from codeteam.core.tools.shell import build_bash_tool, build_disabled_bash_tool
@@ -127,15 +127,23 @@ def run_agent(
         context_file_path = context_path(private_dir = relative_private_dir),
     )
 
+    # Правила проекта: блок в системном промпте и чтение файла в разогреве, если файл есть
+    has_project_rules = (project_dir / PROJECT_RULES_FILE_NAME).is_file()
+    project_rules_instructions = (
+        PROJECT_RULES_INSTRUCTIONS.format(project_rules_file = PROJECT_RULES_FILE_NAME) if has_project_rules else ""
+    )
+    project_rules_reads = [(READ_TOOL_NAME, {"file_path": PROJECT_RULES_FILE_NAME})] if has_project_rules else []
+
     config = RunnableConfig(
         configurable = {
             AGENT_CFG_NAME: AgentConfig(
-                system_prompt = role.system_prompt + system_instructions,
+                system_prompt = role.system_prompt + system_instructions + project_rules_instructions,
                 task = task,
                 chat_model = bound_chat_model,
                 warmup_calls = [
                     # читаем заранее корневую папку проекта за агента
                     (READ_TOOL_NAME, {"file_path": "."}),
+                    *project_rules_reads,
                     *_input_reads(project_dir = project_dir, input_dirs = input_dirs),
                 ],
                 history_token_limit = 30000,
