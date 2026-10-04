@@ -15,7 +15,7 @@ def main():
 
     settings = load_settings()
     project = load_project_config(
-        setup_dir = "/Users/samtakot/devs/learnings/llm-eng/homework/final_project4/codeteam_v2/projects/cards"
+        setup_dir = "/Users/samtakot/devs/learnings/llm-eng/homework/final_project4/codeteam_v2/projects/cardviewer"
     )
     run_dir = settings.runs_dir / datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     logger.info(f"проект: {project.path}")

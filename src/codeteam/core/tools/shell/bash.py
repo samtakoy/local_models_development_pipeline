@@ -46,13 +46,15 @@ BASH_DESCRIPTION = """Выполняет команду bash в папке пр�
 - Длинный вывод обрезается: видны последние 30000 символов.
 - Команда прерывается по истечении timeout_seconds."""
 
-# Часть описания bash о рабочем месте вызова: папка запуска и папки записи.
+# Часть описания bash о рабочем месте вызова: папка запуска, папки записи и закрытое для чтения.
 BASH_WORKSPACE_DESCRIPTION = """
 
 Рабочее место:
 - Команда запускается в папке проекта {project_dir}: cd в неё не нужен, пути пиши относительно неё.
 - Запись разрешена только в: {writable_dirs} и во временные папки системы.
-  Отказ «Operation not permitted» при записи значит, что путь вне этих папок."""
+  Отказ «Operation not permitted» при записи значит, что путь вне этих папок.
+- Чтение закрыто: {closed_dirs}, кроме {open_dirs}; файлы {closed_files} на любой глубине.
+  Отказ «Operation not permitted» при чтении значит, что путь закрыт."""
 
 
 # Код команды, которую остановил сигнал SIGPIPE: следующая команда цепочки перестала читать вывод.
@@ -80,7 +82,7 @@ def build_bash_tool(*, workspace: Workspace) -> BaseTool:
 
     Команда запускается в папке проекта. На macOS запись разрешена только в папки записи рабочего
     места и временные папки системы; на других системах bash без ограничений. Описание инструмента
-    называет папку запуска и папки записи рабочего места.
+    называет папку запуска, папки записи и закрытое для чтения.
 
         workspace: рабочее место вызова.
 
@@ -121,9 +123,13 @@ def build_bash_tool(*, workspace: Workspace) -> BaseTool:
 
         return "\n".join(lines)
 
+    read_restrictions = _read_restrictions(workspace = workspace)
     description = BASH_DESCRIPTION + BASH_WORKSPACE_DESCRIPTION.format(
         project_dir = workspace.project_dir,
         writable_dirs = workspace.show_folders(folders = workspace.writable_dirs),
+        closed_dirs = workspace.show_folders(folders = read_restrictions.closed_dirs),
+        open_dirs = workspace.show_folders(folders = read_restrictions.open_dirs),
+        closed_files = ", ".join(read_restrictions.closed_file_names),
     )
 
     return StructuredTool.from_function(
