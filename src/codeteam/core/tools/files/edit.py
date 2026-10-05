@@ -9,8 +9,9 @@ from pathlib import Path
 from langchain_core.tools import BaseTool, StructuredTool, ToolException
 from pydantic import BaseModel, Field
 
+from codeteam.common.files import decode_text
 from codeteam.core.agent.workspace import PathOutsideWorkspace, Workspace
-from codeteam.core.tools.files._hints import PATH_HINT
+from codeteam.core.tools.files._hints import NOT_TEXT_REFUSAL, PATH_HINT
 from codeteam.core.tools.files._internal._seen_files import SeenFiles
 from codeteam.core.tools.files.read import is_read_header_line, is_read_summary_line
 from codeteam.core.tools.files._internal.edit_utils import (
@@ -133,10 +134,9 @@ def _edit(
     if stale_reason is not None:
         raise ToolException(stale_reason)
 
-    try:
-        text = path.read_bytes().decode("utf-8")
-    except UnicodeDecodeError:
-        raise ToolException(f"Ошибка: файл {shown_path} не текстовый") from None
+    text = decode_text(content = path.read_bytes())
+    if text is None:
+        raise ToolException(NOT_TEXT_REFUSAL.format(shown_path = shown_path))
 
     is_crlf = "\r\n" in text
     try:

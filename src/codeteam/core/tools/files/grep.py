@@ -9,7 +9,7 @@ from pathlib import Path
 from langchain_core.tools import BaseTool, StructuredTool, ToolException
 from pydantic import BaseModel, Field
 
-from codeteam.common.files import IgnoreRules, split_lines, visible_files
+from codeteam.common.files import IgnoreRules, decode_text, split_lines, visible_files
 from codeteam.core.agent.workspace import Workspace
 from codeteam.core.tools.files._internal._paths import compile_path_mask, resolve_visible_path
 
@@ -163,13 +163,11 @@ def _text_lines(*, path: Path) -> list[str]:
     except OSError:
         return []
 
-    if b"\0" in raw_content:
+    text = decode_text(content = raw_content)
+    if text is None:
         return []
 
-    try:
-        return split_lines(text = raw_content.decode("utf-8"))
-    except UnicodeDecodeError:
-        return []
+    return split_lines(text = text)
 
 
 def _render(*, workspace: Workspace, found: list[_LineMatch]) -> str:

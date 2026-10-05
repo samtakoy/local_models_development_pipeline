@@ -1,13 +1,24 @@
 """Инструмент агента read: строки файла с номерами или содержимое папки."""
 
+import math
 import re
 from pathlib import Path
 
 from langchain_core.tools import BaseTool, StructuredTool, ToolException
 from pydantic import BaseModel, Field
 
-from codeteam.common.files import IgnoreRules, list_directory, number_lines, split_lines
+from codeteam.common.files import (
+    DirectoryEntry,
+    FileKind,
+    IgnoreRules,
+    decode_text,
+    file_stats,
+    list_directory,
+    number_lines,
+    split_lines,
+)
 from codeteam.core.agent.workspace import Workspace
+from codeteam.core.tools.files._hints import NOT_TEXT_REFUSAL
 from codeteam.core.tools.files._internal._paths import resolve_visible_path
 from codeteam.core.tools.files._internal._seen_files import SeenFiles
 from codeteam.core.tools.files._internal.format import format_header, parse_header
@@ -16,13 +27,17 @@ from codeteam.core.tools.files._internal.format import format_header, parse_head
 READ_TOOL_NAME = "read"
 
 # Сколько строк read отдаёт за раз.
-READ_LINE_LIMIT = 2000
+READ_LINE_LIMIT = 1000
 
 # Длина строки в выводе read, дальше строка обрезается.
 READ_LINE_WIDTH = 2000
 
 # Предел объёма вывода read в символах.
-READ_CHARACTER_LIMIT = 50_000
+READ_CHARACTER_LIMIT = 30_000
+
+# Байт в килобайте и в мегабайте: для размера файлов в содержимом папки.
+BYTES_IN_KILOBYTE = 1024
+BYTES_IN_MEGABYTE = 1024 * 1024
 
 # Итоговая строка read, когда файл показан до конца: вид задаёт _summary.
 _END_SUMMARY_PATTERN = re.compile(r"\(Конец файла, всего строк: \d+\)")
@@ -30,10 +45,10 @@ _END_SUMMARY_PATTERN = re.compile(r"\(Конец файла, всего стро
 # Итоговая строка read, когда показана часть файла: вид задаёт _summary.
 _PART_SUMMARY_PATTERN = re.compile(r"\(Показаны строки \d+-\d+ из \d+\. Продолжение: offset = \d+\)")
 
-READ_DESCRIPTION = """Читает текстовый файл. Первая строка вывода — заголовок [путь],
+READ_DESCRIPTION = f"""Читает текстовый файл. Первая строка вывода — заголовок [путь],
 дальше строки файла в виде "номер:строка". Заголовка и номеров в файле нет.
-За раз показывает до 2000 строк; большой файл читай частями через offset и limit.
-Для папки показывает её содержимое.
+За раз показывает до {READ_LINE_LIMIT} строк; большой файл читай частями через offset и limit.
+Для папки показывает её содержимое: у текстового файла число строк, у двоичного и большого — размер.
 Чтобы найти нужный текст в большом файле, используй grep.
 Если не уверен в пути к файлу, найди его через glob по маске.
 Закрытые файлы проекта (.env, личные папки других агентов) не читает и в папке не показывает."""
@@ -46,7 +61,7 @@ class ReadArguments(BaseModel):
 
     file_path: str = Field(description = "путь файла или папки, абсолютный или относительно папки проекта")
     offset: int | None = Field(default = None, description = "номер строки, с которой читать, от 1")
-    limit: int | None = Field(default = None, description = "сколько строк прочитать, до 2000")
+    limit: int | None = Field(default = None, description = f"сколько строк прочитать, до {READ_LINE_LIMIT}")
 
 
 def build_read_tool(*, workspace: Workspace, seen_files: SeenFiles, ignore_rules: IgnoreRules) -> BaseTool:
@@ -116,21 +131,20 @@ def _read(
     if path.is_dir():
         entries = [
             entry for entry in list_directory(path = path)
-            if not ignore_rules.is_closed(path = path / entry.removesuffix("/"))
+            if not ignore_rules.is_closed(path = entry.path)
         ]
         if not entries:
             return f"Папка {shown_path} пуста"
 
-        return f"Папка {shown_path}:\n" + "\n".join(entries)
+        return f"Папка {shown_path}:\n" + "\n".join(_show_entry(entry = entry) for entry in entries)
 
     if offset < 1 or limit < 1:
         raise ToolException("Ошибка: offset и limit должны быть не меньше 1")
 
     raw_content = path.read_bytes()
-    try:
-        text = raw_content.decode("utf-8")
-    except UnicodeDecodeError:
-        raise ToolException(f"Ошибка: файл {shown_path} не текстовый") from None
+    text = decode_text(content = raw_content)
+    if text is None:
+        raise ToolException(NOT_TEXT_REFUSAL.format(shown_path = shown_path))
 
     lines = split_lines(text = text)
     if not lines:
@@ -195,3 +209,43 @@ def _summary(*, first_number: int, last_number: int, total: int) -> str:
         )
 
     return f"(Конец файла, всего строк: {total})"
+
+
+def _show_entry(*, entry: DirectoryEntry) -> str:
+    """
+    Показывает элемент папки строкой: папку с косой чертой, файл со сведениями.
+
+        entry: элемент папки.
+
+    Возвращает: «имя/» для папки, «имя (строк: N)» для текстового файла,
+        «имя (двоичный или не UTF-8, 48 КБ)» для двоичного, «имя (большой, 3.2 МБ)» для большого, имя без сведений, если файл
+        не удалось прочитать.
+    """
+    if entry.is_dir:
+        return f"{entry.name}/"
+
+    stats = file_stats(path = entry.path)
+    if stats is None:
+        return entry.name
+
+    if stats.kind is FileKind.TEXT:
+        return f"{entry.name} (строк: {stats.line_count})"
+
+    if stats.kind is FileKind.BINARY:
+        return f"{entry.name} (двоичный или не UTF-8, {_show_size(size_bytes = stats.size_bytes)})"
+
+    return f"{entry.name} (большой, {_show_size(size_bytes = stats.size_bytes)})"
+
+
+def _show_size(*, size_bytes: int) -> str:
+    """
+    Показывает размер файла в килобайтах или мегабайтах.
+
+        size_bytes: размер в байтах.
+
+    Возвращает: «48 КБ» до 1 МБ, с округлением вверх; «3.2 МБ» от 1 МБ.
+    """
+    if size_bytes < BYTES_IN_MEGABYTE:
+        return f"{math.ceil(size_bytes / BYTES_IN_KILOBYTE)} КБ"
+
+    return f"{size_bytes / BYTES_IN_MEGABYTE:.1f} МБ"

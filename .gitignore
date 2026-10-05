@@ -17,3 +17,6 @@ wheels/
 # Прогоны агентов
 /runs/
 /docs/docker_todo.md
+
+# Снимки и журналы Playwright MCP
+/.playwright-mcp/
