@@ -1,10 +1,18 @@
 """Рабочее место вызова агента: папки, доступные для чтения и записи, и закрытые имена."""
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
 # Папка личных папок запусков внутри проекта.
 PRIVATE_ROOT = Path(".ct-work")
+
+# Папка черновика и файл контекста внутри личной папки.
+DRAFT_DIR_NAME = "draft"
+CONTEXT_FILE_NAME = "context.md"
+
+# Имя раздела черновика: номер, тема латиницей, .md. Группа 1 — номер раздела.
+DRAFT_SECTION_PATTERN = re.compile(r"^(\d+)_[A-Za-z0-9_-]+\.md$")
 
 # Имена файлов, закрытых для агента на любой глубине проекта.
 CLOSED_FILE_NAMES = (".env",)
@@ -16,6 +24,28 @@ CLOSED_NAMES = (
     *CLOSED_FILE_NAMES,
     f"/{PRIVATE_ROOT.as_posix()}/*",
 )
+
+
+def draft_dir(*, private_dir: Path) -> Path:
+    """
+    Строит путь папки черновика.
+
+        private_dir: личная папка агента.
+
+    Возвращает: Папку черновика внутри личной папки.
+    """
+    return private_dir / DRAFT_DIR_NAME
+
+
+def context_path(*, private_dir: Path) -> Path:
+    """
+    Строит путь файла контекста.
+
+        private_dir: личная папка агента.
+
+    Возвращает: Файл контекста внутри личной папки, рядом с черновиком.
+    """
+    return private_dir / CONTEXT_FILE_NAME
 
 
 class PathOutsideWorkspace(ValueError):
@@ -42,6 +72,16 @@ class Workspace:
     readable_dirs: tuple[Path, ...]
     writable_dirs: tuple[Path, ...]
     refusal_hint: str | None
+
+    @property
+    def draft_dir(self) -> Path:
+        """Папка черновика вызова: разделы ответа."""
+        return draft_dir(private_dir = self.private_dir)
+
+    @property
+    def context_file(self) -> Path:
+        """Файл контекста вызова для следующего агента той же роли."""
+        return context_path(private_dir = self.private_dir)
 
     def resolve_readable(self, *, path: str) -> Path:
         """

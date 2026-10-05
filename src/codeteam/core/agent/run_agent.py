@@ -9,11 +9,12 @@ from codeteam.core.agent.config import AgentConfig
 from codeteam.core.agent.graph import create_agent_graph, AgentState, AGENT_CFG_NAME
 from codeteam.core.agent.journal import AgentJournal
 from codeteam.core.agent.role import AgentRole
-from codeteam.core.agent.prompts import DRAFT_PHASE_HINT, DRAFT_PHASE_BASH_REFUSAL, CONTEXT_FILE_NAME, AGENT_SYSTEM_INSTRUCTIONS, LIMIT_NOTICE, \
-    REINIT_NOTICE, PROJECT_RULES_FILE_NAME, PROJECT_RULES_INSTRUCTIONS, draft_dir, context_path
-from codeteam.core.agent.workspace import Workspace, PRIVATE_ROOT
+from codeteam.core.agent.prompts import DRAFT_PHASE_HINT, DRAFT_PHASE_BASH_REFUSAL, AGENT_SYSTEM_INSTRUCTIONS, LIMIT_NOTICE, \
+    REINIT_NOTICE, PROJECT_RULES_FILE_NAME, PROJECT_RULES_INSTRUCTIONS
+from codeteam.core.agent.workspace import CONTEXT_FILE_NAME, PRIVATE_ROOT, Workspace, context_path, draft_dir
 from codeteam.core.tools.files import READ_TOOL_NAME, build_file_tools, SeenFiles
-from codeteam.core.tools.shell import build_bash_tool, build_disabled_bash_tool
+from codeteam.common.shell import ShellProcesses
+from codeteam.core.tools.shell import build_bash_tool, build_disabled_bash_tool, build_stop_process_tool
 
 
 # Запас токенов окна модели на её ответ.
@@ -81,9 +82,14 @@ def run_agent(
         ),
         refusal_hint = None
     )
+    # Фоновые процессы команд bash агента: снимаются, когда агент закончит работу
+    shell_processes = ShellProcesses()
+    # Остановка фоновых процессов агента: одна и та же в фазе работы и в фазе черновика
+    stop_process_tool = build_stop_process_tool(processes = shell_processes)
     tools = [
         *build_file_tools(workspace = workspace, seen_files = seen_files),
-        build_bash_tool(workspace = workspace),
+        build_bash_tool(workspace = workspace, processes = shell_processes),
+        stop_process_tool,
     ]
 
     # Фаза черновика. Писать можно только в личную папку. Остальные тулы должны быть запрещены
@@ -108,6 +114,7 @@ def run_agent(
     draft_tools = [
         *build_file_tools(workspace = draft_workspace, seen_files = seen_files),
         build_disabled_bash_tool(refusal = DRAFT_PHASE_BASH_REFUSAL),
+        stop_process_tool,
     ]
 
     agent = create_agent_graph(tools = tools, draft_tools = draft_tools)
@@ -168,6 +175,8 @@ def run_agent(
     except Exception as error:
         journal.write_error(error = error)
         raise
+    finally:
+        shell_processes.kill_all()
 
     journal.finish()
 

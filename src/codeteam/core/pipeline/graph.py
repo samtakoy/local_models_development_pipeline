@@ -1,7 +1,6 @@
 """Граф пайплайна: кто из агентов за кем идёт и что кому передаётся."""
 
 import logging
-import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,7 +15,7 @@ from codeteam.app.settings import Settings
 from codeteam.common.git import commit_all
 from codeteam.core.agent.role import AgentRole
 from codeteam.core.agent.run_agent import run_agent
-from codeteam.core.agent.workspace import PRIVATE_ROOT
+from codeteam.core.agent.workspace import DRAFT_SECTION_PATTERN, PRIVATE_ROOT
 from codeteam.core.pipeline.prompts import ARCHITECT_TASK, DEVELOPER_TASK, RESEARCHER_TASK, SENIOR_TASK
 from codeteam.core.roles import load_role_prompt
 
@@ -33,8 +32,8 @@ FINISH_STAGE_NODE_ID = "finish_stage"
 # Файл общего решения в черновике архитектора.
 ARCHITECTURE_FILE_NAME = "000_architecture.md"
 
-# Файл этапа в черновике архитектора: номер этапа, тема, .md.
-STAGE_FILE_PATTERN = re.compile(r"^(\d+)_.+\.md$")
+# Файл этапа в черновике архитектора — раздел черновика: номер этапа, тема, .md.
+STAGE_FILE_PATTERN = DRAFT_SECTION_PATTERN
 
 # Папка этапа внутри личной папки этапа: копии общего решения и файла этапа, вход сеньора.
 STAGE_TASK_DIR_NAME = "task"

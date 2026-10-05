@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from codeteam.common.files import IgnoreRules, split_lines
 from codeteam.core.agent.workspace import PathOutsideWorkspace, Workspace
+from codeteam.core.tools.files._internal._draft import draft_file_refusal
 from codeteam.core.tools.files._internal._paths import refuse_hidden_path
 from codeteam.core.tools.files._internal._seen_files import SeenFiles
 from codeteam.core.tools.files._internal.format import format_header
@@ -86,6 +87,10 @@ def _write(*, workspace: Workspace, seen_files: SeenFiles, path: Path, content: 
     shown_path = workspace.display_path(path = path)
     if path.is_dir():
         raise ToolException(f"Ошибка: {shown_path} — папка")
+
+    draft_refusal = draft_file_refusal(workspace = workspace, path = path)
+    if draft_refusal is not None:
+        raise ToolException(draft_refusal)
 
     # Пустой файл перезаписывается без чтения: терять в нём нечего
     if path.exists() and path.stat().st_size > 0:

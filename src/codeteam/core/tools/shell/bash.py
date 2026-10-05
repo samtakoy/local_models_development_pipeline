@@ -8,7 +8,7 @@
 from langchain_core.tools import BaseTool, StructuredTool, ToolException
 from pydantic import BaseModel, Field
 
-from codeteam.common.shell import ReadRestrictions, run_command
+from codeteam.common.shell import ReadRestrictions, ShellProcesses, run_command
 from codeteam.core.agent.workspace import CLOSED_FILE_NAMES, PRIVATE_ROOT, Workspace
 
 # Предел времени команды, если агент его не задал, секунды.
@@ -42,6 +42,11 @@ BASH_DESCRIPTION = """Выполняет команду bash в папке пр�
 Ограничения:
 - Каждый вызов — новая оболочка: cd, export и source между вызовами не сохраняются.
   Нужное окружение и переменные задавай в той же команде через &&.
+- Фоновые процессы (&) продолжают работать между вызовами и завершаются, когда ты закончишь работу.
+  Их вывод перенаправляй в файл, иначе вызов ждёт фоновый процесс до предела времени.
+- Сигналы (kill, pkill, killall) доходят только до процессов этого же вызова: отказ
+  «Operation not permitted» при kill значит, что процесс не из этого вызова.
+  Фоновый процесс из прошлого вызова останавливай инструментом stop_process.
 - Ввода с клавиатуры нет: команды, которые ждут ввода, не запускай.
 - Длинный вывод обрезается: видны последние 30000 символов.
 - Команда прерывается по истечении timeout_seconds."""
@@ -76,7 +81,7 @@ class BashArguments(BaseModel):
     )
 
 
-def build_bash_tool(*, workspace: Workspace) -> BaseTool:
+def build_bash_tool(*, workspace: Workspace, processes: ShellProcesses) -> BaseTool:
     """
     Собирает инструмент bash для рабочего места вызова.
 
@@ -85,6 +90,7 @@ def build_bash_tool(*, workspace: Workspace) -> BaseTool:
     называет папку запуска, папки записи и закрытое для чтения.
 
         workspace: рабочее место вызова.
+        processes: учёт фоновых процессов команд; их снимает владелец учёта.
 
     Возвращает: Инструмент bash.
     """
@@ -109,6 +115,7 @@ def build_bash_tool(*, workspace: Workspace) -> BaseTool:
             write_roots = workspace.writable_dirs,
             read_restrictions = _read_restrictions(workspace = workspace),
         )
+        processes.remember(process_group_id = result.process_group_id)
         if result.exit_code is None:
             raise ToolException(
                 f"Ошибка: команда прервана, превышен предел времени {timeout} с\n"

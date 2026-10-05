@@ -1,5 +1,3 @@
-from pathlib import Path
-
 DONE_ANSWER = "DONE"
 TODO_ANSWER = "TODO"
 
@@ -45,8 +43,6 @@ AGENT_SYSTEM_INSTRUCTIONS = """
 - Отвечать DONE, пока корректный проверенный ответ по правилам твоей роли не записан в {draft_dir} полностью.
 """
 
-DRAFT_DIR_NAME = "draft"
-CONTEXT_FILE_NAME = "context.md"
 
 # Файл общих правил проекта для агентов в корне проекта.
 PROJECT_RULES_FILE_NAME = "AGENTS.md"
@@ -71,12 +67,6 @@ DRAFT_PHASE_BASH_REFUSAL = (
     "Файлы черновика пиши инструментами write и edit, лишние удаляй инструментом delete. "
     "Посмотреть папку или файл — инструментом read."
 )
-
-def draft_dir(private_dir: Path) -> Path:
-    return private_dir / DRAFT_DIR_NAME
-
-def context_path(private_dir: Path) -> Path:
-    return private_dir / CONTEXT_FILE_NAME
 
 LIMIT_NOTICE = """Достигнут лимит сообщений - мы не успели доделать работу. 
 Сейчас надо заморозить работу и подготовить текущие результаты для того чтобы

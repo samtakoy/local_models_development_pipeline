@@ -11,10 +11,12 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.constants import START, END
 from langgraph.graph import StateGraph, add_messages
 from langgraph.graph.state import CompiledStateGraph
+from ollama import ResponseError
 from typing import TypedDict, Annotated
 
 from codeteam.core.agent.config import AgentConfig
-from codeteam.core.agent.prompts import draft_dir, context_path, DONE_ANSWER, TODO_ANSWER
+from codeteam.core.agent.prompts import DONE_ANSWER, TODO_ANSWER
+from codeteam.core.agent.workspace import context_path, draft_dir
 from codeteam.core.tools.files import READ_TOOL_NAME
 
 logger = logging.getLogger(__name__)
@@ -85,16 +87,35 @@ def agent_node(
 ) -> AgentState:
     cfg: AgentConfig = config["configurable"][AGENT_CFG_NAME]
 
-    response = cfg.chat_model.invoke(state["messages"])
+    response = _invoke_model(cfg = cfg, messages = state["messages"])
     for _ in range(UNFINISHED_ANSWER_RETRIES):
         if not _is_unfinished(response = response):
             break
         logger.info("[agent] ответ без инструмента и без DONE, повторяю запрос")
         # замечание: тесты показывают что повторные запросы при пустом ответе в текущем решении не дают результата
         # все равно получим пустой ответ - данная правка сомнительная
-        response = cfg.chat_model.invoke(state["messages"])
+        response = _invoke_model(cfg = cfg, messages = state["messages"])
 
     return {"messages": [response]}
+
+
+SERVER_ERROR_RETRIES = 2
+def _invoke_model(*, cfg: AgentConfig, messages: Sequence[BaseMessage]) -> BaseMessage:
+    """
+    Запрашивает ответ модели, повторяя запрос при ошибке сервера ollama.
+
+        cfg: настройки агента.
+        messages: история агента.
+
+    Возвращает: Ответ модели.
+    """
+    for attempt in range(SERVER_ERROR_RETRIES):
+        try:
+            return cfg.chat_model.invoke(messages)
+        except ResponseError as error:
+            logger.warning(f"[agent] ошибка сервера ({error}), повтор {attempt + 1} из {SERVER_ERROR_RETRIES}")
+
+    return cfg.chat_model.invoke(messages)
 
 
 def limit_notice_node(

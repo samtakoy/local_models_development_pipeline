@@ -1,13 +1,13 @@
 """Запуск команды оболочки с пределом времени."""
 
 import os
-import signal
 import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 from codeteam.common.shell.macos_sandbox import ReadRestrictions, sandbox_argv
+from codeteam.common.shell.processes import kill_process_group
 
 # Переменные окружения, через которые команда унаследовала бы виртуальное окружение процесса
 # codeteam и его пути импорта: их задают uv run и среда разработки.
@@ -36,11 +36,13 @@ class CommandResult:
         output: stdout и stderr вместе.
         pipe_exit_codes: коды команд последней цепочки через |; пустые, если команда прервана
             по времени или сама вызвала exit.
+        process_group_id: номер группы процессов команды: в ней остаются её фоновые процессы.
     """
 
     exit_code: int | None
     output: str
     pipe_exit_codes: tuple[int, ...]
+    process_group_id: int
 
 
 def run_command(
@@ -53,6 +55,7 @@ def run_command(
 ) -> CommandResult:
     """
     Запускает команду bash в своей группе процессов; по истечении времени снимает всю группу.
+    Фоновые процессы завершившейся команды продолжают работать в её группе.
 
     Ввода у команды нет: stdin закрыт. Окружение команды — без виртуального окружения процесса
     codeteam. На macOS запись разрешена только в write_roots и временные папки системы, чтение
@@ -87,7 +90,7 @@ def run_command(
         raw_output, _ = process.communicate(timeout = timeout_seconds)
         exit_code = process.returncode
     except subprocess.TimeoutExpired:
-        os.killpg(process.pid, signal.SIGKILL)
+        kill_process_group(process_group_id = process.pid)
         raw_output, _ = process.communicate()
         exit_code = None
 
@@ -95,6 +98,7 @@ def run_command(
         exit_code = exit_code,
         output = raw_output.decode("utf-8", errors = "replace"),
         pipe_exit_codes = _read_pipe_exit_codes(status_read_fd = status_read_fd),
+        process_group_id = process.pid,
     )
 
 
