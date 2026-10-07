@@ -6,7 +6,7 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
 
 from codeteam.app.settings import Settings
-from codeteam.common.llm import build_chat_model, OllamaConfig, GenerationMode, ReasoningLevel
+from codeteam.common.llm import build_chat_model, OllamaConfig, GenerationMode
 from codeteam.core.agent.config import AgentConfig
 from codeteam.core.agent.graph import create_agent_graph, AgentState, AGENT_CFG_NAME
 from codeteam.core.agent.journal import AgentJournal
@@ -64,7 +64,7 @@ def run_agent(
             context_window = settings.agent_ctx_window
         ),
         generation_mode = GenerationMode.THINKING,
-        reasoning_level = ReasoningLevel.LOW,
+        reasoning_level = role.reasoning_level,
     )
 
     project_dir = Path(project_path).resolve()
@@ -197,7 +197,7 @@ def run_agent(
         }
     )
 
-    initial_state = AgentState(messages = [], reset_count = 0, answer_written = False)
+    initial_state = AgentState(messages = [], reset_count = 0)
     journal = AgentJournal(path = journal_path, agent_name = role.name, model_name = role.model_name)
     journal.write_tools(tools = bound_chat_model.kwargs["tools"])
     try:

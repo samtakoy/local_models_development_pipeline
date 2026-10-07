@@ -5,7 +5,7 @@ import shutil
 from pathlib import Path
 
 from codeteam.common.git import commit_all, commit_paths, has_uncommitted_changes, init_repository, is_repository
-from codeteam.core.agent.workspace import CLOSED_FILE_NAMES, PRIVATE_ROOT
+from codeteam.core.agent.workspace import CHECK_DIR, CLOSED_FILE_NAMES, PRIVATE_ROOT
 
 logger = logging.getLogger(__name__)
 
@@ -14,13 +14,14 @@ ARCHIVE_DIR_NAME = "archive"
 
 GITIGNORE_NAME = ".gitignore"
 
-# Строки .gitignore: закрытые файлы и папка личных папок агентов.
-GITIGNORE_LINES = (*CLOSED_FILE_NAMES, f"{PRIVATE_ROOT.as_posix()}/")
+# Строки .gitignore: закрытые файлы, папка личных папок агентов и папка временных файлов проверки.
+GITIGNORE_LINES = (*CLOSED_FILE_NAMES, f"{PRIVATE_ROOT.as_posix()}/", f"{CHECK_DIR.as_posix()}/")
 
 # Исключения проверки незакоммиченных правок: всё, что скрывают строки GITIGNORE_LINES.
 DIRTY_CHECK_EXCLUSIONS = (
     *(f":(exclude,glob)**/{name}" for name in CLOSED_FILE_NAMES),
     f":(exclude){PRIVATE_ROOT.as_posix()}",
+    f":(exclude){CHECK_DIR.as_posix()}",
 )
 
 INITIAL_COMMIT_MESSAGE = "codeteam: исходное состояние проекта"

@@ -13,10 +13,11 @@ from langgraph.graph.state import CompiledStateGraph
 
 from codeteam.app.settings import Settings
 from codeteam.common.git import commit_all
+from codeteam.common.llm import ReasoningLevel
 from codeteam.core.agent.role import AgentRole
 from codeteam.core.agent.run_agent import run_agent
-from codeteam.core.agent.workspace import DRAFT_SECTION_PATTERN, PRIVATE_ROOT
-from codeteam.core.pipeline.prompts import ARCHITECT_TASK, DEVELOPER_TASK, RESEARCHER_TASK, SENIOR_TASK
+from codeteam.core.agent.workspace import CHECK_DIR, DRAFT_SECTION_PATTERN, PRIVATE_ROOT
+from codeteam.core.pipeline.prompts import ARCHITECT_TASK, DEVELOPER_TASK, PM_TASK, RESEARCHER_TASK, SENIOR_TASK
 from codeteam.core.roles import load_role_prompt
 from codeteam.core.tools.files import DELETE_TOOL_NAME, EDIT_TOOL_NAME, GLOB_TOOL_NAME, GREP_TOOL_NAME, \
     READ_TOOL_NAME, WRITE_TOOL_NAME
@@ -26,11 +27,15 @@ logger = logging.getLogger(__name__)
 
 PIPELINE_CFG_NAME = "pipeline"
 
+PM_NODE_ID = "pm"
 RESEARCHER_NODE_ID = "researcher"
 ARCHITECT_NODE_ID = "architect"
 SENIOR_NODE_ID = "senior"
 DEVELOPER_NODE_ID = "developer"
 FINISH_STAGE_NODE_ID = "finish_stage"
+
+# Файл чеклиста требований в черновике менеджера продукта.
+REQUIREMENTS_FILE_NAME = "100_requirements.md"
 
 # Файл общего решения в черновике архитектора.
 ARCHITECTURE_FILE_NAME = "000_architecture.md"
@@ -40,12 +45,6 @@ STAGE_FILE_PATTERN = DRAFT_SECTION_PATTERN
 
 # Папка этапа внутри личной папки этапа: копии общего решения и файла этапа, вход сеньора.
 STAGE_TASK_DIR_NAME = "task"
-
-# Номер журнала первого агента этапов: после исследователя и архитектора.
-FIRST_STAGE_JOURNAL_NUMBER = 3
-
-# Агентов на этап: сеньор и разработчик.
-STAGE_AGENT_COUNT = 2
 
 # Инструменты ролей, которые работают с кодом проекта.
 PROJECT_TOOL_NAMES = (
@@ -59,6 +58,14 @@ PROJECT_TOOL_NAMES = (
     STOP_PROCESS_TOOL_NAME,
 )
 
+# Инструменты ролей, которые работают только со своим черновиком.
+DRAFT_TOOL_NAMES = (
+    READ_TOOL_NAME,
+    WRITE_TOOL_NAME,
+    EDIT_TOOL_NAME,
+    DELETE_TOOL_NAME,
+)
+
 
 class PipelineError(RuntimeError):
     """Результат агента не годится для продолжения пайплайна."""
@@ -69,19 +76,23 @@ class PipelineState(TypedDict):
     Состояние пайплайна.
 
         task: задача пользователя.
+        requirements_dir: папка черновика менеджера продукта: чеклист требований; None, пока он не отработал.
         research_dir: папка черновика исследователя; None, пока он не отработал.
         plan_dir: папка черновика архитектора: общее решение и файлы этапов; None, пока он не отработал.
         stage_files: файлы этапов из черновика архитектора по порядку имён.
         stage_index: номер текущего этапа в stage_files, с нуля.
         stage_plan_dir: папка плана сеньора текущего этапа; None, пока он не отработал.
+        journal_count: число журналов агентов, уже начатых в прогоне.
     """
 
     task: str
+    requirements_dir: Path | None
     research_dir: Path | None
     plan_dir: Path | None
     stage_files: list[Path]
     stage_index: int
     stage_plan_dir: Path | None
+    journal_count: int
 
 
 @dataclass(frozen = True)
@@ -101,6 +112,28 @@ class PipelineConfig:
     settings: Settings
 
 
+def pm_node(state: PipelineState, config: RunnableConfig):
+    """Запускает менеджера продукта: по тексту задачи пользователя он пишет чеклист требований без доступа к проекту."""
+    cfg: PipelineConfig = config["configurable"][PIPELINE_CFG_NAME]
+    requirements_dir = _run_role(
+        cfg = cfg,
+        name = PM_NODE_ID,
+        journal_name = _journal_name(journal_count = state["journal_count"], label = PM_NODE_ID),
+        prompt_fields = {"requirements_file": REQUIREMENTS_FILE_NAME},
+        reasoning_level = ReasoningLevel.HIGH,
+        task = PM_TASK.format(task = state["task"]),
+        input_dirs = (),
+        private_dir_name = Path(PM_NODE_ID),
+        tool_names = DRAFT_TOOL_NAMES,
+        extra_readable_dirs = (),
+        extra_writable_dirs = (),
+    )
+    if not (requirements_dir / REQUIREMENTS_FILE_NAME).is_file():
+        raise PipelineError(f"в черновике менеджера продукта {requirements_dir} нет файла {REQUIREMENTS_FILE_NAME}")
+
+    return {"requirements_dir": requirements_dir, "journal_count": state["journal_count"] + 1}
+
+
 def researcher_node(state: PipelineState, config: RunnableConfig):
     """Запускает исследователя кода на задаче пользователя."""
     cfg: PipelineConfig = config["configurable"][PIPELINE_CFG_NAME]
@@ -109,7 +142,9 @@ def researcher_node(state: PipelineState, config: RunnableConfig):
     research_dir = _run_role(
         cfg = cfg,
         name = RESEARCHER_NODE_ID,
-        journal_name = f"01_{RESEARCHER_NODE_ID}",
+        journal_name = _journal_name(journal_count = state["journal_count"], label = RESEARCHER_NODE_ID),
+        prompt_fields = {},
+        reasoning_level = ReasoningLevel.LOW,
         task = task,
         input_dirs = (),
         private_dir_name = Path(RESEARCHER_NODE_ID),
@@ -118,31 +153,39 @@ def researcher_node(state: PipelineState, config: RunnableConfig):
         extra_writable_dirs = (),
     )
 
-    return {"research_dir": research_dir}
+    return {"research_dir": research_dir, "journal_count": state["journal_count"] + 1}
 
 
 def architect_node(state: PipelineState, config: RunnableConfig):
-    """Запускает архитектора: по задаче и отчёту исследователя он делит работу на этапы."""
+    """Запускает архитектора: по задаче, чеклисту требований и отчёту исследователя он делит работу на этапы."""
     cfg: PipelineConfig = config["configurable"][PIPELINE_CFG_NAME]
     project_dir = Path(cfg.project_path).resolve()
+    requirements_dir = state["requirements_dir"]
     research_dir = state["research_dir"]
     task = ARCHITECT_TASK.format(
         task = state["task"],
+        requirements_file = (requirements_dir / REQUIREMENTS_FILE_NAME).relative_to(project_dir),
         research_dir = research_dir.relative_to(project_dir),
     )
     plan_dir = _run_role(
         cfg = cfg,
         name = ARCHITECT_NODE_ID,
-        journal_name = f"02_{ARCHITECT_NODE_ID}",
+        journal_name = _journal_name(journal_count = state["journal_count"], label = ARCHITECT_NODE_ID),
+        prompt_fields = {},
+        reasoning_level = ReasoningLevel.LOW,
         task = task,
-        input_dirs = (research_dir,),
+        input_dirs = (requirements_dir, research_dir),
         private_dir_name = Path(ARCHITECT_NODE_ID),
         tool_names = PROJECT_TOOL_NAMES,
         extra_readable_dirs = (project_dir,),
         extra_writable_dirs = (),
     )
 
-    return {"plan_dir": plan_dir, "stage_files": find_stage_files(plan_dir = plan_dir)}
+    return {
+        "plan_dir": plan_dir,
+        "stage_files": find_stage_files(plan_dir = plan_dir),
+        "journal_count": state["journal_count"] + 1,
+    }
 
 
 def senior_node(state: PipelineState, config: RunnableConfig):
@@ -166,12 +209,12 @@ def senior_node(state: PipelineState, config: RunnableConfig):
     stage_plan_dir = _run_role(
         cfg = cfg,
         name = SENIOR_NODE_ID,
-        journal_name = _stage_journal_name(
-            stage_index = stage_index,
-            role_position = 0,
-            stage_dir_name = stage_dir_name,
-            role_name = SENIOR_NODE_ID,
+        journal_name = _journal_name(
+            journal_count = state["journal_count"],
+            label = f"{stage_dir_name}_{SENIOR_NODE_ID}",
         ),
+        prompt_fields = {},
+        reasoning_level = ReasoningLevel.LOW,
         task = task,
         input_dirs = (stage_task_dir,),
         private_dir_name = stage_dir_name / SENIOR_NODE_ID,
@@ -180,7 +223,7 @@ def senior_node(state: PipelineState, config: RunnableConfig):
         extra_writable_dirs = (),
     )
 
-    return {"stage_plan_dir": stage_plan_dir}
+    return {"stage_plan_dir": stage_plan_dir, "journal_count": state["journal_count"] + 1}
 
 
 def developer_node(state: PipelineState, config: RunnableConfig):
@@ -193,12 +236,12 @@ def developer_node(state: PipelineState, config: RunnableConfig):
     _run_role(
         cfg = cfg,
         name = DEVELOPER_NODE_ID,
-        journal_name = _stage_journal_name(
-            stage_index = stage_index,
-            role_position = 1,
-            stage_dir_name = stage_dir_name,
-            role_name = DEVELOPER_NODE_ID,
+        journal_name = _journal_name(
+            journal_count = state["journal_count"],
+            label = f"{stage_dir_name}_{DEVELOPER_NODE_ID}",
         ),
+        prompt_fields = {"check_dir": CHECK_DIR.as_posix()},
+        reasoning_level = ReasoningLevel.LOW,
         task = DEVELOPER_TASK.format(stage_plan_dir = stage_plan_dir.relative_to(project_dir)),
         input_dirs = (stage_plan_dir,),
         private_dir_name = stage_dir_name / DEVELOPER_NODE_ID,
@@ -207,7 +250,7 @@ def developer_node(state: PipelineState, config: RunnableConfig):
         extra_writable_dirs = (project_dir,),
     )
 
-    return {}
+    return {"journal_count": state["journal_count"] + 1}
 
 
 def finish_stage_node(state: PipelineState, config: RunnableConfig):
@@ -261,20 +304,22 @@ def find_stage_files(*, plan_dir: Path) -> list[Path]:
 
 def create_pipeline_graph() -> CompiledStateGraph:
     """
-    Собирает граф пайплайна: исследователь, архитектор, затем по каждому этапу сеньор,
-    разработчик и коммит этапа.
+    Собирает граф пайплайна: менеджер продукта, исследователь, архитектор, затем по каждому этапу
+    сеньор, разработчик и коммит этапа.
 
     Возвращает: Граф пайплайна.
     """
     workflow: StateGraph = StateGraph(PipelineState) # noqa
 
+    workflow.add_node(PM_NODE_ID, pm_node)
     workflow.add_node(RESEARCHER_NODE_ID, researcher_node)
     workflow.add_node(ARCHITECT_NODE_ID, architect_node)
     workflow.add_node(SENIOR_NODE_ID, senior_node)
     workflow.add_node(DEVELOPER_NODE_ID, developer_node)
     workflow.add_node(FINISH_STAGE_NODE_ID, finish_stage_node)
 
-    workflow.add_edge(START, RESEARCHER_NODE_ID)
+    workflow.add_edge(START, PM_NODE_ID)
+    workflow.add_edge(PM_NODE_ID, RESEARCHER_NODE_ID)
     workflow.add_edge(RESEARCHER_NODE_ID, ARCHITECT_NODE_ID)
     workflow.add_conditional_edges(ARCHITECT_NODE_ID, route_next_stage)
     workflow.add_edge(SENIOR_NODE_ID, DEVELOPER_NODE_ID)
@@ -339,20 +384,16 @@ def _prepare_stage_task_dir(*, plan_dir: Path, stage_file: Path, target_dir: Pat
     return target_dir
 
 
-def _stage_journal_name(*, stage_index: int, role_position: int, stage_dir_name: Path, role_name: str) -> str:
+def _journal_name(*, journal_count: int, label: str) -> str:
     """
-    Строит имя журнала агента этапа.
+    Строит имя журнала следующего агента прогона.
 
-        stage_index: номер этапа в списке этапов, с нуля.
-        role_position: место роли в этапе, с нуля: сеньор 0, разработчик 1.
-        stage_dir_name: имя личной папки этапа.
-        role_name: имя роли.
+        journal_count: число журналов агентов, уже начатых в прогоне.
+        label: метка агента в имени журнала: имя роли или папка этапа с именем роли.
 
-    Возвращает: Имя журнала без расширения, например 03_stage_100_senior.
+    Возвращает: Имя журнала без расширения, например 04_stage_100_senior.
     """
-    number = FIRST_STAGE_JOURNAL_NUMBER + stage_index * STAGE_AGENT_COUNT + role_position
-
-    return f"{number:02d}_{stage_dir_name}_{role_name}"
+    return f"{journal_count + 1:02d}_{label}"
 
 
 def _run_role(
@@ -360,6 +401,8 @@ def _run_role(
     cfg: PipelineConfig,
     name: str,
     journal_name: str,
+    prompt_fields: dict[str, str],
+    reasoning_level: ReasoningLevel,
     task: str,
     input_dirs: tuple[Path, ...],
     private_dir_name: Path,
@@ -373,6 +416,8 @@ def _run_role(
         cfg: настройки запуска пайплайна.
         name: имя роли; по нему берётся промпт роли.
         journal_name: имя журнала агента без расширения.
+        prompt_fields: значения полей промпта роли.
+        reasoning_level: уровень размышления модели агента.
         task: задача агенту.
         input_dirs: папки результатов других агентов.
         private_dir_name: путь личной папки агента внутри папки личных папок.
@@ -385,8 +430,9 @@ def _run_role(
     """
     role = AgentRole(
         name = name,
-        system_prompt = load_role_prompt(name = name),
+        system_prompt = load_role_prompt(name = name, fields = prompt_fields),
         model_name = cfg.model_name,
+        reasoning_level = reasoning_level,
         tool_names = tool_names,
     )
 

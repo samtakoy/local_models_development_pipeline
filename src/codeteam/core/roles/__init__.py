@@ -6,12 +6,13 @@ from pathlib import Path
 ROLES_DIR = Path(__file__).parent
 
 
-def load_role_prompt(*, name: str) -> str:
+def load_role_prompt(*, name: str, fields: dict[str, str]) -> str:
     """
-    Читает промпт роли.
+    Читает промпт роли и подставляет в него поля.
 
         name: имя роли.
+        fields: значения полей вида {имя поля} в тексте промпта.
 
     Возвращает: Текст промпта роли.
     """
-    return (ROLES_DIR / f"{name}.md").read_text(encoding = "utf-8").strip()
+    return (ROLES_DIR / f"{name}.md").read_text(encoding = "utf-8").strip().format(**fields)

@@ -7,6 +7,9 @@ from pathlib import Path
 # Папка личных папок запусков внутри проекта.
 PRIVATE_ROOT = Path(".ct-work")
 
+# Папка временных скриптов и данных проверки в корне проекта.
+CHECK_DIR = Path("tmp_check")
+
 # Папка черновика и файл контекста внутри личной папки.
 DRAFT_DIR_NAME = "draft"
 CONTEXT_FILE_NAME = "context.md"

@@ -1,6 +1,6 @@
 import logging
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from pathlib import Path
 
 from langchain_core.messages import SystemMessage, BaseMessage, HumanMessage, AIMessage, ToolMessage, RemoveMessage
@@ -25,8 +25,6 @@ class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
     # сколько уже было сбросов истории (компактизаций)
     reset_count: int
-    # менялись ли файлы ответа на последнем шаге инструментов
-    answer_written: bool
 
 AGENT_CFG_NAME = "agent"
 
@@ -143,26 +141,6 @@ def limit_notice_node(
     # сообщение с тем же id заменяет прежнее в истории
     return {"messages": [noticed_tool_message]}
 
-def make_tools_node(*, tools: list[BaseTool]) -> Callable:
-    """
-    Собирает узел инструментов, который отмечает, менялись ли файлы ответа.
-
-        tools: инструменты узла.
-
-    Возвращает: Узел графа.
-    """
-    tool_node = ToolNode(tools)
-
-    def tools_node(state: AgentState, config: RunnableConfig):
-        """Выполняет вызовы инструментов и сравнивает файлы ответа до и после."""
-        cfg: AgentConfig = config["configurable"][AGENT_CFG_NAME]
-        before = _answer_snapshot(cfg = cfg)
-        update = tool_node.invoke(state, config)
-
-        return {**update, "answer_written": _answer_snapshot(cfg = cfg) != before}
-
-    return tools_node
-
 def route_after_tools(state: AgentState, config: RunnableConfig) -> str:
     """
     Выбирает узел после выполнения инструментов: продолжение работы или фаза черновика.
@@ -177,10 +155,46 @@ def route_after_tools(state: AgentState, config: RunnableConfig) -> str:
     if input_tokens >= cfg.history_token_hard_limit:
         return LIMIT_NOTICE_NODE_ID
 
-    if input_tokens >= cfg.history_token_limit and not state["answer_written"]:
+    if input_tokens >= cfg.history_token_limit and not _works_with_answer(cfg = cfg, messages = state["messages"]):
         return LIMIT_NOTICE_NODE_ID
 
     return AGENT_NODE_ID
+
+def _works_with_answer(*, cfg: AgentConfig, messages: Sequence[BaseMessage]) -> bool:
+    """
+    Проверяет, работал ли агент на последнем шаге инструментов со своим ответом.
+
+        cfg: настройки агента.
+        messages: история агента; в конце - ответ модели с вызовами и результаты этих вызовов.
+
+    Возвращает: True, если успешных вызовов на шаге нет или в аргументах хотя бы одного успешного
+        вызова есть путь к личной папке агента: относительный или абсолютный.
+    """
+    private_paths = (str(cfg.relative_private_dir), str(cfg.project_dir / cfg.relative_private_dir))
+
+    failed_call_ids = set()
+    last_response: AIMessage | None = None
+    for message in reversed(messages):
+        if isinstance(message, ToolMessage):
+            if message.status == "error":
+                failed_call_ids.add(message.tool_call_id)
+            continue
+        if isinstance(message, AIMessage):
+            last_response = message
+        break
+
+    if last_response is None:
+        return False
+
+    successful_calls = [call for call in last_response.tool_calls if call["id"] not in failed_call_ids]
+    if not successful_calls:
+        return True
+
+    return any(
+        private_path in str(call["args"])
+        for call in successful_calls
+        for private_path in private_paths
+    )
 
 def route_after_draft(state: AgentState, config: RunnableConfig) -> str:
     """
@@ -226,7 +240,7 @@ def create_agent_graph(
 
     workflow.add_node(INIT_NODE_ID, init_node)
     workflow.add_node(AGENT_NODE_ID, agent_node)
-    workflow.add_node(TOOL_NODE_ID, make_tools_node(tools = tools))
+    workflow.add_node(TOOL_NODE_ID, ToolNode(tools))
     workflow.add_node(LIMIT_NOTICE_NODE_ID, limit_notice_node)
     workflow.add_node(DRAFT_AGENT_NODE_ID, agent_node)
     workflow.add_node(DRAFT_TOOL_NODE_ID, ToolNode(draft_tools))
@@ -310,6 +324,8 @@ def _is_unfinished(*, response: AIMessage) -> bool:
         and TODO_PATTERN.search(str(response.content)) is None
     )
 
+# Не используется. Прежний признак работы с ответом за мягким лимитом: узел инструментов снимал состояние
+# файлов ответа до и после шага и пропускал агента дальше, если файлы изменились. Оставлено на всякий случай.
 def _answer_snapshot(*, cfg: AgentConfig) -> dict[Path, tuple[int, int]]:
     """
     Снимает состояние файлов ответа: черновика и контекста.
