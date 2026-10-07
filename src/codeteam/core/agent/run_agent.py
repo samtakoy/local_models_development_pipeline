@@ -10,7 +10,7 @@ from codeteam.core.agent.graph import create_agent_graph, AgentState, AGENT_CFG_
 from codeteam.core.agent.journal import AgentJournal
 from codeteam.core.agent.role import AgentRole
 from codeteam.core.agent.prompts import DRAFT_PHASE_HINT, DRAFT_PHASE_BASH_REFUSAL, AGENT_SYSTEM_INSTRUCTIONS, LIMIT_NOTICE, \
-    REINIT_NOTICE, PROJECT_RULES_FILE_NAME, PROJECT_RULES_INSTRUCTIONS
+    REINIT_NOTICE, PROJECT_RULES_FILE_NAME, PROJECT_RULES_INSTRUCTIONS, PROJECT_DOCS_DIR_NAME
 from codeteam.core.agent.workspace import CONTEXT_FILE_NAME, PRIVATE_ROOT, Workspace, context_path, draft_dir
 from codeteam.core.tools.files import READ_TOOL_NAME, build_file_tools, SeenFiles
 from codeteam.common.shell import ShellProcesses
@@ -113,7 +113,12 @@ def run_agent(
     # тот де набор инструментов, но с другими ограничениями
     draft_tools = [
         *build_file_tools(workspace = draft_workspace, seen_files = seen_files),
-        build_disabled_bash_tool(refusal = DRAFT_PHASE_BASH_REFUSAL),
+        build_disabled_bash_tool(
+            refusal = DRAFT_PHASE_BASH_REFUSAL.format(
+                draft_dir = draft_dir(private_dir = relative_private_dir),
+                context_file_path = context_path(private_dir = relative_private_dir),
+            )
+        ),
         stop_process_tool,
     ]
 
@@ -141,6 +146,10 @@ def run_agent(
     )
     project_rules_reads = [(READ_TOOL_NAME, {"file_path": PROJECT_RULES_FILE_NAME})] if has_project_rules else []
 
+    # Документация проекта: чтение списка файлов папки в разогреве, если папка есть
+    has_project_docs = (project_dir / PROJECT_DOCS_DIR_NAME).is_dir()
+    project_docs_reads = [(READ_TOOL_NAME, {"file_path": PROJECT_DOCS_DIR_NAME})] if has_project_docs else []
+
     config = RunnableConfig(
         configurable = {
             AGENT_CFG_NAME: AgentConfig(
@@ -151,6 +160,7 @@ def run_agent(
                     # читаем заранее корневую папку проекта за агента
                     (READ_TOOL_NAME, {"file_path": "."}),
                     *project_rules_reads,
+                    *project_docs_reads,
                     *_input_reads(project_dir = project_dir, input_dirs = input_dirs),
                 ],
                 history_token_limit = 60000,

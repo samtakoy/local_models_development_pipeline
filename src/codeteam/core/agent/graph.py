@@ -123,9 +123,25 @@ def limit_notice_node(
     state: AgentState,
     config: RunnableConfig
 ) -> AgentState:
+    """
+    Дописывает уведомление о лимите в конец результата последнего инструмента.
+
+        state: состояние агента; последнее сообщение истории - результат инструмента.
+        config: конфигурация запуска с настройками агента.
+
+    Возвращает: Обновление состояния с результатом инструмента, дополненным уведомлением.
+    """
     cfg: AgentConfig = config["configurable"][AGENT_CFG_NAME]
 
-    return {"messages": [HumanMessage(content = cfg.limit_notice)]}
+    # Просто испольщовать User Message - просто и работает. Но в этот момент сбрасываются все thinking блоки модели и kv-кеш считается заново
+    # return {"messages": [HumanMessage(content = cfg.limit_notice)]}
+    last_tool_message: ToolMessage = state["messages"][-1]
+    noticed_tool_message = last_tool_message.model_copy(
+        update = {"content": f"{last_tool_message.text}\n\n{cfg.limit_notice}"}
+    )
+
+    # сообщение с тем же id заменяет прежнее в истории
+    return {"messages": [noticed_tool_message]}
 
 def make_tools_node(*, tools: list[BaseTool]) -> Callable:
     """
