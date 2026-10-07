@@ -18,6 +18,9 @@ from codeteam.core.agent.run_agent import run_agent
 from codeteam.core.agent.workspace import DRAFT_SECTION_PATTERN, PRIVATE_ROOT
 from codeteam.core.pipeline.prompts import ARCHITECT_TASK, DEVELOPER_TASK, RESEARCHER_TASK, SENIOR_TASK
 from codeteam.core.roles import load_role_prompt
+from codeteam.core.tools.files import DELETE_TOOL_NAME, EDIT_TOOL_NAME, GLOB_TOOL_NAME, GREP_TOOL_NAME, \
+    READ_TOOL_NAME, WRITE_TOOL_NAME
+from codeteam.core.tools.shell import BASH_TOOL_NAME, STOP_PROCESS_TOOL_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +46,18 @@ FIRST_STAGE_JOURNAL_NUMBER = 3
 
 # Агентов на этап: сеньор и разработчик.
 STAGE_AGENT_COUNT = 2
+
+# Инструменты ролей, которые работают с кодом проекта.
+PROJECT_TOOL_NAMES = (
+    READ_TOOL_NAME,
+    GLOB_TOOL_NAME,
+    GREP_TOOL_NAME,
+    WRITE_TOOL_NAME,
+    EDIT_TOOL_NAME,
+    DELETE_TOOL_NAME,
+    BASH_TOOL_NAME,
+    STOP_PROCESS_TOOL_NAME,
+)
 
 
 class PipelineError(RuntimeError):
@@ -89,6 +104,7 @@ class PipelineConfig:
 def researcher_node(state: PipelineState, config: RunnableConfig):
     """Запускает исследователя кода на задаче пользователя."""
     cfg: PipelineConfig = config["configurable"][PIPELINE_CFG_NAME]
+    project_dir = Path(cfg.project_path).resolve()
     task = RESEARCHER_TASK.format(task = state["task"])
     research_dir = _run_role(
         cfg = cfg,
@@ -97,6 +113,8 @@ def researcher_node(state: PipelineState, config: RunnableConfig):
         task = task,
         input_dirs = (),
         private_dir_name = Path(RESEARCHER_NODE_ID),
+        tool_names = PROJECT_TOOL_NAMES,
+        extra_readable_dirs = (project_dir,),
         extra_writable_dirs = (),
     )
 
@@ -106,10 +124,11 @@ def researcher_node(state: PipelineState, config: RunnableConfig):
 def architect_node(state: PipelineState, config: RunnableConfig):
     """Запускает архитектора: по задаче и отчёту исследователя он делит работу на этапы."""
     cfg: PipelineConfig = config["configurable"][PIPELINE_CFG_NAME]
+    project_dir = Path(cfg.project_path).resolve()
     research_dir = state["research_dir"]
     task = ARCHITECT_TASK.format(
         task = state["task"],
-        research_dir = research_dir.relative_to(Path(cfg.project_path).resolve()),
+        research_dir = research_dir.relative_to(project_dir),
     )
     plan_dir = _run_role(
         cfg = cfg,
@@ -118,6 +137,8 @@ def architect_node(state: PipelineState, config: RunnableConfig):
         task = task,
         input_dirs = (research_dir,),
         private_dir_name = Path(ARCHITECT_NODE_ID),
+        tool_names = PROJECT_TOOL_NAMES,
+        extra_readable_dirs = (project_dir,),
         extra_writable_dirs = (),
     )
 
@@ -154,6 +175,8 @@ def senior_node(state: PipelineState, config: RunnableConfig):
         task = task,
         input_dirs = (stage_task_dir,),
         private_dir_name = stage_dir_name / SENIOR_NODE_ID,
+        tool_names = PROJECT_TOOL_NAMES,
+        extra_readable_dirs = (project_dir,),
         extra_writable_dirs = (),
     )
 
@@ -179,6 +202,8 @@ def developer_node(state: PipelineState, config: RunnableConfig):
         task = DEVELOPER_TASK.format(stage_plan_dir = stage_plan_dir.relative_to(project_dir)),
         input_dirs = (stage_plan_dir,),
         private_dir_name = stage_dir_name / DEVELOPER_NODE_ID,
+        tool_names = PROJECT_TOOL_NAMES,
+        extra_readable_dirs = (project_dir,),
         extra_writable_dirs = (project_dir,),
     )
 
@@ -338,6 +363,8 @@ def _run_role(
     task: str,
     input_dirs: tuple[Path, ...],
     private_dir_name: Path,
+    tool_names: tuple[str, ...],
+    extra_readable_dirs: tuple[Path, ...],
     extra_writable_dirs: tuple[Path, ...],
 ) -> Path:
     """
@@ -349,6 +376,9 @@ def _run_role(
         task: задача агенту.
         input_dirs: папки результатов других агентов.
         private_dir_name: путь личной папки агента внутри папки личных папок.
+        tool_names: имена инструментов агента.
+        extra_readable_dirs: папки чтения агента в фазе работы, кроме личной папки и папок результатов
+            других агентов.
         extra_writable_dirs: папки записи агента в фазе работы, кроме черновика и файла контекста.
 
     Возвращает: Папку черновика агента.
@@ -356,7 +386,8 @@ def _run_role(
     role = AgentRole(
         name = name,
         system_prompt = load_role_prompt(name = name),
-        model_name = cfg.model_name
+        model_name = cfg.model_name,
+        tool_names = tool_names,
     )
 
     return run_agent(
@@ -365,6 +396,7 @@ def _run_role(
         input_dirs = input_dirs,
         project_path = cfg.project_path,
         private_dir_name = private_dir_name,
+        extra_readable_dirs = extra_readable_dirs,
         extra_writable_dirs = extra_writable_dirs,
         journal_path = cfg.run_dir / f"{journal_name}.md",
         settings = cfg.settings,

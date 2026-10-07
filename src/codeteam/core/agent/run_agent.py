@@ -1,7 +1,9 @@
+from collections.abc import Callable
 from pathlib import Path
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.runnables import RunnableConfig
+from langchain_core.tools import BaseTool
 
 from codeteam.app.settings import Settings
 from codeteam.common.llm import build_chat_model, OllamaConfig, GenerationMode, ReasoningLevel
@@ -12,13 +14,18 @@ from codeteam.core.agent.role import AgentRole
 from codeteam.core.agent.prompts import DRAFT_PHASE_HINT, DRAFT_PHASE_BASH_REFUSAL, AGENT_SYSTEM_INSTRUCTIONS, LIMIT_NOTICE, \
     REINIT_NOTICE, PROJECT_RULES_FILE_NAME, PROJECT_RULES_INSTRUCTIONS, PROJECT_DOCS_DIR_NAME
 from codeteam.core.agent.workspace import CONTEXT_FILE_NAME, PRIVATE_ROOT, Workspace, context_path, draft_dir
-from codeteam.core.tools.files import READ_TOOL_NAME, build_file_tools, SeenFiles
+from codeteam.core.tools.files import DELETE_TOOL_NAME, EDIT_TOOL_NAME, READ_TOOL_NAME, WRITE_TOOL_NAME, \
+    file_tool_builders, SeenFiles
 from codeteam.common.shell import ShellProcesses
-from codeteam.core.tools.shell import build_bash_tool, build_disabled_bash_tool, build_stop_process_tool
+from codeteam.core.tools.shell import BASH_TOOL_NAME, STOP_PROCESS_TOOL_NAME, build_bash_tool, \
+    build_disabled_bash_tool, build_stop_process_tool
 
 
 # Запас токенов окна модели на её ответ.
 RESPONSE_TOKEN_RESERVE = 16000
+
+# Инструменты, без которых агент не прочитает разогрев и не запишет черновик.
+REQUIRED_TOOL_NAMES = (READ_TOOL_NAME, WRITE_TOOL_NAME, EDIT_TOOL_NAME, DELETE_TOOL_NAME)
 
 
 def run_agent(
@@ -28,6 +35,7 @@ def run_agent(
     input_dirs: tuple[Path, ...],
     project_path: str,
     private_dir_name: Path,
+    extra_readable_dirs: tuple[Path, ...],
     extra_writable_dirs: tuple[Path, ...],
     journal_path: Path,
     settings: Settings,
@@ -40,6 +48,8 @@ def run_agent(
         input_dirs: папки результатов других агентов: агент их читает в разогреве.
         project_path: папка рабочего проекта.
         private_dir_name: путь личной папки агента внутри папки личных папок.
+        extra_readable_dirs: папки, где агенту разрешено чтение в фазе работы, кроме личной папки
+            и папок результатов других агентов; с папкой проекта агент видит её в разогреве.
         extra_writable_dirs: папки, где агенту разрешена запись в фазе работы, кроме черновика
             и файла контекста.
         journal_path: файл журнала агента.
@@ -67,12 +77,14 @@ def run_agent(
     # Просмотренный файлы - одинаковые для фазы работы и фазы черновика
     seen_files = SeenFiles()
 
-    # Фаза работы. TODO писать черновик могу все, но нужен список тулов свой для каждого агента
+    _check_required_tools(tool_names = role.tool_names)
+
+    # Фаза работы
     workspace = Workspace(
         project_dir = project_dir,
         private_dir = private_dir,
         input_dirs = input_dirs,
-        readable_dirs = (project_dir,),
+        readable_dirs = (private_dir, *input_dirs, *extra_readable_dirs),
         # отдельно укажем папку и файл
         # writable_dirs = (private_dir,),
         writable_dirs = (
@@ -86,11 +98,14 @@ def run_agent(
     shell_processes = ShellProcesses()
     # Остановка фоновых процессов агента: одна и та же в фазе работы и в фазе черновика
     stop_process_tool = build_stop_process_tool(processes = shell_processes)
-    tools = [
-        *build_file_tools(workspace = workspace, seen_files = seen_files),
-        build_bash_tool(workspace = workspace, processes = shell_processes),
-        stop_process_tool,
-    ]
+    tools = _build_tools(
+        builders = {
+            **file_tool_builders(workspace = workspace, seen_files = seen_files),
+            BASH_TOOL_NAME: lambda: build_bash_tool(workspace = workspace, processes = shell_processes),
+            STOP_PROCESS_TOOL_NAME: lambda: stop_process_tool,
+        },
+        tool_names = role.tool_names,
+    )
 
     # Фаза черновика. Писать можно только в личную папку. Остальные тулы должны быть запрещены
     # TODO запрет должен касаться и тулов вызова других агентов, а также web-code-ресерчей
@@ -110,17 +125,20 @@ def run_agent(
             context_file_path = CONTEXT_FILE_NAME
         ),
     )
-    # тот де набор инструментов, но с другими ограничениями
-    draft_tools = [
-        *build_file_tools(workspace = draft_workspace, seen_files = seen_files),
-        build_disabled_bash_tool(
-            refusal = DRAFT_PHASE_BASH_REFUSAL.format(
-                draft_dir = draft_dir(private_dir = relative_private_dir),
-                context_file_path = context_path(private_dir = relative_private_dir),
-            )
-        ),
-        stop_process_tool,
-    ]
+    # тот же набор инструментов, но с другими ограничениями
+    draft_tools = _build_tools(
+        builders = {
+            **file_tool_builders(workspace = draft_workspace, seen_files = seen_files),
+            BASH_TOOL_NAME: lambda: build_disabled_bash_tool(
+                refusal = DRAFT_PHASE_BASH_REFUSAL.format(
+                    draft_dir = draft_dir(private_dir = relative_private_dir),
+                    context_file_path = context_path(private_dir = relative_private_dir),
+                )
+            ),
+            STOP_PROCESS_TOOL_NAME: lambda: stop_process_tool,
+        },
+        tool_names = role.tool_names,
+    )
 
     agent = create_agent_graph(tools = tools, draft_tools = draft_tools)
     bound_chat_model = chat_model.bind_tools(tools)
@@ -139,15 +157,19 @@ def run_agent(
         context_file_path = context_path(private_dir = relative_private_dir),
     )
 
-    # Правила проекта: блок в системном промпте и чтение файла в разогреве, если файл есть
-    has_project_rules = (project_dir / PROJECT_RULES_FILE_NAME).is_file()
+    # Корень проекта: чтение в разогреве, если агенту разрешено читать папку проекта
+    reads_project = project_dir in (folder.resolve() for folder in extra_readable_dirs)
+    project_root_reads = [(READ_TOOL_NAME, {"file_path": "."})] if reads_project else []
+
+    # Правила проекта: блок в системном промпте и чтение файла в разогреве, если файл есть и проект читается
+    has_project_rules = reads_project and (project_dir / PROJECT_RULES_FILE_NAME).is_file()
     project_rules_instructions = (
         PROJECT_RULES_INSTRUCTIONS.format(project_rules_file = PROJECT_RULES_FILE_NAME) if has_project_rules else ""
     )
     project_rules_reads = [(READ_TOOL_NAME, {"file_path": PROJECT_RULES_FILE_NAME})] if has_project_rules else []
 
-    # Документация проекта: чтение списка файлов папки в разогреве, если папка есть
-    has_project_docs = (project_dir / PROJECT_DOCS_DIR_NAME).is_dir()
+    # Документация проекта: чтение списка файлов папки в разогреве, если папка есть и проект читается
+    has_project_docs = reads_project and (project_dir / PROJECT_DOCS_DIR_NAME).is_dir()
     project_docs_reads = [(READ_TOOL_NAME, {"file_path": PROJECT_DOCS_DIR_NAME})] if has_project_docs else []
 
     config = RunnableConfig(
@@ -157,8 +179,7 @@ def run_agent(
                 task = task,
                 chat_model = bound_chat_model,
                 warmup_calls = [
-                    # читаем заранее корневую папку проекта за агента
-                    (READ_TOOL_NAME, {"file_path": "."}),
+                    *project_root_reads,
                     *project_rules_reads,
                     *project_docs_reads,
                     *_input_reads(project_dir = project_dir, input_dirs = input_dirs),
@@ -191,6 +212,33 @@ def run_agent(
     journal.finish()
 
     return draft_dir(private_dir = private_dir)
+
+
+def _check_required_tools(*, tool_names: tuple[str, ...]) -> None:
+    """
+    Проверяет, что в списке инструментов роли есть обязательные инструменты.
+
+        tool_names: имена инструментов роли.
+    """
+    missing_names = [name for name in REQUIRED_TOOL_NAMES if name not in tool_names]
+    if missing_names:
+        raise ValueError(f"в инструментах роли нет обязательных: {', '.join(missing_names)}")
+
+
+def _build_tools(*, builders: dict[str, Callable[[], BaseTool]], tool_names: tuple[str, ...]) -> list[BaseTool]:
+    """
+    Собирает инструменты фазы с именами из списка роли.
+
+        builders: сборщики инструментов фазы по именам инструментов.
+        tool_names: имена инструментов роли.
+
+    Возвращает: Инструменты в порядке списка роли.
+    """
+    unknown_names = [name for name in tool_names if name not in builders]
+    if unknown_names:
+        raise ValueError(f"неизвестные инструменты роли: {', '.join(unknown_names)}")
+
+    return [builders[name]() for name in tool_names]
 
 
 def _input_reads(*, project_dir: Path, input_dirs: tuple[Path, ...]) -> list[tuple[str, dict]]:
