@@ -12,7 +12,7 @@ from codeteam.core.agent.graph import create_agent_graph, AgentState, AGENT_CFG_
 from codeteam.core.agent.journal import AgentJournal
 from codeteam.core.agent.role import AgentRole
 from codeteam.core.agent.prompts import DRAFT_PHASE_HINT, DRAFT_PHASE_BASH_REFUSAL, AGENT_SYSTEM_INSTRUCTIONS, LIMIT_NOTICE, \
-    REINIT_NOTICE, PROJECT_RULES_FILE_NAME, PROJECT_RULES_INSTRUCTIONS, PROJECT_DOCS_DIR_NAME
+    REINIT_NOTICE, EMPTY_DRAFT_NOTICE, PROJECT_RULES_FILE_NAME, PROJECT_RULES_INSTRUCTIONS, PROJECT_DOCS_DIR_NAME
 from codeteam.core.agent.workspace import CONTEXT_FILE_NAME, PRIVATE_ROOT, Workspace, context_path, draft_dir
 from codeteam.core.tools.files import DELETE_TOOL_NAME, EDIT_TOOL_NAME, READ_TOOL_NAME, WRITE_TOOL_NAME, \
     file_tool_builders, SeenFiles
@@ -156,6 +156,7 @@ def run_agent(
         draft_dir = draft_dir(private_dir = relative_private_dir),
         context_file_path = context_path(private_dir = relative_private_dir),
     )
+    empty_draft_notice = EMPTY_DRAFT_NOTICE.format(draft_dir = draft_dir(private_dir = relative_private_dir))
 
     # Корень проекта: чтение в разогреве, если агенту разрешено читать папку проекта
     reads_project = project_dir in (folder.resolve() for folder in extra_readable_dirs)
@@ -190,6 +191,8 @@ def run_agent(
                 max_resets = 10,
                 limit_notice = limit_notice,
                 reinit_notice = reinit_notice,
+                empty_draft_notice = empty_draft_notice,
+                step_hooks = role.step_hooks,
                 relative_private_dir = relative_private_dir,
                 project_dir = project_dir,
                 seen_files = seen_files,
@@ -197,7 +200,7 @@ def run_agent(
         }
     )
 
-    initial_state = AgentState(messages = [], reset_count = 0)
+    initial_state = AgentState(messages = [], reset_count = 0, empty_draft_notices = 0)
     journal = AgentJournal(path = journal_path, agent_name = role.name, model_name = role.model_name)
     journal.write_tools(tools = bound_chat_model.kwargs["tools"])
     try:

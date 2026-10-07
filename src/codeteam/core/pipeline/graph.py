@@ -16,6 +16,7 @@ from codeteam.common.git import commit_all
 from codeteam.common.llm import ReasoningLevel
 from codeteam.core.agent.role import AgentRole
 from codeteam.core.agent.run_agent import run_agent
+from codeteam.core.agent.step_hooks import StepHook, code_block_hook
 from codeteam.core.agent.workspace import CHECK_DIR, DRAFT_SECTION_PATTERN, PRIVATE_ROOT
 from codeteam.core.pipeline.prompts import ARCHITECT_TASK, DEVELOPER_TASK, PM_TASK, RESEARCHER_TASK, SENIOR_TASK
 from codeteam.core.roles import load_role_prompt
@@ -65,6 +66,9 @@ DRAFT_TOOL_NAMES = (
     EDIT_TOOL_NAME,
     DELETE_TOOL_NAME,
 )
+
+# Наибольшее число строк в одном блоке кода с указанным языком в черновике архитектора.
+ARCHITECT_CODE_BLOCK_LINE_LIMIT = 10
 
 
 class PipelineError(RuntimeError):
@@ -125,6 +129,7 @@ def pm_node(state: PipelineState, config: RunnableConfig):
         input_dirs = (),
         private_dir_name = Path(PM_NODE_ID),
         tool_names = DRAFT_TOOL_NAMES,
+        step_hooks = (),
         extra_readable_dirs = (),
         extra_writable_dirs = (),
     )
@@ -149,6 +154,7 @@ def researcher_node(state: PipelineState, config: RunnableConfig):
         input_dirs = (),
         private_dir_name = Path(RESEARCHER_NODE_ID),
         tool_names = PROJECT_TOOL_NAMES,
+        step_hooks = (),
         extra_readable_dirs = (project_dir,),
         extra_writable_dirs = (),
     )
@@ -177,6 +183,7 @@ def architect_node(state: PipelineState, config: RunnableConfig):
         input_dirs = (requirements_dir, research_dir),
         private_dir_name = Path(ARCHITECT_NODE_ID),
         tool_names = PROJECT_TOOL_NAMES,
+        step_hooks = (code_block_hook(max_lines = ARCHITECT_CODE_BLOCK_LINE_LIMIT),),
         extra_readable_dirs = (project_dir,),
         extra_writable_dirs = (),
     )
@@ -219,6 +226,7 @@ def senior_node(state: PipelineState, config: RunnableConfig):
         input_dirs = (stage_task_dir,),
         private_dir_name = stage_dir_name / SENIOR_NODE_ID,
         tool_names = PROJECT_TOOL_NAMES,
+        step_hooks = (),
         extra_readable_dirs = (project_dir,),
         extra_writable_dirs = (),
     )
@@ -246,6 +254,7 @@ def developer_node(state: PipelineState, config: RunnableConfig):
         input_dirs = (stage_plan_dir,),
         private_dir_name = stage_dir_name / DEVELOPER_NODE_ID,
         tool_names = PROJECT_TOOL_NAMES,
+        step_hooks = (),
         extra_readable_dirs = (project_dir,),
         extra_writable_dirs = (project_dir,),
     )
@@ -407,6 +416,7 @@ def _run_role(
     input_dirs: tuple[Path, ...],
     private_dir_name: Path,
     tool_names: tuple[str, ...],
+    step_hooks: tuple[StepHook, ...],
     extra_readable_dirs: tuple[Path, ...],
     extra_writable_dirs: tuple[Path, ...],
 ) -> Path:
@@ -422,6 +432,7 @@ def _run_role(
         input_dirs: папки результатов других агентов.
         private_dir_name: путь личной папки агента внутри папки личных папок.
         tool_names: имена инструментов агента.
+        step_hooks: хуки после шага инструментов: замечания к изменённым файлам черновика.
         extra_readable_dirs: папки чтения агента в фазе работы, кроме личной папки и папок результатов
             других агентов.
         extra_writable_dirs: папки записи агента в фазе работы, кроме черновика и файла контекста.
@@ -434,6 +445,7 @@ def _run_role(
         model_name = cfg.model_name,
         reasoning_level = reasoning_level,
         tool_names = tool_names,
+        step_hooks = step_hooks,
     )
 
     return run_agent(

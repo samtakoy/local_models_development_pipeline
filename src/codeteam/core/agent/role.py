@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 
 from codeteam.common.llm import ReasoningLevel
+from codeteam.core.agent.step_hooks import StepHook
 
 
 @dataclass(frozen = True)
@@ -15,6 +16,7 @@ class AgentRole:
         model_name: модель агента.
         reasoning_level: уровень размышления модели агента.
         tool_names: имена инструментов агента, одни и те же в фазе работы и в фазе черновика.
+        step_hooks: хуки после шага инструментов: замечания к изменённым файлам черновика.
     """
 
     name: str
@@ -22,3 +24,4 @@ class AgentRole:
     model_name: str
     reasoning_level: ReasoningLevel
     tool_names: tuple[str, ...]
+    step_hooks: tuple[StepHook, ...]

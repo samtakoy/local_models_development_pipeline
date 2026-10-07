@@ -3,6 +3,7 @@ from pathlib import Path
 
 from langchain_core.runnables import Runnable
 
+from codeteam.core.agent.step_hooks import StepHook
 from codeteam.core.tools.files import SeenFiles
 
 
@@ -24,6 +25,10 @@ class AgentConfig:
     max_resets: int
     limit_notice: str
     reinit_notice: str
+    # ответ агенту, который сдал работу с пустым черновиком
+    empty_draft_notice: str
+    # хуки после шага инструментов: замечания к изменённым файлам черновика
+    step_hooks: tuple[StepHook, ...]
 
     project_dir: Path
     # путь к рабочей директории агента

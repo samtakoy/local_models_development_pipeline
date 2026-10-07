@@ -1,6 +1,6 @@
 import logging
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from langchain_core.messages import SystemMessage, BaseMessage, HumanMessage, AIMessage, ToolMessage, RemoveMessage
@@ -25,6 +25,8 @@ class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
     # сколько уже было сбросов истории (компактизаций)
     reset_count: int
+    # сколько раз агент сдавал работу с пустым черновиком и получал отказ
+    empty_draft_notices: int
 
 AGENT_CFG_NAME = "agent"
 
@@ -32,9 +34,13 @@ INIT_NODE_ID = "init"
 AGENT_NODE_ID = "agent"
 TOOL_NODE_ID = "tools"
 LIMIT_NOTICE_NODE_ID = "limit_notice"
+EMPTY_DRAFT_NOTICE_NODE_ID = "empty_draft_notice"
 DRAFT_AGENT_NODE_ID = "draft_agent"
 DRAFT_TOOL_NODE_ID = "draft_tools"
 REINIT_NODE_ID = "reinit"
+
+# Сколько раз отказывать агенту, который сдаёт работу с пустым черновиком; дальше работа завершается как есть.
+EMPTY_DRAFT_NOTICE_LIMIT = 2
 
 def init_node(state: AgentState, config: RunnableConfig):
     """Собирает историю агента на старте."""
@@ -141,6 +147,76 @@ def limit_notice_node(
     # сообщение с тем же id заменяет прежнее в истории
     return {"messages": [noticed_tool_message]}
 
+def empty_draft_notice_node(state: AgentState, config: RunnableConfig) -> AgentState:
+    """
+    Отказывает в приёме работы с пустым черновиком: добавляет агенту сообщение с отказом.
+
+        state: состояние агента; последнее сообщение истории - ответ агента с DONE.
+        config: конфигурация запуска с настройками агента.
+
+    Возвращает: Обновление состояния с сообщением об отказе и увеличенным счётчиком отказов.
+    """
+    cfg: AgentConfig = config["configurable"][AGENT_CFG_NAME]
+
+    return {
+        "messages": [HumanMessage(content = cfg.empty_draft_notice)],
+        "empty_draft_notices": state["empty_draft_notices"] + 1,
+    }
+
+def route_after_agent(state: AgentState, config: RunnableConfig) -> str:
+    """
+    Выбирает узел после ответа агента: инструменты, отказ в приёме пустого черновика или конец работы.
+
+        state: состояние агента.
+        config: конфигурация запуска с настройками агента.
+
+    Возвращает: Имя следующего узла.
+    """
+    if tools_condition(state) == TOOL_NODE_ID:
+        return TOOL_NODE_ID
+
+    cfg: AgentConfig = config["configurable"][AGENT_CFG_NAME]
+    response = state["messages"][-1]
+    is_done = DONE_PATTERN.search(str(response.content)) is not None
+    agent_draft_dir = cfg.project_dir / draft_dir(private_dir = cfg.relative_private_dir)
+    is_draft_empty = not any(agent_draft_dir.glob("*.md"))
+    if is_done and is_draft_empty and state["empty_draft_notices"] < EMPTY_DRAFT_NOTICE_LIMIT:
+        return EMPTY_DRAFT_NOTICE_NODE_ID
+
+    return END
+
+def make_tools_node(*, tools: list[BaseTool]) -> Callable:
+    """
+    Собирает узел инструментов, который после шага запускает хуки на изменённых файлах черновика.
+
+        tools: инструменты узла.
+
+    Возвращает: Узел графа.
+    """
+    tool_node = ToolNode(tools)
+
+    def tools_node(state: AgentState, config: RunnableConfig):
+        """Выполняет вызовы инструментов и дописывает замечания хуков к результату последнего вызова."""
+        cfg: AgentConfig = config["configurable"][AGENT_CFG_NAME]
+        if not cfg.step_hooks:
+            return tool_node.invoke(state, config)
+
+        before = _answer_snapshot(cfg = cfg)
+        update = tool_node.invoke(state, config)
+        remarks = _step_hook_remarks(cfg = cfg, before = before, after = _answer_snapshot(cfg = cfg))
+        if not remarks:
+            return update
+
+        tool_messages = list(update["messages"])
+        last_tool_message = tool_messages[-1]
+        tool_messages[-1] = last_tool_message.model_copy(
+            update = {"content": "\n\n".join([last_tool_message.text, *remarks])}
+        )
+
+        return {**update, "messages": tool_messages}
+
+    return tools_node
+
 def route_after_tools(state: AgentState, config: RunnableConfig) -> str:
     """
     Выбирает узел после выполнения инструментов: продолжение работы или фаза черновика.
@@ -240,10 +316,11 @@ def create_agent_graph(
 
     workflow.add_node(INIT_NODE_ID, init_node)
     workflow.add_node(AGENT_NODE_ID, agent_node)
-    workflow.add_node(TOOL_NODE_ID, ToolNode(tools))
+    workflow.add_node(TOOL_NODE_ID, make_tools_node(tools = tools))
     workflow.add_node(LIMIT_NOTICE_NODE_ID, limit_notice_node)
+    workflow.add_node(EMPTY_DRAFT_NOTICE_NODE_ID, empty_draft_notice_node)
     workflow.add_node(DRAFT_AGENT_NODE_ID, agent_node)
-    workflow.add_node(DRAFT_TOOL_NODE_ID, ToolNode(draft_tools))
+    workflow.add_node(DRAFT_TOOL_NODE_ID, make_tools_node(tools = draft_tools))
     workflow.add_node(REINIT_NODE_ID, reinit_node)
 
     workflow.add_edge(START, INIT_NODE_ID)
@@ -254,7 +331,9 @@ def create_agent_graph(
         {TOOL_NODE_ID: TOOL_NODE_ID, END: AGENT_NODE_ID}
     )
 
-    workflow.add_conditional_edges(AGENT_NODE_ID, tools_condition)
+    workflow.add_conditional_edges(AGENT_NODE_ID, route_after_agent)
+    # после отказа в приёме пустого черновика агент продолжает работу
+    workflow.add_edge(EMPTY_DRAFT_NOTICE_NODE_ID, AGENT_NODE_ID)
     # после вызова тулов основного агента - проверка на лимит по токенам
     workflow.add_conditional_edges(TOOL_NODE_ID, route_after_tools)
 
@@ -324,8 +403,37 @@ def _is_unfinished(*, response: AIMessage) -> bool:
         and TODO_PATTERN.search(str(response.content)) is None
     )
 
-# Не используется. Прежний признак работы с ответом за мягким лимитом: узел инструментов снимал состояние
-# файлов ответа до и после шага и пропускал агента дальше, если файлы изменились. Оставлено на всякий случай.
+def _step_hook_remarks(
+    *,
+    cfg: AgentConfig,
+    before: dict[Path, tuple[int, int]],
+    after: dict[Path, tuple[int, int]],
+) -> list[str]:
+    """
+    Запускает хуки после шага на файлах черновика, которые появились или изменились за шаг.
+
+        cfg: настройки агента.
+        before: состояние файлов ответа до шага.
+        after: состояние файлов ответа после шага.
+
+    Возвращает: Замечания хуков по порядку файлов и хуков; пустой список, если замечаний нет.
+    """
+    agent_draft_dir = draft_dir(private_dir = cfg.project_dir / cfg.relative_private_dir)
+    changed_files = sorted(
+        path for path, state in after.items()
+        if before.get(path) != state and path.is_relative_to(agent_draft_dir)
+    )
+
+    remarks = []
+    for path in changed_files:
+        text = path.read_text(encoding = "utf-8", errors = "replace")
+        for hook in cfg.step_hooks:
+            remark = hook(path, text)
+            if remark is not None:
+                remarks.append(remark)
+
+    return remarks
+
 def _answer_snapshot(*, cfg: AgentConfig) -> dict[Path, tuple[int, int]]:
     """
     Снимает состояние файлов ответа: черновика и контекста.
