@@ -40,6 +40,9 @@ CHECK_INTERVAL_SECONDS = 0.5
 # Адрес, на котором проверяется порт службы.
 SERVICE_HOST = "127.0.0.1"
 
+# Одиночный & в команде: запуск в фоне; && и перенаправления вида 2>&1, &> им не считаются.
+BACKGROUND_PATTERN = re.compile(r"(?<![&>])&(?![&>])")
+
 # Сколько последних строк лога показывать агенту.
 LOG_TAIL_LINES = 20
 
@@ -52,6 +55,7 @@ START_SERVICE_DESCRIPTION = """Запускает долго работающу�
 
 Ответ:
 - готово — номер процесса и файл лога;
+- порт port уже занят другой программой — ошибка, служба не запускается: выбери другой порт;
 - процесс завершился или не стал готов за timeout_seconds — ошибка с последними строками лога.
 
 Обращайся к службе по 127.0.0.1. Остановить — инструментом stop_process с номером процесса.
@@ -63,7 +67,9 @@ class StartServiceArguments(BaseModel):
     Аргументы start_service.
     """
 
-    command: str = Field(description = "команда запуска службы, без & в конце")
+    command: str = Field(
+        description = "команда запуска службы, без & и без перенаправления вывода (> файл): вывод в лог пишет сам инструмент"
+    )
     port: int | None = Field(default = None, description = "порт, который служба откроет на 127.0.0.1")
     log_pattern: str | None = Field(
         default = None,
@@ -106,11 +112,22 @@ def build_start_service_tool(*, workspace: Workspace, processes: ShellProcesses)
         if not 1 <= timeout <= READY_TIMEOUT_LIMIT_SECONDS:
             raise ToolException(f"Ошибка: timeout_seconds должен быть от 1 до {READY_TIMEOUT_LIMIT_SECONDS}")
         if port is None and not log_pattern:
-            raise ToolException("Ошибка: укажи port или log_pattern — по ним видно, что служба готова")
+            raise ToolException(
+                "Ошибка: укажи, по чему понять, что служба готова: port — порт, который она откроет "
+                "(например port = 8050; обычно этого достаточно), или log_pattern — регулярное выражение "
+                "строки, которую служба выводит, когда готова."
+            )
+        if BACKGROUND_PATTERN.search(command):
+            raise ToolException("Ошибка: убери & из команды: инструмент сам запускает службу в фоне.")
         try:
             pattern = re.compile(log_pattern) if log_pattern else None
         except re.error as error:
             raise ToolException(f"Ошибка: log_pattern — неверное регулярное выражение: {error}") from error
+        if port is not None and _is_port_open(port = port):
+            raise ToolException(
+                f"Ошибка: порт {port} уже занят другой программой, служба не запущена. "
+                f"Запусти службу на другом порту."
+            )
 
         log_descriptor, log_name = tempfile.mkstemp(prefix = "service_", suffix = ".log")
         os.close(log_descriptor)
