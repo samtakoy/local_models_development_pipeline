@@ -4,7 +4,7 @@ from pathlib import Path
 
 from langchain_core.runnables import RunnableConfig
 
-from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState
+from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState, Stages
 from codeteam.core.roles.architect.config import ARCHITECT_ROLE, ARCHITECTURE_FILE_NAME
 from codeteam.core.roles.architect.prompts import ARCHITECT_TASK
 from codeteam.core.roles.common import STAGE_FILE_PATTERN, PipelineError, make_journal_name, run_role
@@ -35,12 +35,12 @@ def architect_node(state: PipelineState, config: RunnableConfig):
 
     return {
         "plan_dir": plan_dir,
-        "stage_files": find_stage_files(plan_dir = plan_dir),
+        "stages": Stages(files = find_stage_files(plan_dir = plan_dir), index = 0, plan_dir = None),
         "journal_count": state["journal_count"] + 1,
     }
 
 
-def find_stage_files(*, plan_dir: Path) -> list[Path]:
+def find_stage_files(*, plan_dir: Path) -> tuple[Path, ...]:
     """
     Собирает файлы этапов из черновика архитектора.
 
@@ -51,11 +51,11 @@ def find_stage_files(*, plan_dir: Path) -> list[Path]:
     if not (plan_dir / ARCHITECTURE_FILE_NAME).is_file():
         raise PipelineError(f"в черновике архитектора {plan_dir} нет файла {ARCHITECTURE_FILE_NAME}")
 
-    stage_files = sorted(
+    stage_files = tuple(sorted(
         path
         for path in plan_dir.iterdir()
         if path.is_file() and path.name != ARCHITECTURE_FILE_NAME and STAGE_FILE_PATTERN.match(path.name)
-    )
+    ))
     if not stage_files:
         raise PipelineError(f"в черновике архитектора {plan_dir} нет файлов этапов")
 

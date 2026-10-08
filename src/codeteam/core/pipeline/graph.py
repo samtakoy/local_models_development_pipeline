@@ -1,6 +1,7 @@
 """Граф пайплайна: кто из агентов за кем идёт и что кому передаётся."""
 
 import logging
+from dataclasses import replace
 from pathlib import Path
 
 from langchain_core.runnables import RunnableConfig
@@ -25,14 +26,15 @@ FINISH_STAGE_NODE_ID = "finish_stage"
 def finish_stage_node(state: PipelineState, config: RunnableConfig):
     """Коммитит изменения проекта за текущий этап и переходит к следующему этапу."""
     cfg: PipelineConfig = config["configurable"][PIPELINE_CFG_NAME]
-    stage_file = state["stage_files"][state["stage_index"]]
+    stages = state["stages"]
+    stage_file = stages.current_file
     message = f"codeteam: этап {parse_stage_number(stage_file = stage_file)} — {_stage_title(stage_file = stage_file)}"
     if commit_all(project_dir = Path(cfg.project_path).resolve(), message = message):
         logger.info(f"[git] коммит: {message}")
     else:
         logger.warning(f"[git] этап {stage_file.name} не изменил проект, коммита нет")
 
-    return {"stage_index": state["stage_index"] + 1, "stage_plan_dir": None}
+    return {"stages": replace(stages, index = stages.index + 1, plan_dir = None)}
 
 
 def route_next_stage(state: PipelineState) -> str:
@@ -43,7 +45,8 @@ def route_next_stage(state: PipelineState) -> str:
 
     Возвращает: Узел сеньора, если остались этапы; иначе END.
     """
-    if state["stage_index"] < len(state["stage_files"]):
+    stages = state["stages"]
+    if stages.index < len(stages.files):
         return SENIOR_ROLE.name
 
     return END

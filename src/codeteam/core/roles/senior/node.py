@@ -1,6 +1,7 @@
 """Узел сеньора в графе пайплайна: план реализации текущего этапа."""
 
 import shutil
+from dataclasses import replace
 from pathlib import Path
 
 from langchain_core.runnables import RunnableConfig
@@ -20,8 +21,8 @@ def senior_node(state: PipelineState, config: RunnableConfig):
     """Запускает сеньора текущего этапа: по общему решению и файлу этапа он пишет план реализации."""
     cfg: PipelineConfig = config["configurable"][PIPELINE_CFG_NAME]
     project_dir = Path(cfg.project_path).resolve()
-    stage_index = state["stage_index"]
-    stage_file = state["stage_files"][stage_index]
+    stages = state["stages"]
+    stage_file = stages.current_file
     stage_dir_name = build_stage_dir_name(stage_file = stage_file)
     stage_task_dir = _prepare_stage_task_dir(
         plan_dir = state["plan_dir"],
@@ -48,7 +49,7 @@ def senior_node(state: PipelineState, config: RunnableConfig):
         extra_writable_dirs = (),
     )
 
-    return {"stage_plan_dir": stage_plan_dir, "journal_count": state["journal_count"] + 1}
+    return {"stages": replace(stages, plan_dir = stage_plan_dir), "journal_count": state["journal_count"] + 1}
 
 
 def _prepare_stage_task_dir(*, plan_dir: Path, stage_file: Path, target_dir: Path) -> Path:

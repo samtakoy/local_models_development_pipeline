@@ -11,7 +11,7 @@ from codeteam.core.roles.common import PROJECT_TOOL_NAMES, RoleSettings
 ARCHITECTURE_FILE_NAME = "000_architecture.md"
 
 # Наибольшее число строк в одном блоке кода с указанным языком в черновике архитектора.
-ARCHITECT_CODE_BLOCK_LINE_LIMIT = 15
+ARCHITECT_CODE_BLOCK_LINE_LIMIT = 10
 
 ARCHITECT_ROLE = RoleSettings(
     name = "architect",

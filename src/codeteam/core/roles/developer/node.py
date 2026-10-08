@@ -14,9 +14,9 @@ def developer_node(state: PipelineState, config: RunnableConfig):
     """Запускает разработчика текущего этапа: по плану сеньора он пишет код этапа в папке проекта."""
     cfg: PipelineConfig = config["configurable"][PIPELINE_CFG_NAME]
     project_dir = Path(cfg.project_path).resolve()
-    stage_index = state["stage_index"]
-    stage_dir_name = build_stage_dir_name(stage_file = state["stage_files"][stage_index])
-    stage_plan_dir = state["stage_plan_dir"]
+    stages = state["stages"]
+    stage_dir_name = build_stage_dir_name(stage_file = stages.current_file)
+    stage_plan_dir = stages.plan_dir
     run_role(
         cfg = cfg,
         role = DEVELOPER_ROLE,

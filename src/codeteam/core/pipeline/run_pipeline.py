@@ -39,9 +39,7 @@ def run_pipeline(*, project: ProjectSettings, run_dir: Path, model_name: str, se
         requirements_dir = None,
         research_dir = None,
         plan_dir = None,
-        stage_files = [],
-        stage_index = 0,
-        stage_plan_dir = None,
+        stages = None,
         journal_count = 0,
     )
 
