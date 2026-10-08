@@ -7,8 +7,8 @@ from langchain_core.runnables import RunnableConfig
 from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState
 from codeteam.core.roles.architect.config import ARCHITECT_ROLE, ARCHITECTURE_FILE_NAME
 from codeteam.core.roles.architect.prompts import ARCHITECT_TASK
-from codeteam.core.roles.common import REQUIREMENTS_FILE_NAME, STAGE_FILE_PATTERN, PipelineError, \
-    make_journal_name, run_role
+from codeteam.core.roles.common import STAGE_FILE_PATTERN, PipelineError, make_journal_name, run_role
+from codeteam.core.roles.pm import REQUIREMENTS_FILE_NAME
 
 
 def architect_node(state: PipelineState, config: RunnableConfig):

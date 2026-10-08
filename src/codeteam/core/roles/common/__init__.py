@@ -1,7 +1,5 @@
-"""Общее для ролей: описание роли, наборы инструментов, запуск роли, этапы плана архитектора,
-файлы черновиков, которые читают другие роли, ошибки ролей."""
+"""Общее для ролей: описание роли, наборы инструментов, запуск роли, этапы плана архитектора, ошибки ролей."""
 
-from codeteam.core.roles.common.draft_files import REQUIREMENTS_FILE_NAME
 from codeteam.core.roles.common.errors import PipelineError
 from codeteam.core.roles.common.role_settings import DRAFT_TOOL_NAMES, PROJECT_TOOL_NAMES, RoleSettings
 from codeteam.core.roles.common.run_role import make_journal_name, run_role
@@ -10,7 +8,6 @@ from codeteam.core.roles.common.stages import STAGE_FILE_PATTERN, build_stage_di
 __all__ = [
     "DRAFT_TOOL_NAMES",
     "PROJECT_TOOL_NAMES",
-    "REQUIREMENTS_FILE_NAME",
     "STAGE_FILE_PATTERN",
     "PipelineError",
     "RoleSettings",
