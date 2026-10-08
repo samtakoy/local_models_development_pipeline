@@ -28,5 +28,6 @@ ARCHITECT_ROLE = RoleSettings(
             skip_file_names = (ARCHITECTURE_FILE_NAME,),
         ),
     ),
+    step_checks = (),
     answer_checks = (required_files_check(file_names = (ARCHITECTURE_FILE_NAME,)),),
 )

@@ -1,15 +1,17 @@
 """Узел приёмщика этапа в графе пайплайна: проверка этапа в запущенном приложении, вердикт и замечания."""
 
 import logging
+from dataclasses import replace
 from pathlib import Path
 
 from langchain_core.runnables import RunnableConfig
 
-from codeteam.common.git import commit_all
+from codeteam.common.git import commit_all, list_uncommitted_changes
 from codeteam.core.agent.workspace import PRIVATE_ROOT
 from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState, Review
 from codeteam.core.roles.common import STAGE_TASK_DIR_NAME, build_stage_dir_name, check_review_limit, \
-    make_journal_name, next_review_round, parse_stage_number, read_stage_title, read_verdict, run_role
+    clean_project_check, make_journal_name, next_review_round, parse_stage_number, read_stage_title, read_verdict, \
+    run_role, tracked_changes_check
 from codeteam.core.roles.developer import DEVELOPER_ROLE
 from codeteam.core.roles.developer_review.config import DEVELOPER_REVIEW_ROLE
 from codeteam.core.roles.developer_review.prompts import DEVELOPER_REVIEW_TASK
@@ -21,6 +23,7 @@ def developer_review_node(state: PipelineState, config: RunnableConfig):
     """
     Коммитит работу разработчика и запускает приёмщика этапа: он запускает тесты и приложение,
     проходит шаги проверки этапа и пишет вердикт с замечаниями.
+    Правки проекта приёмщиком ловят проверки после шага и при сдаче; оставшиеся правки — предупреждение в лог.
     """
     cfg: PipelineConfig = config["configurable"][PIPELINE_CFG_NAME]
     project_dir = Path(cfg.project_path).resolve()
@@ -38,9 +41,15 @@ def developer_review_node(state: PipelineState, config: RunnableConfig):
         logger.info(f"[git] перед приёмкой круг {review_round} новых изменений нет, коммита нет")
 
     stage_task_dir = project_dir / PRIVATE_ROOT / stage_dir_name / STAGE_TASK_DIR_NAME
+    # проверки правок проекта знают папку проекта только при запуске, поэтому добавляются к описанию роли здесь
+    guarded_role = replace(
+        DEVELOPER_REVIEW_ROLE,
+        step_checks = (*DEVELOPER_REVIEW_ROLE.step_checks, tracked_changes_check(project_dir = project_dir)),
+        answer_checks = (*DEVELOPER_REVIEW_ROLE.answer_checks, clean_project_check(project_dir = project_dir)),
+    )
     remarks_dir = run_role(
         cfg = cfg,
-        role = DEVELOPER_REVIEW_ROLE,
+        role = guarded_role,
         journal_name = make_journal_name(
             journal_count = state["journal_count"],
             label = f"{stage_dir_name}_{DEVELOPER_REVIEW_ROLE.name}_{review_round}",
@@ -55,6 +64,10 @@ def developer_review_node(state: PipelineState, config: RunnableConfig):
         extra_readable_dirs = (project_dir,),
         extra_writable_dirs = (project_dir,),
     )
+    left_changes = [path for _, path in list_uncommitted_changes(project_dir = project_dir)]
+    if left_changes:
+        logger.warning(f"[приёмка] приёмщик оставил правки в проекте: {', '.join(left_changes)}")
+
     review = Review(
         target = DEVELOPER_ROLE.name,
         remarks_dir = remarks_dir,

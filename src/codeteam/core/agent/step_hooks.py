@@ -11,6 +11,9 @@ from codeteam.core.agent.workspace import DRAFT_SECTION_PATTERN, LATIN_DRAFT_SEC
 # Хук после шага: путь и текст изменённого файла черновика → замечание агенту или None.
 StepHook = Callable[[Path, str], str | None]
 
+# Проверка после шага: смотрит не на черновик, а на что угодно ещё (например, на проект) → замечание агенту или None.
+StepCheck = Callable[[], str | None]
+
 # Строка, открывающая блок с указанным языком: ``` и имя языка.
 LANGUAGE_BLOCK_START_PATTERN = re.compile(r"^```[A-Za-z0-9_+#.-]+$")
 

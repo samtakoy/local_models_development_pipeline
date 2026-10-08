@@ -28,6 +28,10 @@ def init_repository(*, project_dir: Path) -> None:
     _run_git(project_dir = project_dir, arguments = ["init"])
 
 
+# Состояние нового, ещё не отслеживаемого файла в выводе git status --porcelain.
+UNTRACKED_STATUS = "??"
+
+
 def has_uncommitted_changes(*, project_dir: Path) -> bool:
     """
     Проверяет, есть ли в рабочей папке незакоммиченные правки и новые файлы.
@@ -36,9 +40,21 @@ def has_uncommitted_changes(*, project_dir: Path) -> bool:
 
     Возвращает: True, если git status показывает изменения.
     """
+    return bool(list_uncommitted_changes(project_dir = project_dir))
+
+
+def list_uncommitted_changes(*, project_dir: Path) -> list[tuple[str, str]]:
+    """
+    Перечисляет незакоммиченные правки и новые файлы рабочей папки; файлы из .gitignore не входят.
+
+        project_dir: папка проекта.
+
+    Возвращает: Пары (состояние, путь) из git status --porcelain по порядку вывода;
+        состояние UNTRACKED_STATUS — новый файл.
+    """
     output = _run_git(project_dir = project_dir, arguments = ["status", "--porcelain", "--untracked-files=all"])
 
-    return output.strip() != ""
+    return [(line[:2], line[3:]) for line in output.splitlines() if line.strip()]
 
 
 def commit_all(*, project_dir: Path, message: str) -> bool:

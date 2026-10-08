@@ -18,5 +18,6 @@ ARCHITECT_REVIEW_ROLE = RoleSettings(
     reasoning_level = ReasoningLevel.LOW,
     tool_names = PROJECT_TOOL_NAMES,
     step_hooks = (),
+    step_checks = (),
     answer_checks = (check_verdict_file,),
 )

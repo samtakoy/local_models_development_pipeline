@@ -24,5 +24,6 @@ SENIOR_ROLE = RoleSettings(
             skip_file_names = (),
         ),
     ),
+    step_checks = (),
     answer_checks = (),
 )

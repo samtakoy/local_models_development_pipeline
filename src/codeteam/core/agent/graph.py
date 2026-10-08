@@ -192,7 +192,8 @@ def route_after_agent(state: AgentState, config: RunnableConfig) -> str:
 
 def make_tools_node(*, tools: list[BaseTool]) -> Callable:
     """
-    Собирает узел инструментов, который после шага запускает хуки на изменённых файлах черновика.
+    Собирает узел инструментов, который после шага запускает хуки на изменённых файлах черновика
+    и проверки после шага.
 
         tools: инструменты узла.
 
@@ -201,14 +202,17 @@ def make_tools_node(*, tools: list[BaseTool]) -> Callable:
     tool_node = ToolNode(tools)
 
     def tools_node(state: AgentState, config: RunnableConfig):
-        """Выполняет вызовы инструментов и дописывает замечания хуков к результату последнего вызова."""
+        """Выполняет вызовы инструментов и дописывает замечания хуков и проверок к результату последнего вызова."""
         cfg: AgentConfig = config["configurable"][AGENT_CFG_NAME]
-        if not cfg.step_hooks:
+        if not cfg.step_hooks and not cfg.step_checks:
             return tool_node.invoke(state, config)
 
         before = _answer_snapshot(cfg = cfg)
         update = tool_node.invoke(state, config)
-        remarks = _step_hook_remarks(cfg = cfg, before = before, after = _answer_snapshot(cfg = cfg))
+        remarks = [
+            *_step_hook_remarks(cfg = cfg, before = before, after = _answer_snapshot(cfg = cfg)),
+            *(remark for check in cfg.step_checks if (remark := check()) is not None),
+        ]
         if not remarks:
             return update
 

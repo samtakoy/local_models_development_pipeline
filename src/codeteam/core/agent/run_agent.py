@@ -195,6 +195,7 @@ def run_agent(
                 empty_draft_notice = empty_draft_notice,
                 # правило разделов черновика общее для всех ролей, к нему добавляются хуки роли
                 step_hooks = (draft_section_hook, *role.step_hooks),
+                step_checks = role.step_checks,
                 answer_checks = role.answer_checks,
                 relative_private_dir = relative_private_dir,
                 project_dir = project_dir,

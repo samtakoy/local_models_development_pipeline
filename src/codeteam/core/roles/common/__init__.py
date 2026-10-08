@@ -1,6 +1,8 @@
-"""Общее для ролей: описание роли, наборы инструментов, запуск роли, этапы плана архитектора, ревью, ошибки ролей."""
+"""Общее для ролей: описание роли, наборы инструментов, запуск роли, этапы плана архитектора, ревью,
+охрана проекта от правок проверяющей роли, ошибки ролей."""
 
 from codeteam.core.roles.common.errors import PipelineError
+from codeteam.core.roles.common.project_guard import clean_project_check, tracked_changes_check
 from codeteam.core.roles.common.review import ACCEPTED_VERDICT, REWORK_VERDICT, VERDICT_FILE_NAME, add_role_exit, \
     check_review_limit, check_verdict_file, copy_reviewed_draft, needs_fix, next_review_round, read_verdict
 from codeteam.core.roles.common.role_settings import DRAFT_TOOL_NAMES, PROJECT_TOOL_NAMES, RoleSettings
@@ -22,6 +24,7 @@ __all__ = [
     "build_stage_dir_name",
     "check_review_limit",
     "check_verdict_file",
+    "clean_project_check",
     "copy_reviewed_draft",
     "make_journal_name",
     "needs_fix",
@@ -30,4 +33,5 @@ __all__ = [
     "read_stage_title",
     "read_verdict",
     "run_role",
+    "tracked_changes_check",
 ]
