@@ -1,3 +1,4 @@
+import argparse
 import logging
 from datetime import datetime
 
@@ -13,10 +14,9 @@ def main():
     # httpx пишет строку на каждый запрос к ollama
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
+    arguments = _parse_arguments()
     settings = load_settings()
-    project = load_project_config(
-        setup_dir = "/Users/samtakot/devs/learnings/llm-eng/homework/final_project4/codeteam_v2/projects/cardviewer"
-    )
+    project = load_project_config(setup_dir = arguments.setup_dir)
     run_dir = settings.runs_dir / datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     logger.info(f"проект: {project.path}")
     logger.info(f"задача: {project.task}")
@@ -25,6 +25,18 @@ def main():
     result = run_pipeline(project = project, run_dir = run_dir, model_name = "qwen3.5:9b", settings = settings)
     logger.info(f"отчёт исследователя: {result['research_dir']}")
     logger.info(f"этапы архитектора: {result['plan_dir']}")
+
+
+def _parse_arguments() -> argparse.Namespace:
+    """
+    Разбирает аргументы командной строки.
+
+    Возвращает: Аргументы: setup_dir - папка задачи с файлом set.toml.
+    """
+    parser = argparse.ArgumentParser(description = "Запуск команды агентов на задаче проекта.")
+    parser.add_argument("setup_dir", help = "папка задачи с файлом set.toml, например projects/cardviewer_ai")
+
+    return parser.parse_args()
 
 
 if __name__ == "__main__":

@@ -18,7 +18,8 @@ from codeteam.core.agent.role import AgentRole
 from codeteam.core.agent.run_agent import run_agent
 from codeteam.core.agent.step_hooks import StepHook, code_block_hook
 from codeteam.core.agent.workspace import CHECK_DIR, DRAFT_SECTION_PATTERN, PRIVATE_ROOT
-from codeteam.core.pipeline.prompts import ARCHITECT_TASK, DEVELOPER_TASK, PM_TASK, RESEARCHER_TASK, SENIOR_TASK
+from codeteam.core.pipeline.prompts import ARCHITECT_CODE_BLOCK_REMARK, ARCHITECT_TASK, DEVELOPER_TASK, PM_TASK, \
+    RESEARCHER_TASK, SENIOR_CODE_BLOCK_REMARK, SENIOR_TASK
 from codeteam.core.roles import load_role_prompt
 from codeteam.core.tools.files import DELETE_TOOL_NAME, EDIT_TOOL_NAME, GLOB_TOOL_NAME, GREP_TOOL_NAME, \
     READ_TOOL_NAME, WRITE_TOOL_NAME
@@ -68,7 +69,10 @@ DRAFT_TOOL_NAMES = (
 )
 
 # Наибольшее число строк в одном блоке кода с указанным языком в черновике архитектора.
-ARCHITECT_CODE_BLOCK_LINE_LIMIT = 10
+ARCHITECT_CODE_BLOCK_LINE_LIMIT = 15
+
+# Наибольшее число строк в одном блоке кода с указанным языком в плане сеньора.
+SENIOR_CODE_BLOCK_LINE_LIMIT = 30
 
 
 class PipelineError(RuntimeError):
@@ -183,7 +187,9 @@ def architect_node(state: PipelineState, config: RunnableConfig):
         input_dirs = (requirements_dir, research_dir),
         private_dir_name = Path(ARCHITECT_NODE_ID),
         tool_names = PROJECT_TOOL_NAMES,
-        step_hooks = (code_block_hook(max_lines = ARCHITECT_CODE_BLOCK_LINE_LIMIT),),
+        step_hooks = (
+            code_block_hook(max_lines = ARCHITECT_CODE_BLOCK_LINE_LIMIT, remark = ARCHITECT_CODE_BLOCK_REMARK),
+        ),
         extra_readable_dirs = (project_dir,),
         extra_writable_dirs = (),
     )
@@ -226,7 +232,7 @@ def senior_node(state: PipelineState, config: RunnableConfig):
         input_dirs = (stage_task_dir,),
         private_dir_name = stage_dir_name / SENIOR_NODE_ID,
         tool_names = PROJECT_TOOL_NAMES,
-        step_hooks = (),
+        step_hooks = (code_block_hook(max_lines = SENIOR_CODE_BLOCK_LINE_LIMIT, remark = SENIOR_CODE_BLOCK_REMARK),),
         extra_readable_dirs = (project_dir,),
         extra_writable_dirs = (),
     )

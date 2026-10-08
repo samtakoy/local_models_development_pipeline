@@ -14,8 +14,11 @@ CHECK_DIR = Path("tmp_check")
 DRAFT_DIR_NAME = "draft"
 CONTEXT_FILE_NAME = "context.md"
 
-# Имя раздела черновика: номер, тема латиницей, .md. Группа 1 — номер раздела.
-DRAFT_SECTION_PATTERN = re.compile(r"^(\d+)_[A-Za-z0-9_-]+\.md$")
+# Имя раздела черновика: номер, тема буквами любого алфавита, .md. Группа 1 — номер раздела.
+DRAFT_SECTION_PATTERN = re.compile(r"^(\d+)_[\w-]+\.md$")
+
+# Рекомендуемое имя раздела черновика: номер, тема латиницей, .md.
+LATIN_DRAFT_SECTION_PATTERN = re.compile(r"^(\d+)_[A-Za-z0-9_-]+\.md$")
 
 # Имена файлов, закрытых для агента на любой глубине проекта.
 CLOSED_FILE_NAMES = (".env",)

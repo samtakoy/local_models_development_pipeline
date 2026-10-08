@@ -13,6 +13,7 @@ from codeteam.core.agent.journal import AgentJournal
 from codeteam.core.agent.role import AgentRole
 from codeteam.core.agent.prompts import DRAFT_PHASE_HINT, DRAFT_PHASE_BASH_REFUSAL, AGENT_SYSTEM_INSTRUCTIONS, LIMIT_NOTICE, \
     REINIT_NOTICE, EMPTY_DRAFT_NOTICE, PROJECT_RULES_FILE_NAME, PROJECT_RULES_INSTRUCTIONS, PROJECT_DOCS_DIR_NAME
+from codeteam.core.agent.step_hooks import draft_section_hook
 from codeteam.core.agent.workspace import CONTEXT_FILE_NAME, PRIVATE_ROOT, Workspace, context_path, draft_dir
 from codeteam.core.tools.files import DELETE_TOOL_NAME, EDIT_TOOL_NAME, READ_TOOL_NAME, WRITE_TOOL_NAME, \
     file_tool_builders, SeenFiles
@@ -192,7 +193,8 @@ def run_agent(
                 limit_notice = limit_notice,
                 reinit_notice = reinit_notice,
                 empty_draft_notice = empty_draft_notice,
-                step_hooks = role.step_hooks,
+                # правило разделов черновика общее для всех ролей, к нему добавляются хуки роли
+                step_hooks = (draft_section_hook, *role.step_hooks),
                 relative_private_dir = relative_private_dir,
                 project_dir = project_dir,
                 seen_files = seen_files,
