@@ -11,20 +11,19 @@ from langgraph.graph.state import CompiledStateGraph
 from codeteam.common.git import commit_all
 from codeteam.common.llm import ReasoningLevel
 from codeteam.core.agent.step_hooks import StepHook
-from codeteam.core.agent.workspace import CHECK_DIR
-from codeteam.core.pipeline.prompts import DEVELOPER_TASK, PM_TASK, RESEARCHER_TASK
+from codeteam.core.pipeline.prompts import PM_TASK, RESEARCHER_TASK
 from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState
 from codeteam.core.roles import ROLES_DIR
 from codeteam.core.roles.architect import ARCHITECT_ROLE, architect_node
 from codeteam.core.roles.common import DRAFT_TOOL_NAMES, PROJECT_TOOL_NAMES, REQUIREMENTS_FILE_NAME, PipelineError, \
-    RoleSettings, build_stage_dir_name, make_journal_name, parse_stage_number, run_role
+    RoleSettings, make_journal_name, parse_stage_number, run_role
+from codeteam.core.roles.developer import DEVELOPER_ROLE, developer_node
 from codeteam.core.roles.senior import SENIOR_ROLE, senior_node
 
 logger = logging.getLogger(__name__)
 
 PM_NODE_ID = "pm"
 RESEARCHER_NODE_ID = "researcher"
-DEVELOPER_NODE_ID = "developer"
 FINISH_STAGE_NODE_ID = "finish_stage"
 
 
@@ -74,34 +73,6 @@ def researcher_node(state: PipelineState, config: RunnableConfig):
     return {"research_dir": research_dir, "journal_count": state["journal_count"] + 1}
 
 
-def developer_node(state: PipelineState, config: RunnableConfig):
-    """Запускает разработчика текущего этапа: по плану сеньора он пишет код этапа в папке проекта."""
-    cfg: PipelineConfig = config["configurable"][PIPELINE_CFG_NAME]
-    project_dir = Path(cfg.project_path).resolve()
-    stage_index = state["stage_index"]
-    stage_dir_name = build_stage_dir_name(stage_file = state["stage_files"][stage_index])
-    stage_plan_dir = state["stage_plan_dir"]
-    _run_role(
-        cfg = cfg,
-        name = DEVELOPER_NODE_ID,
-        journal_name = make_journal_name(
-            journal_count = state["journal_count"],
-            label = f"{stage_dir_name}_{DEVELOPER_NODE_ID}",
-        ),
-        prompt_fields = {"check_dir": CHECK_DIR.as_posix()},
-        reasoning_level = ReasoningLevel.LOW,
-        task = DEVELOPER_TASK.format(stage_plan_dir = stage_plan_dir.relative_to(project_dir)),
-        input_dirs = (stage_plan_dir,),
-        private_dir_name = stage_dir_name / DEVELOPER_NODE_ID,
-        tool_names = PROJECT_TOOL_NAMES,
-        step_hooks = (),
-        extra_readable_dirs = (project_dir,),
-        extra_writable_dirs = (project_dir,),
-    )
-
-    return {"journal_count": state["journal_count"] + 1}
-
-
 def finish_stage_node(state: PipelineState, config: RunnableConfig):
     """Коммитит изменения проекта за текущий этап и переходит к следующему этапу."""
     cfg: PipelineConfig = config["configurable"][PIPELINE_CFG_NAME]
@@ -142,15 +113,15 @@ def create_pipeline_graph() -> CompiledStateGraph:
     workflow.add_node(RESEARCHER_NODE_ID, researcher_node)
     workflow.add_node(ARCHITECT_ROLE.name, architect_node)
     workflow.add_node(SENIOR_ROLE.name, senior_node)
-    workflow.add_node(DEVELOPER_NODE_ID, developer_node)
+    workflow.add_node(DEVELOPER_ROLE.name, developer_node)
     workflow.add_node(FINISH_STAGE_NODE_ID, finish_stage_node)
 
     workflow.add_edge(START, PM_NODE_ID)
     workflow.add_edge(PM_NODE_ID, RESEARCHER_NODE_ID)
     workflow.add_edge(RESEARCHER_NODE_ID, ARCHITECT_ROLE.name)
     workflow.add_conditional_edges(ARCHITECT_ROLE.name, route_next_stage)
-    workflow.add_edge(SENIOR_ROLE.name, DEVELOPER_NODE_ID)
-    workflow.add_edge(DEVELOPER_NODE_ID, FINISH_STAGE_NODE_ID)
+    workflow.add_edge(SENIOR_ROLE.name, DEVELOPER_ROLE.name)
+    workflow.add_edge(DEVELOPER_ROLE.name, FINISH_STAGE_NODE_ID)
     workflow.add_conditional_edges(FINISH_STAGE_NODE_ID, route_next_stage)
 
     return workflow.compile()
