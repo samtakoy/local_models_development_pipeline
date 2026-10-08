@@ -10,33 +10,22 @@ from langgraph.graph.state import CompiledStateGraph
 
 from codeteam.common.git import commit_all
 from codeteam.common.llm import ReasoningLevel
-from codeteam.core.agent.step_hooks import StepHook, code_block_hook
+from codeteam.core.agent.step_hooks import StepHook
 from codeteam.core.agent.workspace import CHECK_DIR
-from codeteam.core.pipeline.prompts import ARCHITECT_CODE_BLOCK_REMARK, ARCHITECT_TASK, DEVELOPER_TASK, PM_TASK, \
-    RESEARCHER_TASK
+from codeteam.core.pipeline.prompts import DEVELOPER_TASK, PM_TASK, RESEARCHER_TASK
 from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState
 from codeteam.core.roles import ROLES_DIR
-from codeteam.core.roles.common import ARCHITECTURE_FILE_NAME, DRAFT_TOOL_NAMES, PROJECT_TOOL_NAMES, \
-    STAGE_FILE_PATTERN, RoleSettings, build_stage_dir_name, make_journal_name, parse_stage_number, run_role
+from codeteam.core.roles.architect import ARCHITECT_ROLE, architect_node
+from codeteam.core.roles.common import DRAFT_TOOL_NAMES, PROJECT_TOOL_NAMES, REQUIREMENTS_FILE_NAME, PipelineError, \
+    RoleSettings, build_stage_dir_name, make_journal_name, parse_stage_number, run_role
 from codeteam.core.roles.senior import SENIOR_ROLE, senior_node
 
 logger = logging.getLogger(__name__)
 
 PM_NODE_ID = "pm"
 RESEARCHER_NODE_ID = "researcher"
-ARCHITECT_NODE_ID = "architect"
 DEVELOPER_NODE_ID = "developer"
 FINISH_STAGE_NODE_ID = "finish_stage"
-
-# Файл чеклиста требований в черновике менеджера продукта.
-REQUIREMENTS_FILE_NAME = "100_requirements.md"
-
-# Наибольшее число строк в одном блоке кода с указанным языком в черновике архитектора.
-ARCHITECT_CODE_BLOCK_LINE_LIMIT = 15
-
-
-class PipelineError(RuntimeError):
-    """Результат агента не годится для продолжения пайплайна."""
 
 
 def pm_node(state: PipelineState, config: RunnableConfig):
@@ -83,45 +72,6 @@ def researcher_node(state: PipelineState, config: RunnableConfig):
     )
 
     return {"research_dir": research_dir, "journal_count": state["journal_count"] + 1}
-
-
-def architect_node(state: PipelineState, config: RunnableConfig):
-    """Запускает архитектора: по задаче, чеклисту требований и отчёту исследователя он делит работу на этапы."""
-    cfg: PipelineConfig = config["configurable"][PIPELINE_CFG_NAME]
-    project_dir = Path(cfg.project_path).resolve()
-    requirements_dir = state["requirements_dir"]
-    research_dir = state["research_dir"]
-    task = ARCHITECT_TASK.format(
-        task = state["task"],
-        requirements_file = (requirements_dir / REQUIREMENTS_FILE_NAME).relative_to(project_dir),
-        research_dir = research_dir.relative_to(project_dir),
-    )
-    plan_dir = _run_role(
-        cfg = cfg,
-        name = ARCHITECT_NODE_ID,
-        journal_name = make_journal_name(journal_count = state["journal_count"], label = ARCHITECT_NODE_ID),
-        prompt_fields = {},
-        reasoning_level = ReasoningLevel.LOW,
-        task = task,
-        input_dirs = (requirements_dir, research_dir),
-        private_dir_name = Path(ARCHITECT_NODE_ID),
-        tool_names = PROJECT_TOOL_NAMES,
-        step_hooks = (
-            code_block_hook(
-                max_lines = ARCHITECT_CODE_BLOCK_LINE_LIMIT,
-                remark = ARCHITECT_CODE_BLOCK_REMARK,
-                skip_file_names = (ARCHITECTURE_FILE_NAME,),
-            ),
-        ),
-        extra_readable_dirs = (project_dir,),
-        extra_writable_dirs = (),
-    )
-
-    return {
-        "plan_dir": plan_dir,
-        "stage_files": find_stage_files(plan_dir = plan_dir),
-        "journal_count": state["journal_count"] + 1,
-    }
 
 
 def developer_node(state: PipelineState, config: RunnableConfig):
@@ -179,28 +129,6 @@ def route_next_stage(state: PipelineState) -> str:
     return END
 
 
-def find_stage_files(*, plan_dir: Path) -> list[Path]:
-    """
-    Собирает файлы этапов из черновика архитектора.
-
-        plan_dir: папка черновика архитектора.
-
-    Возвращает: Файлы этапов по порядку имён: все файлы вида <номер>_<тема>.md, кроме общего решения.
-    """
-    if not (plan_dir / ARCHITECTURE_FILE_NAME).is_file():
-        raise PipelineError(f"в черновике архитектора {plan_dir} нет файла {ARCHITECTURE_FILE_NAME}")
-
-    stage_files = sorted(
-        path
-        for path in plan_dir.iterdir()
-        if path.is_file() and path.name != ARCHITECTURE_FILE_NAME and STAGE_FILE_PATTERN.match(path.name)
-    )
-    if not stage_files:
-        raise PipelineError(f"в черновике архитектора {plan_dir} нет файлов этапов")
-
-    return stage_files
-
-
 def create_pipeline_graph() -> CompiledStateGraph:
     """
     Собирает граф пайплайна: менеджер продукта, исследователь, архитектор, затем по каждому этапу
@@ -212,15 +140,15 @@ def create_pipeline_graph() -> CompiledStateGraph:
 
     workflow.add_node(PM_NODE_ID, pm_node)
     workflow.add_node(RESEARCHER_NODE_ID, researcher_node)
-    workflow.add_node(ARCHITECT_NODE_ID, architect_node)
+    workflow.add_node(ARCHITECT_ROLE.name, architect_node)
     workflow.add_node(SENIOR_ROLE.name, senior_node)
     workflow.add_node(DEVELOPER_NODE_ID, developer_node)
     workflow.add_node(FINISH_STAGE_NODE_ID, finish_stage_node)
 
     workflow.add_edge(START, PM_NODE_ID)
     workflow.add_edge(PM_NODE_ID, RESEARCHER_NODE_ID)
-    workflow.add_edge(RESEARCHER_NODE_ID, ARCHITECT_NODE_ID)
-    workflow.add_conditional_edges(ARCHITECT_NODE_ID, route_next_stage)
+    workflow.add_edge(RESEARCHER_NODE_ID, ARCHITECT_ROLE.name)
+    workflow.add_conditional_edges(ARCHITECT_ROLE.name, route_next_stage)
     workflow.add_edge(SENIOR_ROLE.name, DEVELOPER_NODE_ID)
     workflow.add_edge(DEVELOPER_NODE_ID, FINISH_STAGE_NODE_ID)
     workflow.add_conditional_edges(FINISH_STAGE_NODE_ID, route_next_stage)

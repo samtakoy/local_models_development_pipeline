@@ -1,12 +1,8 @@
-"""Этапы плана архитектора: общее решение, файлы этапов, папки этапов."""
+"""Этапы плана архитектора: файлы этапов, папки этапов."""
 
 from pathlib import Path
 
 from codeteam.core.agent.workspace import DRAFT_SECTION_PATTERN
-
-# Файл общего решения в черновике архитектора.
-# TODO: перенести в roles/architect/config.py: файл пишет архитектор, остальные роли импортируют оттуда.
-ARCHITECTURE_FILE_NAME = "000_architecture.md"
 
 # Файл этапа в черновике архитектора — раздел черновика: номер этапа, тема, .md.
 STAGE_FILE_PATTERN = DRAFT_SECTION_PATTERN
