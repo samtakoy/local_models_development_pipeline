@@ -54,4 +54,4 @@ question = """Нужно сделать локальное веб-приложе
 [review]
 architect = "on"
 developer = "on"
-tester = "on"
+web_tester = "on"

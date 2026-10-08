@@ -1,11 +1,11 @@
 """
-Запуск одного тестировщика на готовом проекте, без остальных ролей пайплайна.
+Запуск одного веб-тестировщика на готовом проекте, без остальных ролей пайплайна.
 
 Задача берётся из set.toml, чеклист требований — из черновика менеджера продукта в .ct-work проекта
-от прошлого прогона. Проект должен быть закоммичен: охрана проекта тестировщика сравнивает с коммитом.
+от прошлого прогона. Проект должен быть закоммичен: охрана проекта веб-тестировщика сравнивает с коммитом.
 
 Запуск из папки codeteam_v2:
-    uv run python scripts/run_tester.py projects/cardviewer --model qwen3.5:9b
+    uv run python scripts/run_web_tester.py projects/cardviewer --model qwen3.5:9b
 """
 
 import argparse
@@ -21,7 +21,7 @@ from codeteam.common.git import list_uncommitted_changes
 from codeteam.core.agent.workspace import PRIVATE_ROOT, draft_dir
 from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState
 from codeteam.core.roles.pm import PM_ROLE, REQUIREMENTS_FILE_NAME
-from codeteam.core.roles.tester import tester_node
+from codeteam.core.roles.web_tester import web_tester_node
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +30,9 @@ def parse_arguments() -> argparse.Namespace:
     """
     Разбирает аргументы командной строки.
 
-    Возвращает: Аргументы: setup_dir — папка задачи с файлом set.toml, model — модель тестировщика.
+    Возвращает: Аргументы: setup_dir — папка задачи с файлом set.toml, model — модель веб-тестировщика.
     """
-    parser = argparse.ArgumentParser(description = "Запуск одного тестировщика на готовом проекте.")
+    parser = argparse.ArgumentParser(description = "Запуск одного веб-тестировщика на готовом проекте.")
     parser.add_argument("setup_dir", help = "папка задачи с файлом set.toml, например projects/cardviewer")
     parser.add_argument("--model", required = True, help = "имя модели в ollama, например qwen3.5:9b")
 
@@ -41,7 +41,7 @@ def parse_arguments() -> argparse.Namespace:
 
 def main() -> None:
     """
-    Проверяет проект и чеклист, запускает тестировщика и пишет в лог, где лежат его журнал и отчёт.
+    Проверяет проект и чеклист, запускает веб-тестировщика и пишет в лог, где лежат его журнал и отчёт.
     """
     logging.basicConfig(level = logging.INFO, format = "%(asctime)s %(message)s", datefmt = "%H:%M:%S")
     logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -61,7 +61,7 @@ def main() -> None:
             f"в проекте {project_dir} есть незакоммиченные правки: {', '.join(path for _, path in changes)}"
         )
 
-    run_dir = settings.runs_dir / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_tester"
+    run_dir = settings.runs_dir / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_web_tester"
     run_dir.mkdir(parents = True, exist_ok = True)
     logger.info(f"проект: {project_dir}")
     logger.info(f"прогон: {run_dir}")
@@ -86,7 +86,7 @@ def main() -> None:
         review = None,
         journal_count = 0,
     )
-    tester_node(state, config)
+    web_tester_node(state, config)
 
 
 if __name__ == "__main__":

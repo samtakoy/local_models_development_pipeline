@@ -1,4 +1,4 @@
-"""Описание роли тестировщика: промпт, модель, инструменты, сервер браузера, проверки сдачи."""
+"""Описание роли веб-тестировщика: промпт, модель, инструменты, сервер браузера, проверки сдачи."""
 
 from pathlib import Path
 
@@ -11,8 +11,8 @@ from codeteam.core.tools.files import DELETE_TOOL_NAME, EDIT_TOOL_NAME, GLOB_TOO
 from codeteam.core.tools.mcp import McpServer
 from codeteam.core.tools.shell import START_SERVICE_TOOL_NAME, STOP_PROCESS_TOOL_NAME
 
-# Инструменты тестировщика: без bash — приложение он запускает только через start_service.
-TESTER_TOOL_NAMES = (
+# Инструменты веб-тестировщика: без bash — приложение он запускает только через start_service.
+WEB_TESTER_TOOL_NAMES = (
     READ_TOOL_NAME,
     GLOB_TOOL_NAME,
     GREP_TOOL_NAME,
@@ -45,8 +45,8 @@ def playwright_server(caller_context: CallerContext) -> McpServer:
     return McpServer(name = "playwright", command = PLAYWRIGHT_COMMAND, args = args)
 
 
-TESTER_ROLE = RoleSettings(
-    name = "tester",
+WEB_TESTER_ROLE = RoleSettings(
+    name = "web_tester",
     system_prompt_path = Path(__file__).parent / "system_prompt.md",
     prompt_fields = {
         "verdict_file": VERDICT_FILE_NAME,
@@ -56,7 +56,7 @@ TESTER_ROLE = RoleSettings(
     },
     model_name = None,
     reasoning_level = ReasoningLevel.LOW,
-    tool_names = TESTER_TOOL_NAMES,
+    tool_names = WEB_TESTER_TOOL_NAMES,
     step_hooks = (),
     step_checks = (),
     answer_checks = (check_verdict_file,),

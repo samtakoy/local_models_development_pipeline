@@ -20,7 +20,7 @@ from codeteam.core.roles.developer_review import DEVELOPER_REVIEW_ROLE, develope
 from codeteam.core.roles.pm import PM_ROLE, pm_node
 from codeteam.core.roles.researcher import RESEARCHER_ROLE, researcher_node
 from codeteam.core.roles.senior import SENIOR_ROLE, senior_node
-from codeteam.core.roles.tester import TESTER_ROLE, tester_node
+from codeteam.core.roles.web_tester import WEB_TESTER_ROLE, web_tester_node
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ def make_stage_route(*, after_stages: str) -> Route:
     """
     Собирает выбор пути после архитектора или после этапа.
 
-        after_stages: узел после последнего этапа: тестировщик или END.
+        after_stages: узел после последнего этапа: веб-тестировщик или END.
 
     Возвращает: Выбор пути: узел сеньора, если остались этапы; иначе after_stages.
     """
@@ -78,19 +78,19 @@ def create_pipeline_graph(*, review: ReviewSettings) -> CompiledStateGraph:
     """
     Собирает граф пайплайна: менеджер продукта, исследователь, архитектор, затем по каждому этапу
     сеньор, разработчик и коммит этапа. Ревьюеры и приёмщик этапа встают после ролей, у которых ревью включено;
-    тестировщик, если включён, — после последнего этапа.
+    веб-тестировщик, если включён, — после последнего этапа.
 
         review: режимы ревью ролей.
 
     Возвращает: Граф пайплайна.
     """
     workflow: StateGraph = StateGraph(PipelineState) # noqa
-    if review.tester == ReviewMode.OFF:
+    if review.web_tester == ReviewMode.OFF:
         route_next_stage = make_stage_route(after_stages = END)
     else:
-        workflow.add_node(TESTER_ROLE.name, tester_node)
-        workflow.add_edge(TESTER_ROLE.name, END)
-        route_next_stage = make_stage_route(after_stages = TESTER_ROLE.name)
+        workflow.add_node(WEB_TESTER_ROLE.name, web_tester_node)
+        workflow.add_edge(WEB_TESTER_ROLE.name, END)
+        route_next_stage = make_stage_route(after_stages = WEB_TESTER_ROLE.name)
 
     workflow.add_node(PM_ROLE.name, pm_node)
     workflow.add_node(RESEARCHER_ROLE.name, researcher_node)
