@@ -9,12 +9,9 @@ from langchain_core.runnables import RunnableConfig
 from codeteam.core.agent.workspace import PRIVATE_ROOT
 from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState
 from codeteam.core.roles.architect import ARCHITECTURE_FILE_NAME
-from codeteam.core.roles.common import build_stage_dir_name, make_journal_name, run_role
+from codeteam.core.roles.common import STAGE_TASK_DIR_NAME, build_stage_dir_name, make_journal_name, run_role
 from codeteam.core.roles.senior.config import SENIOR_ROLE
 from codeteam.core.roles.senior.prompts import SENIOR_TASK
-
-# Папка этапа внутри личной папки этапа: копии общего решения и файла этапа, вход сеньора.
-STAGE_TASK_DIR_NAME = "task"
 
 
 def senior_node(state: PipelineState, config: RunnableConfig):

@@ -24,9 +24,11 @@ class ReviewSettings:
     Режимы ревью ролей: поле на каждую роль, у которой есть ревьюер.
 
         architect: режим ревью архитектора.
+        developer: режим приёмки этапа после разработчика.
     """
 
     architect: ReviewMode
+    developer: ReviewMode
 
 
 @dataclass(frozen = True)
