@@ -14,14 +14,15 @@ ARCHIVE_DIR_NAME = "archive"
 
 GITIGNORE_NAME = ".gitignore"
 
-# Строки .gitignore: закрытые файлы, папка личных папок агентов и папка временных файлов проверки.
-GITIGNORE_LINES = (*CLOSED_FILE_NAMES, f"{PRIVATE_ROOT.as_posix()}/", f"{CHECK_DIR.as_posix()}/")
+# Системные файлы, которые не попадают в репозиторий проекта.
+SYSTEM_FILE_NAMES = (".DS_Store", ".idea",)
 
-# Исключения проверки незакоммиченных правок: всё, что скрывают строки GITIGNORE_LINES.
-DIRTY_CHECK_EXCLUSIONS = (
-    *(f":(exclude,glob)**/{name}" for name in CLOSED_FILE_NAMES),
-    f":(exclude){PRIVATE_ROOT.as_posix()}",
-    f":(exclude){CHECK_DIR.as_posix()}",
+# Строки .gitignore: закрытые файлы, системные файлы, папка личных папок агентов и папка временных файлов проверки.
+GITIGNORE_LINES = (
+    *CLOSED_FILE_NAMES,
+    *SYSTEM_FILE_NAMES,
+    f"{PRIVATE_ROOT.as_posix()}/",
+    f"{CHECK_DIR.as_posix()}/",
 )
 
 INITIAL_COMMIT_MESSAGE = "codeteam: исходное состояние проекта"
@@ -47,7 +48,7 @@ def prepare_project(*, project_dir: Path, run_name: str) -> None:
     if fresh_repository:
         init_repository(project_dir = project_dir)
         logger.info(f"[git] создан репозиторий в {project_dir}")
-    elif has_uncommitted_changes(project_dir = project_dir, excluded_pathspecs = DIRTY_CHECK_EXCLUSIONS):
+    elif has_uncommitted_changes(project_dir = project_dir):
         raise UncommittedChangesError(
             f"в проекте {project_dir} есть незакоммиченные правки: закоммитьте или отмените их до запуска"
         )

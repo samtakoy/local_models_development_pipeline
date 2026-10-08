@@ -28,19 +28,15 @@ def init_repository(*, project_dir: Path) -> None:
     _run_git(project_dir = project_dir, arguments = ["init"])
 
 
-def has_uncommitted_changes(*, project_dir: Path, excluded_pathspecs: tuple[str, ...]) -> bool:
+def has_uncommitted_changes(*, project_dir: Path) -> bool:
     """
     Проверяет, есть ли в рабочей папке незакоммиченные правки и новые файлы.
 
         project_dir: папка проекта.
-        excluded_pathspecs: исключения в виде pathspec git, например ":(exclude).ct-work".
 
-    Возвращает: True, если git status показывает изменения вне исключений.
+    Возвращает: True, если git status показывает изменения.
     """
-    output = _run_git(
-        project_dir = project_dir,
-        arguments = ["status", "--porcelain", "--untracked-files=all", "--", ".", *excluded_pathspecs],
-    )
+    output = _run_git(project_dir = project_dir, arguments = ["status", "--porcelain", "--untracked-files=all"])
 
     return output.strip() != ""
 
