@@ -1,5 +1,6 @@
 """Инструмент get_advice: агент спрашивает совета у советника — отдельного агента со свежей памятью."""
 
+import itertools
 import shutil
 from pathlib import Path
 
@@ -48,7 +49,8 @@ def build_get_advice_tool(helper_context: HelperContext) -> BaseTool:
     Возвращает: Инструмент get_advice.
     """
     project_dir = Path(helper_context.cfg.project_path).resolve()
-    call_count = 0
+    # номера вызовов: next() выдаёт номер атомарно, параллельные вызовы из одного ответа модели не совпадут
+    call_numbers = itertools.count(1)
 
     def get_advice(*, question: str, context: str, related_files: list[str]) -> str:
         """
@@ -61,12 +63,11 @@ def build_get_advice_tool(helper_context: HelperContext) -> BaseTool:
         Возвращает: Ответ советника; длиннее ADVICE_LENGTH_LIMIT — начало ответа и путь к файлу.
             Ошибку для агента поднимает ToolException.
         """
-        nonlocal call_count
-        if call_count >= ADVICE_CALL_LIMIT:
+        call_number = next(call_numbers)
+        if call_number > ADVICE_CALL_LIMIT:
             raise ToolException(f"Ошибка: советника уже спрашивали {ADVICE_CALL_LIMIT} раз, больше нельзя.")
 
-        call_count += 1
-        private_dir_name = helper_context.caller_private_dir_name / f"{ADVISOR_ROLE.name}_{call_count}"
+        private_dir_name = helper_context.caller_private_dir_name / f"{ADVISOR_ROLE.name}_{call_number}"
         related_paths = _copy_private_files(
             file_paths = related_files,
             project_dir = project_dir,
@@ -75,7 +76,7 @@ def build_get_advice_tool(helper_context: HelperContext) -> BaseTool:
         advice_dir = run_role(
             cfg = helper_context.cfg,
             role = ADVISOR_ROLE,
-            journal_name = f"{helper_context.caller_journal_name}.{ADVISOR_ROLE.name}_{call_count}",
+            journal_name = f"{helper_context.caller_journal_name}.{ADVISOR_ROLE.name}_{call_number}",
             task = ADVISOR_TASK.format(
                 caller_name = helper_context.caller_name,
                 question = question,
