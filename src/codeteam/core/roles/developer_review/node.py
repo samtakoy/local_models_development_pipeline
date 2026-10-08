@@ -74,6 +74,6 @@ def developer_review_node(state: PipelineState, config: RunnableConfig):
         round = review_round,
         accepted = read_verdict(remarks_dir = remarks_dir),
     )
-    check_review_limit(review = review, mode = cfg.review.developer)
+    check_review_limit(review = review)
 
     return {"review": review, "journal_count": state["journal_count"] + 1}

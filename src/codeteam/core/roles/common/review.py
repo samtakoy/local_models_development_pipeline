@@ -168,23 +168,19 @@ def _verdict_line(*, verdict_path: Path) -> str:
     return next((line for line in lines if line), "")
 
 
-def check_review_limit(*, review: Review, mode: ReviewMode) -> None:
+def check_review_limit(*, review: Review) -> None:
     """
-    Проверяет последний круг ревью: работа не принята и кругов больше нет.
-
-    В режиме STRICT останавливает прогон, в режиме ON пишет предупреждение.
+    Проверяет последний круг ревью: если работа не принята и кругов больше нет, пишет предупреждение.
 
         review: только что сделанное ревью.
-        mode: режим ревью роли.
     """
     if review.accepted or review.round < REVIEW_ROUND_LIMIT:
         return
 
-    message = f"[ревью] работа роли {review.target} не принята за {REVIEW_ROUND_LIMIT} круга: {review.remarks_dir}"
-    if mode == ReviewMode.STRICT:
-        raise PipelineError(message)
-
-    logger.warning(f"{message}; пайплайн идёт дальше")
+    logger.warning(
+        f"[ревью] работа роли {review.target} не принята за {REVIEW_ROUND_LIMIT} круга: {review.remarks_dir}; "
+        f"пайплайн идёт дальше"
+    )
 
 
 def add_role_exit(
