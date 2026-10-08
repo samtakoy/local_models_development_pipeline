@@ -2,6 +2,7 @@
 
 import logging
 import re
+import shutil
 from collections.abc import Callable
 from pathlib import Path
 
@@ -15,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 # Наибольшее число кругов ревью: ревью, исправление, повторное ревью.
 REVIEW_ROUND_LIMIT = 2
+
+# Папка внутри папки круга ревьюера: копия черновика, который ревьюер проверяет в этом круге.
+REVIEWED_DIR_NAME = "reviewed"
 
 # Файл вердикта в черновике ревьюера: первая непустая строка содержит вердикт.
 VERDICT_FILE_NAME = "000_verdict.md"
@@ -72,6 +76,23 @@ def needs_fix(*, review: Review | None, target: str) -> bool:
     Возвращает: True, если последнее ревью — работы этой роли и с вердиктом «доработать».
     """
     return review is not None and review.target == target and not review.accepted
+
+
+def copy_reviewed_draft(*, draft_dir: Path, round_dir: Path) -> Path:
+    """
+    Копирует проверяемый черновик в папку круга ревьюера: версия до исправления остаётся для сравнения.
+
+        draft_dir: папка черновика роли, чью работу проверяет ревьюер.
+        round_dir: личная папка ревьюера на этот круг.
+
+    Возвращает: Папку копии черновика.
+    """
+    reviewed_dir = round_dir / REVIEWED_DIR_NAME
+    if reviewed_dir.exists():
+        shutil.rmtree(reviewed_dir)
+    shutil.copytree(draft_dir, reviewed_dir)
+
+    return reviewed_dir
 
 
 def check_verdict_file(answer_dir: Path) -> str | None:
