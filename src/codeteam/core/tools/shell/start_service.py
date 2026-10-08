@@ -19,7 +19,7 @@ from langchain_core.tools import BaseTool, StructuredTool, ToolException
 from pydantic import BaseModel, Field
 
 from codeteam.common.shell import ShellProcesses, run_command
-from codeteam.core.agent.workspace import Workspace
+from codeteam.core.agent.workspace import CHECK_DIR, PathOutsideWorkspace, Workspace
 from codeteam.core.tools.shell.bash import workspace_read_restrictions
 
 # Имя инструмента запуска служб.
@@ -43,6 +43,9 @@ SERVICE_HOST = "127.0.0.1"
 # Одиночный & в команде: запуск в фоне; && и перенаправления вида 2>&1, &> им не считаются.
 BACKGROUND_PATTERN = re.compile(r"(?<![&>])&(?![&>])")
 
+# Папка логов служб внутри папки временных файлов проверки CHECK_DIR.
+SERVICE_LOG_DIR_NAME = "services"
+
 # Сколько последних строк лога показывать агенту.
 LOG_TAIL_LINES = 20
 
@@ -59,7 +62,7 @@ START_SERVICE_DESCRIPTION = """Запускает долго работающу�
 - процесс завершился или не стал готов за timeout_seconds — ошибка с последними строками лога.
 
 Обращайся к службе по 127.0.0.1. Остановить — инструментом stop_process с номером процесса.
-Лог читай через bash: tail <файл лога>."""
+Лог читай инструментом read: путь к нему — в ответе."""
 
 
 class StartServiceArguments(BaseModel):
@@ -129,9 +132,8 @@ def build_start_service_tool(*, workspace: Workspace, processes: ShellProcesses)
                 f"Запусти службу на другом порту."
             )
 
-        log_descriptor, log_name = tempfile.mkstemp(prefix = "service_", suffix = ".log")
-        os.close(log_descriptor)
-        log_path = Path(log_name)
+        log_path = _new_log_path(workspace = workspace)
+        shown_log = workspace.display_path(path = log_path)
         result = run_command(
             command = f"( {command} ) > {shlex.quote(str(log_path))} 2>&1 & echo $!",
             working_dir = str(workspace.project_dir),
@@ -148,18 +150,18 @@ def build_start_service_tool(*, workspace: Workspace, processes: ShellProcesses)
         while True:
             if _is_ready(port = port, pattern = pattern, log_path = log_path):
                 return (
-                    f"Служба готова: процесс {process_id}, лог {log_path}.\n"
+                    f"Служба готова: процесс {process_id}, лог {shown_log}.\n"
                     f"Остановить: stop_process(pid = {process_id}).\n"
                     f"Последние строки лога:\n{_log_tail(log_path = log_path)}"
                 )
             if not _is_process_alive(process_id = process_id):
                 raise ToolException(
-                    f"Ошибка: служба не запустилась — процесс {process_id} завершился. Лог {log_path}.\n"
+                    f"Ошибка: служба не запустилась — процесс {process_id} завершился. Лог {shown_log}.\n"
                     f"Последние строки лога:\n{_log_tail(log_path = log_path)}"
                 )
             if time.monotonic() >= deadline:
                 raise ToolException(
-                    f"Ошибка: служба не готова за {timeout} с, процесс {process_id} работает. Лог {log_path}.\n"
+                    f"Ошибка: служба не готова за {timeout} с, процесс {process_id} работает. Лог {shown_log}.\n"
                     f"Остановить: stop_process(pid = {process_id}).\n"
                     f"Последние строки лога:\n{_log_tail(log_path = log_path)}"
                 )
@@ -209,6 +211,28 @@ def build_disabled_start_service_tool(*, refusal: str) -> BaseTool:
         args_schema = StartServiceArguments,
         handle_tool_error = True,
     )
+
+
+def _new_log_path(*, workspace: Workspace) -> Path:
+    """
+    Создаёт пустой файл лога службы: в папке CHECK_DIR/SERVICE_LOG_DIR_NAME проекта, если туда разрешена
+    запись, иначе во временной папке системы.
+
+        workspace: рабочее место вызова.
+
+    Возвращает: Путь файла лога.
+    """
+    log_dir = workspace.project_dir / CHECK_DIR / SERVICE_LOG_DIR_NAME
+    try:
+        workspace.resolve_writable(path = str(log_dir))
+    except PathOutsideWorkspace:
+        log_dir = Path(tempfile.gettempdir())
+
+    log_dir.mkdir(parents = True, exist_ok = True)
+    log_descriptor, log_name = tempfile.mkstemp(prefix = "service_", suffix = ".log", dir = log_dir)
+    os.close(log_descriptor)
+
+    return Path(log_name)
 
 
 def _is_ready(*, port: int | None, pattern: re.Pattern[str] | None, log_path: Path) -> bool:

@@ -4,9 +4,24 @@ from pathlib import Path
 
 from codeteam.common.llm import ReasoningLevel
 from codeteam.core.agent.workspace import CHECK_DIR
-from codeteam.core.roles.common import ACCEPTED_VERDICT, PROJECT_TOOL_NAMES, REWORK_VERDICT, VERDICT_FILE_NAME, \
-    CallerContext, RoleSettings, check_verdict_file
+from codeteam.core.roles.common import ACCEPTED_VERDICT, REWORK_VERDICT, VERDICT_FILE_NAME, CallerContext, \
+    RoleSettings, check_verdict_file
+from codeteam.core.tools.files import DELETE_TOOL_NAME, EDIT_TOOL_NAME, GLOB_TOOL_NAME, GREP_TOOL_NAME, \
+    READ_TOOL_NAME, WRITE_TOOL_NAME
 from codeteam.core.tools.mcp import McpServer
+from codeteam.core.tools.shell import START_SERVICE_TOOL_NAME, STOP_PROCESS_TOOL_NAME
+
+# Инструменты тестировщика: без bash — приложение он запускает только через start_service.
+TESTER_TOOL_NAMES = (
+    READ_TOOL_NAME,
+    GLOB_TOOL_NAME,
+    GREP_TOOL_NAME,
+    WRITE_TOOL_NAME,
+    EDIT_TOOL_NAME,
+    DELETE_TOOL_NAME,
+    START_SERVICE_TOOL_NAME,
+    STOP_PROCESS_TOOL_NAME,
+)
 
 # Команда запуска Playwright MCP: браузер с профилем только в памяти.
 PLAYWRIGHT_COMMAND = "npx"
@@ -41,7 +56,7 @@ TESTER_ROLE = RoleSettings(
     },
     model_name = None,
     reasoning_level = ReasoningLevel.LOW,
-    tool_names = PROJECT_TOOL_NAMES,
+    tool_names = TESTER_TOOL_NAMES,
     step_hooks = (),
     step_checks = (),
     answer_checks = (check_verdict_file,),
