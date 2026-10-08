@@ -107,7 +107,11 @@ def architect_node(state: PipelineState, config: RunnableConfig):
         private_dir_name = Path(ARCHITECT_NODE_ID),
         tool_names = PROJECT_TOOL_NAMES,
         step_hooks = (
-            code_block_hook(max_lines = ARCHITECT_CODE_BLOCK_LINE_LIMIT, remark = ARCHITECT_CODE_BLOCK_REMARK),
+            code_block_hook(
+                max_lines = ARCHITECT_CODE_BLOCK_LINE_LIMIT,
+                remark = ARCHITECT_CODE_BLOCK_REMARK,
+                skip_file_names = (ARCHITECTURE_FILE_NAME,),
+            ),
         ),
         extra_readable_dirs = (project_dir,),
         extra_writable_dirs = (),

@@ -17,5 +17,11 @@ SENIOR_ROLE = RoleSettings(
     model_name = None,
     reasoning_level = ReasoningLevel.LOW,
     tool_names = PROJECT_TOOL_NAMES,
-    step_hooks = (code_block_hook(max_lines = SENIOR_CODE_BLOCK_LINE_LIMIT, remark = SENIOR_CODE_BLOCK_REMARK),),
+    step_hooks = (
+        code_block_hook(
+            max_lines = SENIOR_CODE_BLOCK_LINE_LIMIT,
+            remark = SENIOR_CODE_BLOCK_REMARK,
+            skip_file_names = (),
+        ),
+    ),
 )

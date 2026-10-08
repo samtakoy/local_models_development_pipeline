@@ -45,18 +45,22 @@ def draft_section_hook(path: Path, text: str) -> str | None:
     return "\n".join(remarks) if remarks else None
 
 
-def code_block_hook(*, max_lines: int, remark: str) -> StepHook:
+def code_block_hook(*, max_lines: int, remark: str, skip_file_names: tuple[str, ...]) -> StepHook:
     """
     Собирает хук, который замечает в файле черновика блоки с указанным языком длиннее предела.
 
         max_lines: наибольшее число строк внутри одного блока с указанным языком.
         remark: текст замечания агенту; поля {file_name} и {max_lines} в нём заменяются
             именем файла и пределом.
+        skip_file_names: имена файлов черновика, которые хук не проверяет.
 
     Возвращает: Хук после шага.
     """
     def hook(path: Path, text: str) -> str | None:
         """Находит самый длинный блок с указанным языком и сравнивает его с пределом."""
+        if path.name in skip_file_names:
+            return None
+
         longest_block = max(_language_block_lengths(text = text), default = 0)
         if longest_block <= max_lines:
             return None
