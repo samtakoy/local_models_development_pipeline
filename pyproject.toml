@@ -10,6 +10,7 @@ dependencies = [
     "langchain-core==1.6.6",
     "langchain-ollama==1.1.0",
     "langgraph==1.2.12",
+    "langchain-mcp-adapters==0.3.2",
     "pydantic==2.13.5",
     "pathspec==1.1.1",
     "python-dotenv==1.2.4",
@@ -29,7 +30,6 @@ packages = ["src/codeteam"]
 
 [dependency-groups]
 dev = [
-    "langchain-mcp-adapters==0.3.2",
     "pytest==9.1.1",
 ]
 

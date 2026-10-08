@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from codeteam.core.agent.workspace import CHECK_DIR, PRIVATE_ROOT
 from codeteam.core.roles.advisor.config import ADVICE_FILE_NAME, ADVISOR_ROLE
 from codeteam.core.roles.advisor.prompts import ADVISOR_TASK, GET_ADVICE_DESCRIPTION
-from codeteam.core.roles.common import HelperContext, run_role
+from codeteam.core.roles.common import CallerContext, run_role
 
 # Имя инструмента вызова советника.
 GET_ADVICE_TOOL_NAME = "get_advice"
@@ -35,7 +35,7 @@ class GetAdviceArguments(BaseModel):
     related_files: list[str] = Field(description = "пути файлов проекта, которые советнику нужно прочитать")
 
 
-def build_get_advice_tool(helper_context: HelperContext) -> BaseTool:
+def build_get_advice_tool(caller_context: CallerContext) -> BaseTool:
     """
     Собирает инструмент get_advice для вызывающего агента.
 
@@ -44,11 +44,11 @@ def build_get_advice_tool(helper_context: HelperContext) -> BaseTool:
     Проект советник читает; пишет, кроме черновика, только в папку временных скриптов CHECK_DIR.
     Файлы из личных папок, которые указал спросивший, советнику закрыты: он получает их копии.
 
-        helper_context: вызывающий агент.
+        caller_context: агент, который будет спрашивать совета.
 
     Возвращает: Инструмент get_advice.
     """
-    project_dir = Path(helper_context.cfg.project_path).resolve()
+    project_dir = Path(caller_context.cfg.project_path).resolve()
     # номера вызовов: next() выдаёт номер атомарно, параллельные вызовы из одного ответа модели не совпадут
     call_numbers = itertools.count(1)
 
@@ -67,18 +67,18 @@ def build_get_advice_tool(helper_context: HelperContext) -> BaseTool:
         if call_number > ADVICE_CALL_LIMIT:
             raise ToolException(f"Ошибка: советника уже спрашивали {ADVICE_CALL_LIMIT} раз, больше нельзя.")
 
-        private_dir_name = helper_context.caller_private_dir_name / f"{ADVISOR_ROLE.name}_{call_number}"
+        private_dir_name = caller_context.caller_private_dir_name / f"{ADVISOR_ROLE.name}_{call_number}"
         related_paths = _copy_private_files(
             file_paths = related_files,
             project_dir = project_dir,
             target_dir = project_dir / PRIVATE_ROOT / private_dir_name / RELATED_DIR_NAME,
         )
         advice_dir = run_role(
-            cfg = helper_context.cfg,
+            cfg = caller_context.cfg,
             role = ADVISOR_ROLE,
-            journal_name = f"{helper_context.caller_journal_name}.{ADVISOR_ROLE.name}_{call_number}",
+            journal_name = f"{caller_context.caller_journal_name}.{ADVISOR_ROLE.name}_{call_number}",
             task = ADVISOR_TASK.format(
-                caller_name = helper_context.caller_name,
+                caller_name = caller_context.caller_name,
                 question = question,
                 context = context,
                 related_files = _show_files(file_paths = related_paths),

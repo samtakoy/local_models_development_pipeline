@@ -18,4 +18,5 @@ DEVELOPER_ROLE = RoleSettings(
     step_checks = (),
     answer_checks = (),
     helper_tools = (build_get_advice_tool,),
+    mcp_servers = (),
 )

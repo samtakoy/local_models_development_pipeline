@@ -20,4 +20,5 @@ PM_ROLE = RoleSettings(
     step_checks = (),
     answer_checks = (required_files_check(file_names = (REQUIREMENTS_FILE_NAME,)),),
     helper_tools = (),
+    mcp_servers = (),
 )

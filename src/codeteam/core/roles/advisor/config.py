@@ -21,4 +21,5 @@ ADVISOR_ROLE = RoleSettings(
     step_checks = (),
     answer_checks = (required_files_check(file_names = (ADVICE_FILE_NAME,)),),
     helper_tools = (),
+    mcp_servers = (),
 )

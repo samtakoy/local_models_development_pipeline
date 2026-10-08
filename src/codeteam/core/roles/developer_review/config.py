@@ -23,4 +23,5 @@ DEVELOPER_REVIEW_ROLE = RoleSettings(
     step_checks = (),
     answer_checks = (check_verdict_file,),
     helper_tools = (),
+    mcp_servers = (),
 )

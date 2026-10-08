@@ -5,8 +5,9 @@ from pathlib import Path
 from codeteam.core.agent.role import AgentRole
 from codeteam.core.agent.run_agent import run_agent
 from codeteam.core.pipeline.state import PipelineConfig
-from codeteam.core.roles.common.helper_tools import HelperContext
+from codeteam.core.roles.common.external_tools import CallerContext
 from codeteam.core.roles.common.role_settings import RoleSettings
+from codeteam.core.tools.mcp import McpTools
 
 
 def run_role(
@@ -21,8 +22,9 @@ def run_role(
     extra_writable_dirs: tuple[Path, ...],
 ) -> Path:
     """
-    Запускает агента роли и ждёт его результата. Инструменты вызова других агентов из описания роли
-    собираются под этот запуск: помощникам нужны папка и журнал вызывающего агента.
+    Запускает агента роли и ждёт его результата. Внешние инструменты из описания роли собираются под этот
+    запуск: помощникам и серверам MCP нужны папка и журнал агента. Сессии серверов MCP открыты,
+    пока агент работает.
 
         cfg: настройки запуска пайплайна.
         role: описание роли.
@@ -47,28 +49,27 @@ def run_role(
         answer_checks = role.answer_checks,
     )
 
-    return run_agent(
-        role = agent_role,
-        task = task,
-        input_dirs = input_dirs,
-        project_path = cfg.project_path,
-        private_dir_name = private_dir_name,
-        extra_readable_dirs = extra_readable_dirs,
-        extra_writable_dirs = extra_writable_dirs,
-        extra_tools = tuple(
-            build_tool(
-                HelperContext(
-                    cfg = cfg,
-                    caller_name = role.name,
-                    caller_private_dir_name = private_dir_name,
-                    caller_journal_name = journal_name,
-                )
-            )
-            for build_tool in role.helper_tools
-        ),
-        journal_path = cfg.run_dir / f"{journal_name}.md",
-        settings = cfg.settings,
+    caller_context = CallerContext(
+        cfg = cfg,
+        caller_name = role.name,
+        caller_private_dir_name = private_dir_name,
+        caller_journal_name = journal_name,
     )
+    helper_tools = [build_tool(caller_context) for build_tool in role.helper_tools]
+    mcp_servers = tuple(build_server(caller_context) for build_server in role.mcp_servers)
+    with McpTools(servers = mcp_servers) as mcp_tools:
+        return run_agent(
+            role = agent_role,
+            task = task,
+            input_dirs = input_dirs,
+            project_path = cfg.project_path,
+            private_dir_name = private_dir_name,
+            extra_readable_dirs = extra_readable_dirs,
+            extra_writable_dirs = extra_writable_dirs,
+            extra_tools = (*helper_tools, *mcp_tools),
+            journal_path = cfg.run_dir / f"{journal_name}.md",
+            settings = cfg.settings,
+        )
 
 
 def make_journal_name(*, journal_count: int, label: str) -> str:

@@ -130,6 +130,7 @@ dependencies = [
     { name = "httpx" },
     { name = "langchain" },
     { name = "langchain-core" },
+    { name = "langchain-mcp-adapters" },
     { name = "langchain-ollama" },
     { name = "langgraph" },
     { name = "pathspec" },
@@ -139,7 +140,6 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "langchain-mcp-adapters" },
     { name = "pytest" },
 ]
 
@@ -148,6 +148,7 @@ requires-dist = [
     { name = "httpx", specifier = "==0.28.1" },
     { name = "langchain", specifier = "==1.4.3" },
     { name = "langchain-core", specifier = "==1.6.6" },
+    { name = "langchain-mcp-adapters", specifier = "==0.3.2" },
     { name = "langchain-ollama", specifier = "==1.1.0" },
     { name = "langgraph", specifier = "==1.2.12" },
     { name = "pathspec", specifier = "==1.1.1" },
@@ -156,10 +157,7 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-dev = [
-    { name = "langchain-mcp-adapters", specifier = "==0.3.2" },
-    { name = "pytest", specifier = "==9.1.1" },
-]
+dev = [{ name = "pytest", specifier = "==9.1.1" }]
 
 [[package]]
 name = "colorama"
