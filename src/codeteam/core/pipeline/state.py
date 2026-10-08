@@ -31,6 +31,23 @@ class Stages:
         return self.files[self.index]
 
 
+@dataclass(frozen = True)
+class Review:
+    """
+    Последнее ревью работы роли.
+
+        target: имя роли, чью работу проверил ревьюер; ей возвращаются замечания.
+        remarks_dir: папка черновика ревьюера: вердикт и замечания.
+        round: номер круга ревью, с 1.
+        accepted: вердикт: True — работа принята, False — на доработку.
+    """
+
+    target: str
+    remarks_dir: Path
+    round: int
+    accepted: bool
+
+
 class PipelineState(TypedDict):
     """
     Состояние пайплайна.
@@ -40,6 +57,7 @@ class PipelineState(TypedDict):
         research_dir: папка черновика исследователя; None, пока он не отработал.
         plan_dir: папка черновика архитектора: общее решение и файлы этапов; None, пока он не отработал.
         stages: этапы плана архитектора и ход по ним; None, пока архитектор не отработал.
+        review: последнее ревью; None, пока ревьюеры не работали.
         journal_count: число журналов агентов, уже начатых в прогоне.
     """
 
@@ -48,6 +66,7 @@ class PipelineState(TypedDict):
     research_dir: Path | None
     plan_dir: Path | None
     stages: Stages | None
+    review: Review | None
     journal_count: int
 
 

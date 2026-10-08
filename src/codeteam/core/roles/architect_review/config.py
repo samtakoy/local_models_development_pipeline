@@ -1,0 +1,21 @@
+"""Описание роли ревьюера архитектора: промпт, модель, инструменты, хуки."""
+
+from pathlib import Path
+
+from codeteam.common.llm import ReasoningLevel
+from codeteam.core.roles.common import ACCEPTED_VERDICT, PROJECT_TOOL_NAMES, REWORK_VERDICT, VERDICT_FILE_NAME, \
+    RoleSettings
+
+ARCHITECT_REVIEW_ROLE = RoleSettings(
+    name = "architect_review",
+    system_prompt_path = Path(__file__).parent / "system_prompt.md",
+    prompt_fields = {
+        "verdict_file": VERDICT_FILE_NAME,
+        "accepted_verdict": ACCEPTED_VERDICT,
+        "rework_verdict": REWORK_VERDICT,
+    },
+    model_name = None,
+    reasoning_level = ReasoningLevel.LOW,
+    tool_names = PROJECT_TOOL_NAMES,
+    step_hooks = (),
+)

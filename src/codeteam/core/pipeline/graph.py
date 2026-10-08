@@ -10,9 +10,11 @@ from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from codeteam.common.git import commit_all
+from codeteam.core.pipeline.project import ReviewSettings
 from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState
 from codeteam.core.roles.architect import ARCHITECT_ROLE, architect_node
-from codeteam.core.roles.common import parse_stage_number
+from codeteam.core.roles.architect_review import ARCHITECT_REVIEW_ROLE, architect_review_node
+from codeteam.core.roles.common import add_role_exit, parse_stage_number
 from codeteam.core.roles.developer import DEVELOPER_ROLE, developer_node
 from codeteam.core.roles.pm import PM_ROLE, pm_node
 from codeteam.core.roles.researcher import RESEARCHER_ROLE, researcher_node
@@ -52,10 +54,12 @@ def route_next_stage(state: PipelineState) -> str:
     return END
 
 
-def create_pipeline_graph() -> CompiledStateGraph:
+def create_pipeline_graph(*, review: ReviewSettings) -> CompiledStateGraph:
     """
     Собирает граф пайплайна: менеджер продукта, исследователь, архитектор, затем по каждому этапу
-    сеньор, разработчик и коммит этапа.
+    сеньор, разработчик и коммит этапа. Ревьюеры встают после ролей, у которых ревью включено.
+
+        review: режимы ревью ролей.
 
     Возвращает: Граф пайплайна.
     """
@@ -71,7 +75,14 @@ def create_pipeline_graph() -> CompiledStateGraph:
     workflow.add_edge(START, PM_ROLE.name)
     workflow.add_edge(PM_ROLE.name, RESEARCHER_ROLE.name)
     workflow.add_edge(RESEARCHER_ROLE.name, ARCHITECT_ROLE.name)
-    workflow.add_conditional_edges(ARCHITECT_ROLE.name, route_next_stage)
+    add_role_exit(
+        workflow = workflow,
+        mode = review.architect,
+        target = ARCHITECT_ROLE.name,
+        review_name = ARCHITECT_REVIEW_ROLE.name,
+        review_node = architect_review_node,
+        next_route = route_next_stage,
+    )
     workflow.add_edge(SENIOR_ROLE.name, DEVELOPER_ROLE.name)
     workflow.add_edge(DEVELOPER_ROLE.name, FINISH_STAGE_NODE_ID)
     workflow.add_conditional_edges(FINISH_STAGE_NODE_ID, route_next_stage)

@@ -41,7 +41,8 @@ def run_pipeline(*, project: ProjectSettings, run_dir: Path, model_name: str, se
         research_dir = None,
         plan_dir = None,
         stages = None,
+        review = None,
         journal_count = 0,
     )
 
-    return create_pipeline_graph().invoke(input = initial_state, config = config)
+    return create_pipeline_graph(review = project.review).invoke(input = initial_state, config = config)
