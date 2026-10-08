@@ -5,6 +5,7 @@ from pathlib import Path
 from codeteam.core.agent.role import AgentRole
 from codeteam.core.agent.run_agent import run_agent
 from codeteam.core.pipeline.state import PipelineConfig
+from codeteam.core.roles.common.helper_tools import HelperContext
 from codeteam.core.roles.common.role_settings import RoleSettings
 
 
@@ -20,7 +21,8 @@ def run_role(
     extra_writable_dirs: tuple[Path, ...],
 ) -> Path:
     """
-    Запускает агента роли и ждёт его результата.
+    Запускает агента роли и ждёт его результата. Инструменты вызова других агентов из описания роли
+    собираются под этот запуск: помощникам нужны папка и журнал вызывающего агента.
 
         cfg: настройки запуска пайплайна.
         role: описание роли.
@@ -53,6 +55,17 @@ def run_role(
         private_dir_name = private_dir_name,
         extra_readable_dirs = extra_readable_dirs,
         extra_writable_dirs = extra_writable_dirs,
+        extra_tools = tuple(
+            build_tool(
+                HelperContext(
+                    cfg = cfg,
+                    caller_name = role.name,
+                    caller_private_dir_name = private_dir_name,
+                    caller_journal_name = journal_name,
+                )
+            )
+            for build_tool in role.helper_tools
+        ),
         journal_path = cfg.run_dir / f"{journal_name}.md",
         settings = cfg.settings,
     )

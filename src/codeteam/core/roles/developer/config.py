@@ -1,9 +1,10 @@
-"""Описание роли разработчика: промпт, модель, инструменты, хуки."""
+"""Описание роли разработчика: промпт, модель, инструменты, хуки, помощники."""
 
 from pathlib import Path
 
 from codeteam.common.llm import ReasoningLevel
 from codeteam.core.agent.workspace import CHECK_DIR
+from codeteam.core.roles.advisor import build_get_advice_tool
 from codeteam.core.roles.common import PROJECT_TOOL_NAMES, RoleSettings
 
 DEVELOPER_ROLE = RoleSettings(
@@ -16,4 +17,5 @@ DEVELOPER_ROLE = RoleSettings(
     step_hooks = (),
     step_checks = (),
     answer_checks = (),
+    helper_tools = (build_get_advice_tool,),
 )

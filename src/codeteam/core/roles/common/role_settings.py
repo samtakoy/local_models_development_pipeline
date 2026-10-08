@@ -6,9 +6,10 @@ from pathlib import Path
 from codeteam.common.llm import ReasoningLevel
 from codeteam.core.agent.answer_checks import AnswerCheck
 from codeteam.core.agent.step_hooks import StepCheck, StepHook
+from codeteam.core.roles.common.helper_tools import HelperToolBuilder
 from codeteam.core.tools.files import DELETE_TOOL_NAME, EDIT_TOOL_NAME, GLOB_TOOL_NAME, GREP_TOOL_NAME, \
     READ_TOOL_NAME, WRITE_TOOL_NAME
-from codeteam.core.tools.shell import BASH_TOOL_NAME, STOP_PROCESS_TOOL_NAME
+from codeteam.core.tools.shell import BASH_TOOL_NAME, START_SERVICE_TOOL_NAME, STOP_PROCESS_TOOL_NAME
 
 # Инструменты ролей, которые работают с кодом проекта.
 PROJECT_TOOL_NAMES = (
@@ -19,6 +20,7 @@ PROJECT_TOOL_NAMES = (
     EDIT_TOOL_NAME,
     DELETE_TOOL_NAME,
     BASH_TOOL_NAME,
+    START_SERVICE_TOOL_NAME,
     STOP_PROCESS_TOOL_NAME,
 )
 
@@ -45,6 +47,7 @@ class RoleSettings:
         step_hooks: хуки после шага инструментов: замечания к изменённым файлам черновика.
         step_checks: проверки после шага инструментов: замечания не к черновику, а, например, к проекту.
         answer_checks: проверки сдачи: замечания к черновику, когда агент отвечает DONE.
+        helper_tools: сборщики инструментов вызова другого агента, например советника.
     """
 
     name: str
@@ -56,3 +59,4 @@ class RoleSettings:
     step_hooks: tuple[StepHook, ...]
     step_checks: tuple[StepCheck, ...]
     answer_checks: tuple[AnswerCheck, ...]
+    helper_tools: tuple[HelperToolBuilder, ...]

@@ -12,14 +12,16 @@ from codeteam.core.agent.graph import create_agent_graph, AgentState, AGENT_CFG_
 from codeteam.core.agent.journal import AgentJournal
 from codeteam.core.agent.role import AgentRole
 from codeteam.core.agent.prompts import DRAFT_PHASE_HINT, DRAFT_PHASE_BASH_REFUSAL, AGENT_SYSTEM_INSTRUCTIONS, LIMIT_NOTICE, \
-    REINIT_NOTICE, EMPTY_DRAFT_NOTICE, PROJECT_RULES_FILE_NAME, PROJECT_RULES_INSTRUCTIONS, PROJECT_DOCS_DIR_NAME
+    DRAFT_PHASE_HELPER_TOOL_REFUSAL, DRAFT_PHASE_START_SERVICE_REFUSAL, REINIT_NOTICE, EMPTY_DRAFT_NOTICE, PROJECT_RULES_FILE_NAME, PROJECT_RULES_INSTRUCTIONS, PROJECT_DOCS_DIR_NAME
 from codeteam.core.agent.step_hooks import draft_section_hook
 from codeteam.core.agent.workspace import CONTEXT_FILE_NAME, PRIVATE_ROOT, Workspace, context_path, draft_dir
 from codeteam.core.tools.files import DELETE_TOOL_NAME, EDIT_TOOL_NAME, READ_TOOL_NAME, WRITE_TOOL_NAME, \
     file_tool_builders, SeenFiles
 from codeteam.common.shell import ShellProcesses
-from codeteam.core.tools.shell import BASH_TOOL_NAME, STOP_PROCESS_TOOL_NAME, build_bash_tool, \
-    build_disabled_bash_tool, build_stop_process_tool
+from codeteam.core.tools.disabled import build_disabled_tool
+from codeteam.core.tools.shell import BASH_TOOL_NAME, START_SERVICE_TOOL_NAME, STOP_PROCESS_TOOL_NAME, \
+    build_bash_tool, build_disabled_bash_tool, build_disabled_start_service_tool, build_start_service_tool, \
+    build_stop_process_tool
 
 
 # Запас токенов окна модели на её ответ.
@@ -38,6 +40,7 @@ def run_agent(
     private_dir_name: Path,
     extra_readable_dirs: tuple[Path, ...],
     extra_writable_dirs: tuple[Path, ...],
+    extra_tools: tuple[BaseTool, ...],
     journal_path: Path,
     settings: Settings,
 ) -> Path:
@@ -53,6 +56,9 @@ def run_agent(
             и папок результатов других агентов; с папкой проекта агент видит её в разогреве.
         extra_writable_dirs: папки, где агенту разрешена запись в фазе работы, кроме черновика
             и файла контекста.
+        extra_tools: инструменты сверх списка роли, например вызов другого агента; в фазе черновика
+            вместо них заглушки с отказом. Почему отдельно: в этих инструментах сидят другие агенты-помощники
+            и передать их стандартно не получится: будет циклическая зависимость
         journal_path: файл журнала агента.
         settings: настройки приложения.
 
@@ -103,10 +109,11 @@ def run_agent(
         builders = {
             **file_tool_builders(workspace = workspace, seen_files = seen_files),
             BASH_TOOL_NAME: lambda: build_bash_tool(workspace = workspace, processes = shell_processes),
+            START_SERVICE_TOOL_NAME: lambda: build_start_service_tool(workspace = workspace, processes = shell_processes),
             STOP_PROCESS_TOOL_NAME: lambda: stop_process_tool,
         },
         tool_names = role.tool_names,
-    )
+    ) + list(extra_tools)
 
     # Фаза черновика. Писать можно только в личную папку. Остальные тулы должны быть запрещены
     # TODO запрет должен касаться и тулов вызова других агентов, а также web-code-ресерчей
@@ -136,10 +143,14 @@ def run_agent(
                     context_file_path = context_path(private_dir = relative_private_dir),
                 )
             ),
+            START_SERVICE_TOOL_NAME: lambda: build_disabled_start_service_tool(refusal = DRAFT_PHASE_START_SERVICE_REFUSAL),
             STOP_PROCESS_TOOL_NAME: lambda: stop_process_tool,
         },
         tool_names = role.tool_names,
-    )
+    ) + [
+        build_disabled_tool(tool = tool, refusal = DRAFT_PHASE_HELPER_TOOL_REFUSAL.format(tool_name = tool.name))
+        for tool in extra_tools
+    ]
 
     agent = create_agent_graph(tools = tools, draft_tools = draft_tools)
     bound_chat_model = chat_model.bind_tools(tools)

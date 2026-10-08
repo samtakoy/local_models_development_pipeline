@@ -44,9 +44,11 @@ BASH_DESCRIPTION = """Выполняет команду bash в папке пр�
   Нужное окружение и переменные задавай в той же команде через &&.
 - Фоновые процессы (&) продолжают работать между вызовами и завершаются, когда ты закончишь работу.
   Их вывод перенаправляй в файл, иначе вызов ждёт фоновый процесс до предела времени.
+  Сервер или службу запускай инструментом start_service: он дождётся готовности и покажет ошибку старта.
 - Сигналы (kill, pkill, killall) доходят только до процессов этого же вызова: отказ
   «Operation not permitted» при kill значит, что процесс не из этого вызова.
   Фоновый процесс из прошлого вызова останавливай инструментом stop_process.
+- ps недоступен: свои фоновые процессы смотри и останавливай инструментом stop_process.
 - Ввода с клавиатуры нет: команды, которые ждут ввода, не запускай.
 - Длинный вывод обрезается: видны последние 30000 символов.
 - Команда прерывается по истечении timeout_seconds."""
@@ -113,7 +115,7 @@ def build_bash_tool(*, workspace: Workspace, processes: ShellProcesses) -> BaseT
             working_dir = str(workspace.project_dir),
             timeout_seconds = timeout,
             write_roots = workspace.writable_dirs,
-            read_restrictions = _read_restrictions(workspace = workspace),
+            read_restrictions = workspace_read_restrictions(workspace = workspace),
         )
         processes.remember(process_group_id = result.process_group_id)
         if result.exit_code is None:
@@ -130,7 +132,7 @@ def build_bash_tool(*, workspace: Workspace, processes: ShellProcesses) -> BaseT
 
         return "\n".join(lines)
 
-    read_restrictions = _read_restrictions(workspace = workspace)
+    read_restrictions = workspace_read_restrictions(workspace = workspace)
     description = BASH_DESCRIPTION + BASH_WORKSPACE_DESCRIPTION.format(
         project_dir = workspace.project_dir,
         writable_dirs = workspace.show_folders(folders = workspace.writable_dirs),
@@ -178,7 +180,7 @@ def build_disabled_bash_tool(*, refusal: str) -> BaseTool:
     )
 
 
-def _read_restrictions(*, workspace: Workspace) -> ReadRestrictions:
+def workspace_read_restrictions(*, workspace: Workspace) -> ReadRestrictions:
     """
     Собирает запреты чтения команды: закрытые файлы проекта и личные папки, кроме своей и входов.
 

@@ -26,4 +26,5 @@ SENIOR_ROLE = RoleSettings(
     ),
     step_checks = (),
     answer_checks = (),
+    helper_tools = (),
 )

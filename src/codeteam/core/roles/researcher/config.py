@@ -15,4 +15,5 @@ RESEARCHER_ROLE = RoleSettings(
     step_hooks = (),
     step_checks = (),
     answer_checks = (),
+    helper_tools = (),
 )
