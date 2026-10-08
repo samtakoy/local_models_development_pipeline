@@ -14,12 +14,13 @@ from codeteam.core.pipeline.project import ReviewMode, ReviewSettings
 from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState
 from codeteam.core.roles.architect import ARCHITECT_ROLE, architect_node
 from codeteam.core.roles.architect_review import ARCHITECT_REVIEW_ROLE, architect_review_node
-from codeteam.core.roles.common import add_role_exit, parse_stage_number, read_stage_title
+from codeteam.core.roles.common import Route, add_role_exit, parse_stage_number, read_stage_title
 from codeteam.core.roles.developer import DEVELOPER_ROLE, developer_node
 from codeteam.core.roles.developer_review import DEVELOPER_REVIEW_ROLE, developer_review_node
 from codeteam.core.roles.pm import PM_ROLE, pm_node
 from codeteam.core.roles.researcher import RESEARCHER_ROLE, researcher_node
 from codeteam.core.roles.senior import SENIOR_ROLE, senior_node
+from codeteam.core.roles.tester import TESTER_ROLE, tester_node
 
 logger = logging.getLogger(__name__)
 
@@ -53,31 +54,43 @@ def route_finish_stage(state: PipelineState) -> str:
     return FINISH_STAGE_NODE_ID
 
 
-def route_next_stage(state: PipelineState) -> str:
+def make_stage_route(*, after_stages: str) -> Route:
     """
-    Выбирает, куда идти после архитектора или после этапа.
+    Собирает выбор пути после архитектора или после этапа.
 
-        state: состояние пайплайна.
+        after_stages: узел после последнего этапа: тестировщик или END.
 
-    Возвращает: Узел сеньора, если остались этапы; иначе END.
+    Возвращает: Выбор пути: узел сеньора, если остались этапы; иначе after_stages.
     """
-    stages = state["stages"]
-    if stages.index < len(stages.files):
-        return SENIOR_ROLE.name
 
-    return END
+    def route_next_stage(state: PipelineState) -> str:
+        """Ведёт к сеньору следующего этапа или, если этапы кончились, к узлу после этапов."""
+        stages = state["stages"]
+        if stages.index < len(stages.files):
+            return SENIOR_ROLE.name
+
+        return after_stages
+
+    return route_next_stage
 
 
 def create_pipeline_graph(*, review: ReviewSettings) -> CompiledStateGraph:
     """
     Собирает граф пайплайна: менеджер продукта, исследователь, архитектор, затем по каждому этапу
-    сеньор, разработчик и коммит этапа. Ревьюеры и приёмщик этапа встают после ролей, у которых ревью включено.
+    сеньор, разработчик и коммит этапа. Ревьюеры и приёмщик этапа встают после ролей, у которых ревью включено;
+    тестировщик, если включён, — после последнего этапа.
 
         review: режимы ревью ролей.
 
     Возвращает: Граф пайплайна.
     """
     workflow: StateGraph = StateGraph(PipelineState) # noqa
+    if review.tester == ReviewMode.OFF:
+        route_next_stage = make_stage_route(after_stages = END)
+    else:
+        workflow.add_node(TESTER_ROLE.name, tester_node)
+        workflow.add_edge(TESTER_ROLE.name, END)
+        route_next_stage = make_stage_route(after_stages = TESTER_ROLE.name)
 
     workflow.add_node(PM_ROLE.name, pm_node)
     workflow.add_node(RESEARCHER_ROLE.name, researcher_node)

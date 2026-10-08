@@ -24,10 +24,12 @@ class ReviewSettings:
 
         architect: режим ревью архитектора.
         developer: режим приёмки этапа после разработчика.
+        tester: режим финальной проверки приложения в браузере после последнего этапа.
     """
 
     architect: ReviewMode
     developer: ReviewMode
+    tester: ReviewMode
 
 
 @dataclass(frozen = True)
