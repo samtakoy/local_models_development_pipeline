@@ -30,6 +30,7 @@ def run_pipeline(*, project: ProjectSettings, run_dir: Path, model_name: str, se
                 project_path = project.path,
                 run_dir = run_dir,
                 model_name = model_name,
+                review = project.review,
                 settings = settings,
             )
         }

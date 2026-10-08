@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import TypedDict
 
 from codeteam.app.settings import Settings
+from codeteam.core.pipeline.project import ReviewSettings
 
 # Ключ настроек пайплайна в configurable настроек запуска графа.
 PIPELINE_CFG_NAME = "pipeline"
@@ -58,10 +59,12 @@ class PipelineConfig:
         project_path: папка рабочего проекта.
         run_dir: папка прогона: журналы агентов.
         model_name: модель агентов.
+        review: режимы ревью ролей.
         settings: настройки приложения.
     """
 
     project_path: str
     run_dir: Path
     model_name: str
+    review: ReviewSettings
     settings: Settings
