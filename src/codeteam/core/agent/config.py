@@ -3,6 +3,7 @@ from pathlib import Path
 
 from langchain_core.runnables import Runnable
 
+from codeteam.core.agent.answer_checks import AnswerCheck
 from codeteam.core.agent.step_hooks import StepHook
 from codeteam.core.tools.files import SeenFiles
 
@@ -29,6 +30,8 @@ class AgentConfig:
     empty_draft_notice: str
     # хуки после шага инструментов: замечания к изменённым файлам черновика
     step_hooks: tuple[StepHook, ...]
+    # проверки сдачи роли: при DONE замечания к черновику, после которых агент продолжает работу
+    answer_checks: tuple[AnswerCheck, ...]
 
     project_dir: Path
     # путь к рабочей директории агента

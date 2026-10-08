@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from codeteam.common.llm import ReasoningLevel
+from codeteam.core.agent.answer_checks import required_files_check
 from codeteam.core.roles.common import DRAFT_TOOL_NAMES, RoleSettings
 
 # Файл чеклиста требований в черновике менеджера продукта.
@@ -16,4 +17,5 @@ PM_ROLE = RoleSettings(
     reasoning_level = ReasoningLevel.HIGH,
     tool_names = DRAFT_TOOL_NAMES,
     step_hooks = (),
+    answer_checks = (required_files_check(file_names = (REQUIREMENTS_FILE_NAME,)),),
 )

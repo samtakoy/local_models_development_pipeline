@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from codeteam.common.llm import ReasoningLevel
+from codeteam.core.agent.answer_checks import AnswerCheck
 from codeteam.core.agent.step_hooks import StepHook
 from codeteam.core.tools.files import DELETE_TOOL_NAME, EDIT_TOOL_NAME, GLOB_TOOL_NAME, GREP_TOOL_NAME, \
     READ_TOOL_NAME, WRITE_TOOL_NAME
@@ -42,6 +43,7 @@ class RoleSettings:
         reasoning_level: уровень размышления модели агента.
         tool_names: имена инструментов агента.
         step_hooks: хуки после шага инструментов: замечания к изменённым файлам черновика.
+        answer_checks: проверки сдачи: замечания к черновику, когда агент отвечает DONE.
     """
 
     name: str
@@ -51,3 +53,4 @@ class RoleSettings:
     reasoning_level: ReasoningLevel
     tool_names: tuple[str, ...]
     step_hooks: tuple[StepHook, ...]
+    answer_checks: tuple[AnswerCheck, ...]

@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from codeteam.common.llm import ReasoningLevel
+from codeteam.core.agent.answer_checks import required_files_check
 from codeteam.core.agent.step_hooks import code_block_hook
 from codeteam.core.roles.architect.prompts import ARCHITECT_CODE_BLOCK_REMARK
 from codeteam.core.roles.common import PROJECT_TOOL_NAMES, RoleSettings
@@ -27,4 +28,5 @@ ARCHITECT_ROLE = RoleSettings(
             skip_file_names = (ARCHITECTURE_FILE_NAME,),
         ),
     ),
+    answer_checks = (required_files_check(file_names = (ARCHITECTURE_FILE_NAME,)),),
 )

@@ -41,6 +41,7 @@ def run_role(
         reasoning_level = role.reasoning_level,
         tool_names = role.tool_names,
         step_hooks = role.step_hooks,
+        answer_checks = role.answer_checks,
     )
 
     return run_agent(

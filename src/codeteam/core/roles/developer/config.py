@@ -14,4 +14,5 @@ DEVELOPER_ROLE = RoleSettings(
     reasoning_level = ReasoningLevel.LOW,
     tool_names = PROJECT_TOOL_NAMES,
     step_hooks = (),
+    answer_checks = (),
 )

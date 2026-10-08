@@ -15,7 +15,7 @@ from ollama import ResponseError
 from typing import TypedDict, Annotated
 
 from codeteam.core.agent.config import AgentConfig
-from codeteam.core.agent.prompts import DONE_ANSWER, TODO_ANSWER
+from codeteam.core.agent.prompts import ANSWER_CHECK_NOTICE, DONE_ANSWER, TODO_ANSWER
 from codeteam.core.agent.workspace import context_path, draft_dir
 from codeteam.core.tools.files import READ_TOOL_NAME
 
@@ -25,8 +25,8 @@ class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
     # сколько уже было сбросов истории (компактизаций)
     reset_count: int
-    # сколько раз агент сдавал работу с пустым черновиком и получал отказ
-    empty_draft_notices: int
+    # сколько раз агент сдавал работу, не прошедшую проверку сдачи, и получал отказ
+    answer_notices: int
 
 AGENT_CFG_NAME = "agent"
 
@@ -34,13 +34,13 @@ INIT_NODE_ID = "init"
 AGENT_NODE_ID = "agent"
 TOOL_NODE_ID = "tools"
 LIMIT_NOTICE_NODE_ID = "limit_notice"
-EMPTY_DRAFT_NOTICE_NODE_ID = "empty_draft_notice"
+ANSWER_NOTICE_NODE_ID = "answer_notice"
 DRAFT_AGENT_NODE_ID = "draft_agent"
 DRAFT_TOOL_NODE_ID = "draft_tools"
 REINIT_NODE_ID = "reinit"
 
-# Сколько раз отказывать агенту, который сдаёт работу с пустым черновиком; дальше работа завершается как есть.
-EMPTY_DRAFT_NOTICE_LIMIT = 2
+# Сколько раз отказывать агенту, чья работа не прошла проверку сдачи; дальше работа завершается как есть.
+ANSWER_NOTICE_LIMIT = 2
 
 def init_node(state: AgentState, config: RunnableConfig):
     """Собирает историю агента на старте."""
@@ -147,9 +147,9 @@ def limit_notice_node(
     # сообщение с тем же id заменяет прежнее в истории
     return {"messages": [noticed_tool_message]}
 
-def empty_draft_notice_node(state: AgentState, config: RunnableConfig) -> AgentState:
+def answer_notice_node(state: AgentState, config: RunnableConfig) -> AgentState:
     """
-    Отказывает в приёме работы с пустым черновиком: добавляет агенту сообщение с отказом.
+    Отказывает в приёме работы, не прошедшей проверку сдачи: добавляет агенту сообщение с отказом.
 
         state: состояние агента; последнее сообщение истории - ответ агента с DONE.
         config: конфигурация запуска с настройками агента.
@@ -159,13 +159,13 @@ def empty_draft_notice_node(state: AgentState, config: RunnableConfig) -> AgentS
     cfg: AgentConfig = config["configurable"][AGENT_CFG_NAME]
 
     return {
-        "messages": [HumanMessage(content = cfg.empty_draft_notice)],
-        "empty_draft_notices": state["empty_draft_notices"] + 1,
+        "messages": [HumanMessage(content = _answer_notice(cfg = cfg))],
+        "answer_notices": state["answer_notices"] + 1,
     }
 
 def route_after_agent(state: AgentState, config: RunnableConfig) -> str:
     """
-    Выбирает узел после ответа агента: инструменты, отказ в приёме пустого черновика или конец работы.
+    Выбирает узел после ответа агента: инструменты, отказ в приёме работы или конец работы.
 
         state: состояние агента.
         config: конфигурация запуска с настройками агента.
@@ -178,10 +178,8 @@ def route_after_agent(state: AgentState, config: RunnableConfig) -> str:
     cfg: AgentConfig = config["configurable"][AGENT_CFG_NAME]
     response = state["messages"][-1]
     is_done = DONE_PATTERN.search(str(response.content)) is not None
-    agent_draft_dir = cfg.project_dir / draft_dir(private_dir = cfg.relative_private_dir)
-    is_draft_empty = not any(agent_draft_dir.glob("*.md"))
-    if is_done and is_draft_empty and state["empty_draft_notices"] < EMPTY_DRAFT_NOTICE_LIMIT:
-        return EMPTY_DRAFT_NOTICE_NODE_ID
+    if is_done and state["answer_notices"] < ANSWER_NOTICE_LIMIT and _answer_notice(cfg = cfg) is not None:
+        return ANSWER_NOTICE_NODE_ID
 
     return END
 
@@ -318,7 +316,7 @@ def create_agent_graph(
     workflow.add_node(AGENT_NODE_ID, agent_node)
     workflow.add_node(TOOL_NODE_ID, make_tools_node(tools = tools))
     workflow.add_node(LIMIT_NOTICE_NODE_ID, limit_notice_node)
-    workflow.add_node(EMPTY_DRAFT_NOTICE_NODE_ID, empty_draft_notice_node)
+    workflow.add_node(ANSWER_NOTICE_NODE_ID, answer_notice_node)
     workflow.add_node(DRAFT_AGENT_NODE_ID, agent_node)
     workflow.add_node(DRAFT_TOOL_NODE_ID, make_tools_node(tools = draft_tools))
     workflow.add_node(REINIT_NODE_ID, reinit_node)
@@ -332,8 +330,8 @@ def create_agent_graph(
     )
 
     workflow.add_conditional_edges(AGENT_NODE_ID, route_after_agent)
-    # после отказа в приёме пустого черновика агент продолжает работу
-    workflow.add_edge(EMPTY_DRAFT_NOTICE_NODE_ID, AGENT_NODE_ID)
+    # после отказа в приёме работы агент продолжает работу
+    workflow.add_edge(ANSWER_NOTICE_NODE_ID, AGENT_NODE_ID)
     # после вызова тулов основного агента - проверка на лимит по токенам
     workflow.add_conditional_edges(TOOL_NODE_ID, route_after_tools)
 
@@ -350,6 +348,26 @@ def create_agent_graph(
 
 
     return workflow.compile()
+
+def _answer_notice(*, cfg: AgentConfig) -> str | None:
+    """
+    Проверяет черновик агента при сдаче работы: черновик не пуст и проходит проверки сдачи роли.
+
+        cfg: настройки агента.
+
+    Возвращает: Сообщение с отказом агенту или None, если работу можно принять.
+    """
+    relative_draft_dir = draft_dir(private_dir = cfg.relative_private_dir)
+    agent_draft_dir = cfg.project_dir / relative_draft_dir
+    if not any(agent_draft_dir.glob("*.md")):
+        return cfg.empty_draft_notice
+
+    remarks = [remark for check in cfg.answer_checks if (remark := check(agent_draft_dir)) is not None]
+    if not remarks:
+        return None
+
+    return ANSWER_CHECK_NOTICE.format(draft_dir = relative_draft_dir, remarks = "\n".join(remarks))
+
 
 def _build_init_prompts(*, cfg: AgentConfig, with_reinit_notice: bool) -> list[BaseMessage]:
     """Собирает стартовые сообщения: системный промпт, задача и сообщение о сбросе."""

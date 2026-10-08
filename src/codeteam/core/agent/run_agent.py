@@ -195,6 +195,7 @@ def run_agent(
                 empty_draft_notice = empty_draft_notice,
                 # правило разделов черновика общее для всех ролей, к нему добавляются хуки роли
                 step_hooks = (draft_section_hook, *role.step_hooks),
+                answer_checks = role.answer_checks,
                 relative_private_dir = relative_private_dir,
                 project_dir = project_dir,
                 seen_files = seen_files,
@@ -202,7 +203,7 @@ def run_agent(
         }
     )
 
-    initial_state = AgentState(messages = [], reset_count = 0, empty_draft_notices = 0)
+    initial_state = AgentState(messages = [], reset_count = 0, answer_notices = 0)
     journal = AgentJournal(path = journal_path, agent_name = role.name, model_name = role.model_name)
     journal.write_tools(tools = bound_chat_model.kwargs["tools"])
     try:

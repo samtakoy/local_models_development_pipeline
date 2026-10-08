@@ -1,6 +1,7 @@
 """Ревью работы роли: вердикт ревьюера, круги ревью, место ревьюера в графе."""
 
 import logging
+import re
 from collections.abc import Callable
 from pathlib import Path
 
@@ -15,7 +16,7 @@ logger = logging.getLogger(__name__)
 # Наибольшее число кругов ревью: ревью, исправление, повторное ревью.
 REVIEW_ROUND_LIMIT = 2
 
-# Файл вердикта в черновике ревьюера: первая непустая строка — вердикт.
+# Файл вердикта в черновике ревьюера: первая непустая строка содержит вердикт.
 VERDICT_FILE_NAME = "000_verdict.md"
 
 # Вердикт: работа принята.
@@ -23,6 +24,21 @@ ACCEPTED_VERDICT = "PASS"
 
 # Вердикт: работа возвращается роли на доработку.
 REWORK_VERDICT = "FIX"
+
+# Слово вердикта в первой строке файла вердикта: отдельное слово, а не часть другого.
+VERDICT_WORD_PATTERN = re.compile(rf"\b({re.escape(ACCEPTED_VERDICT)}|{re.escape(REWORK_VERDICT)})\b")
+
+# Замечание ревьюеру при сдаче: нет файла вердикта.
+MISSING_VERDICT_REMARK = (
+    "Нет файла вердикта {verdict_file}. Запиши вердикт в файл {verdict_file}: "
+    "первая строка — ровно одно слово {accepted_verdict} или {rework_verdict}."
+)
+
+# Замечание ревьюеру при сдаче: в первой строке файла вердикта нет вердикта или их два.
+WRONG_VERDICT_REMARK = (
+    "В файле вердикта {verdict_file} первая строка «{first_line}». "
+    "Первая строка должна содержать одно из слов {accepted_verdict} или {rework_verdict}, только одно."
+)
 
 # Выбор следующего узла графа по состоянию пайплайна.
 Route = Callable[[PipelineState], str]
@@ -58,6 +74,34 @@ def needs_fix(*, review: Review | None, target: str) -> bool:
     return review is not None and review.target == target and not review.accepted
 
 
+def check_verdict_file(answer_dir: Path) -> str | None:
+    """
+    Проверка сдачи ревьюера: файл вердикта есть и его первая строка содержит ровно один вердикт.
+
+        answer_dir: папка черновика ревьюера.
+
+    Возвращает: Замечание ревьюеру или None, если вердикт читается.
+    """
+    verdict_path = answer_dir / VERDICT_FILE_NAME
+    if not verdict_path.is_file():
+        return MISSING_VERDICT_REMARK.format(
+            verdict_file = VERDICT_FILE_NAME,
+            accepted_verdict = ACCEPTED_VERDICT,
+            rework_verdict = REWORK_VERDICT,
+        )
+
+    first_line = _verdict_line(verdict_path = verdict_path)
+    if _verdict_word(line = first_line) is not None:
+        return None
+
+    return WRONG_VERDICT_REMARK.format(
+        verdict_file = VERDICT_FILE_NAME,
+        first_line = first_line,
+        accepted_verdict = ACCEPTED_VERDICT,
+        rework_verdict = REWORK_VERDICT,
+    )
+
+
 def read_verdict(*, remarks_dir: Path) -> bool:
     """
     Читает вердикт ревьюера из файла вердикта.
@@ -66,21 +110,41 @@ def read_verdict(*, remarks_dir: Path) -> bool:
 
     Возвращает: True — работа принята, False — на доработку.
     """
-    verdict_path = remarks_dir / VERDICT_FILE_NAME
-    if not verdict_path.is_file():
-        # TODO падать нельзя надо хинт (user message) агенту
-        raise PipelineError(f"в черновике ревьюера {remarks_dir} нет файла {VERDICT_FILE_NAME}")
+    remark = check_verdict_file(remarks_dir)
+    if remark is not None:
+        raise PipelineError(f"черновик ревьюера {remarks_dir}: {remark}")
 
+    first_line = _verdict_line(verdict_path = remarks_dir / VERDICT_FILE_NAME)
+
+    return _verdict_word(line = first_line) == ACCEPTED_VERDICT
+
+
+def _verdict_word(*, line: str) -> str | None:
+    """
+    Находит вердикт в строке.
+
+        line: первая непустая строка файла вердикта.
+
+    Возвращает: Слово вердикта; None, если в строке нет ни одного вердикта или есть оба.
+    """
+    words = set(VERDICT_WORD_PATTERN.findall(line))
+    if len(words) != 1:
+        return None
+
+    return words.pop()
+
+
+def _verdict_line(*, verdict_path: Path) -> str:
+    """
+    Берёт первую непустую строку файла вердикта без знаков заголовка markdown.
+
+        verdict_path: файл вердикта.
+
+    Возвращает: Первую непустую строку; пустую строку, если файл пустой.
+    """
     lines = [line.strip().lstrip("#").strip() for line in verdict_path.read_text(encoding = "utf-8").splitlines()]
-    verdict = next((line for line in lines if line), "")
-    if verdict == ACCEPTED_VERDICT:
-        return True
-    if verdict == REWORK_VERDICT:
-        return False
 
-    raise PipelineError(
-        f"в {verdict_path} первая строка {verdict!r}: ожидается {ACCEPTED_VERDICT} или {REWORK_VERDICT}"
-    )
+    return next((line for line in lines if line), "")
 
 
 def check_review_limit(*, review: Review, mode: ReviewMode) -> None:

@@ -4,7 +4,7 @@ from pathlib import Path
 
 from codeteam.common.llm import ReasoningLevel
 from codeteam.core.roles.common import ACCEPTED_VERDICT, PROJECT_TOOL_NAMES, REWORK_VERDICT, VERDICT_FILE_NAME, \
-    RoleSettings
+    RoleSettings, check_verdict_file
 
 ARCHITECT_REVIEW_ROLE = RoleSettings(
     name = "architect_review",
@@ -18,4 +18,5 @@ ARCHITECT_REVIEW_ROLE = RoleSettings(
     reasoning_level = ReasoningLevel.LOW,
     tool_names = PROJECT_TOOL_NAMES,
     step_hooks = (),
+    answer_checks = (check_verdict_file,),
 )
