@@ -15,7 +15,7 @@ from ollama import ResponseError
 from typing import TypedDict, Annotated
 
 from codeteam.core.agent.config import AgentConfig
-from codeteam.core.agent.prompts import ANSWER_CHECK_NOTICE, DONE_ANSWER, TODO_ANSWER
+from codeteam.core.agent.prompts import ANSWER_CHECK_NOTICE, DONE_ANSWER, TODO_ANSWER, UNFINISHED_ANSWER_NOTICE
 from codeteam.core.agent.workspace import context_path, draft_dir
 from codeteam.core.tools.files import READ_TOOL_NAME
 
@@ -100,6 +100,13 @@ def agent_node(
         # как усиление на будущее: если посторный запрос не сработал - попробовать еще один
         # с дополнительным хинтом в user message
         response = _invoke_model(cfg = cfg, messages = state["messages"])
+
+    if _is_unfinished(response = response):
+        logger.info("[agent] ответ снова без инструмента и без DONE, повторяю запрос с подсказкой")
+        hint = HumanMessage(content = UNFINISHED_ANSWER_NOTICE)
+        response = _invoke_model(cfg = cfg, messages = [*state["messages"], hint])
+
+        return {"messages": [hint, response]}
 
     return {"messages": [response]}
 
