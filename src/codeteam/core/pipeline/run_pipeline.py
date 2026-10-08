@@ -5,9 +5,10 @@ from pathlib import Path
 from langchain_core.runnables import RunnableConfig
 
 from codeteam.app.settings import Settings
-from codeteam.core.pipeline.graph import PIPELINE_CFG_NAME, PipelineConfig, PipelineState, create_pipeline_graph
+from codeteam.core.pipeline.graph import create_pipeline_graph
 from codeteam.core.pipeline.project import ProjectSettings
 from codeteam.core.pipeline.project_setup import prepare_project
+from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState
 
 
 def run_pipeline(*, project: ProjectSettings, run_dir: Path, model_name: str, settings: Settings) -> PipelineState:
