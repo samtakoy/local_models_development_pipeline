@@ -39,8 +39,8 @@ DRAFT_AGENT_NODE_ID = "draft_agent"
 DRAFT_TOOL_NODE_ID = "draft_tools"
 REINIT_NODE_ID = "reinit"
 
-# Сколько раз отказывать агенту, чья работа не прошла проверку сдачи; дальше работа завершается как есть.
-ANSWER_NOTICE_LIMIT = 2
+# Сколько раз отказывать агенту, чья работа не прошла проверку сдачи; дальше работа переходит к новому агенту.
+ANSWER_NOTICE_LIMIT = 3
 
 def init_node(state: AgentState, config: RunnableConfig):
     """Собирает историю агента на старте."""
@@ -54,7 +54,10 @@ def init_node(state: AgentState, config: RunnableConfig):
 
 
 def reinit_node(state: AgentState, config: RunnableConfig):
-    """Пересобирает историю агента после сброса: старт заново и чтение памяти; обнуляет счётчик отказов в приёме работы."""
+    """
+    Пересобирает историю агента после сброса: старт заново и чтение памяти; снимает фоновые процессы
+    прежнего агента и обнуляет счётчик отказов в приёме работы.
+    """
     cfg: AgentConfig = config["configurable"][AGENT_CFG_NAME]
 
     memory_calls = [
@@ -81,6 +84,9 @@ def reinit_node(state: AgentState, config: RunnableConfig):
 
     # то что модель читала до очистки истории - больше не актуально
     cfg.seen_files.forget_all()
+
+    # фоновые процессы прежнего агента снимаются
+    cfg.shell_processes.kill_all()
 
     # новый агент получает свои попытки сдачи
     return {"messages": messages, "reset_count": state["reset_count"] + 1, "answer_notices": 0}
@@ -177,7 +183,11 @@ def answer_notice_node(state: AgentState, config: RunnableConfig) -> AgentState:
 
 def route_after_agent(state: AgentState, config: RunnableConfig) -> str:
     """
-    Выбирает узел после ответа агента: инструменты, отказ в приёме работы или конец работы.
+    Выбирает узел после ответа агента: инструменты, отказ в приёме работы, передача работы новому
+    агенту или конец работы.
+
+    Работа, не прошедшая проверку сдачи после ANSWER_NOTICE_LIMIT отказов, переходит к новому агенту
+    через пересборку истории; после max_resets сбросов работа завершается как есть.
 
         state: состояние агента.
         config: конфигурация запуска с настройками агента.
@@ -190,8 +200,15 @@ def route_after_agent(state: AgentState, config: RunnableConfig) -> str:
     cfg: AgentConfig = config["configurable"][AGENT_CFG_NAME]
     response = state["messages"][-1]
     is_done = DONE_PATTERN.search(str(response.content)) is not None
-    if is_done and state["answer_notices"] < ANSWER_NOTICE_LIMIT and _answer_notice(cfg = cfg) is not None:
+    if not is_done or _answer_notice(cfg = cfg) is None:
+        return END
+
+    if state["answer_notices"] < ANSWER_NOTICE_LIMIT:
         return ANSWER_NOTICE_NODE_ID
+
+    # попытки сдачи кончились: работу доделывает новый агент
+    if state["reset_count"] < cfg.max_resets:
+        return REINIT_NODE_ID
 
     return END
 
