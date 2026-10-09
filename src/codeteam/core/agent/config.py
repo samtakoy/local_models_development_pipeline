@@ -3,6 +3,7 @@ from pathlib import Path
 
 from langchain_core.runnables import Runnable
 
+from codeteam.common.shell import ShellProcesses
 from codeteam.core.agent.answer_checks import AnswerCheck
 from codeteam.core.agent.step_hooks import StepCheck, StepHook
 from codeteam.core.tools.files import SeenFiles
@@ -40,3 +41,5 @@ class AgentConfig:
     relative_private_dir: Path
     # файлы, которые видел агент; общие с файловыми инструментами, забываются при сбросе истории
     seen_files: SeenFiles
+    # фоновые процессы команд агента; общие с инструментами оболочки, снимаются при уведомлении о лимите
+    shell_processes: ShellProcesses

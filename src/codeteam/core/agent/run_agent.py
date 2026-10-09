@@ -211,6 +211,7 @@ def run_agent(
                 relative_private_dir = relative_private_dir,
                 project_dir = project_dir,
                 seen_files = seen_files,
+                shell_processes = shell_processes,
             )
         }
     )
