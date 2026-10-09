@@ -37,6 +37,9 @@ LAUNCH_TIMEOUT_SECONDS = 10
 # Пауза между проверками готовности, секунды.
 CHECK_INTERVAL_SECONDS = 0.5
 
+# Сколько ждать, пока остановленная прежняя служба освободит порт, секунды.
+PORT_RELEASE_TIMEOUT_SECONDS = 5
+
 # Адрес, на котором проверяется порт службы.
 SERVICE_HOST = "127.0.0.1"
 
@@ -89,11 +92,16 @@ def build_start_service_tool(*, workspace: Workspace, processes: ShellProcesses)
     """
     Собирает инструмент запуска служб для рабочего места вызова.
 
+    Запуск на порту, где работает служба, запущенная этим инструментом раньше, останавливает
+    прежнюю службу и запускает новую.
+
         workspace: рабочее место вызова: папка запуска, права записи и чтения те же, что у bash.
         processes: учёт фоновых процессов; служба попадает в него, её видит и останавливает stop_process.
 
     Возвращает: Инструмент start_service.
     """
+    # номер процесса службы по её порту
+    service_by_port: dict[int, int] = {}
 
     def start_service(
         *,
@@ -127,6 +135,10 @@ def build_start_service_tool(*, workspace: Workspace, processes: ShellProcesses)
             pattern = re.compile(log_pattern) if log_pattern else None
         except re.error as error:
             raise ToolException(f"Ошибка: log_pattern — неверное регулярное выражение: {error}") from error
+        if port is not None and port in service_by_port:
+            # прежняя служба на этом порту заменяется новой
+            processes.kill_group_of(process_id = service_by_port.pop(port))
+            _wait_port_released(port = port)
         if port is not None and _is_port_open(port = port):
             raise ToolException(
                 f"Ошибка: порт {port} уже занят другой программой, служба не запущена. "
@@ -147,6 +159,8 @@ def build_start_service_tool(*, workspace: Workspace, processes: ShellProcesses)
             raise ToolException(f"Ошибка: служба не запущена.\n{result.output}")
 
         process_id = int(result.output.strip())
+        if port is not None:
+            service_by_port[port] = process_id
         deadline = time.monotonic() + timeout
         while True:
             if _is_ready(port = port, pattern = pattern, log_path = log_path):
@@ -267,6 +281,17 @@ def _is_port_open(*, port: int) -> bool:
             return True
     except OSError:
         return False
+
+
+def _wait_port_released(*, port: int) -> None:
+    """
+    Ждёт, пока порт перестанет принимать соединения, не дольше PORT_RELEASE_TIMEOUT_SECONDS.
+
+        port: порт.
+    """
+    deadline = time.monotonic() + PORT_RELEASE_TIMEOUT_SECONDS
+    while _is_port_open(port = port) and time.monotonic() < deadline:
+        time.sleep(CHECK_INTERVAL_SECONDS)
 
 
 def _is_process_alive(*, process_id: int) -> bool:
