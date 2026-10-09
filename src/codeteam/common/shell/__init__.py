@@ -1,7 +1,7 @@
-"""Запуск команд оболочки."""
+"""Запуск команд оболочки агента в песочнице и учёт их фоновых процессов."""
 
-from codeteam.common.shell.command import CommandResult, run_command
-from codeteam.common.shell.macos_sandbox import ReadRestrictions
+from codeteam.common.shell.command import CommandResult
+from codeteam.common.shell.command_host import CommandHost, CommandHostRestarted
 from codeteam.common.shell.processes import ShellProcess, ShellProcesses
 
-__all__ = ["CommandResult", "ReadRestrictions", "ShellProcess", "ShellProcesses", "run_command"]
+__all__ = ["CommandHost", "CommandHostRestarted", "CommandResult", "ShellProcess", "ShellProcesses"]

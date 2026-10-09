@@ -1,15 +1,14 @@
 """Инструмент агента bash: команда оболочки в папке проекта.
 
-Закрытые файлы и личные папки других агентов команды не читают (на macOS). Ограничения чтения
-рабочего места команды не учитывают: агент читает любой открытый файл, в том числе вне папок
-чтения. Требует доработки.
+Команды выполняются через хозяина команд агента (CommandHost): в песочнице запись разрешена только в
+папки записи рабочего места, сигналы — только процессам агента. Чтение не ограничивается.
 """
 
 from langchain_core.tools import BaseTool, StructuredTool, ToolException
 from pydantic import BaseModel, Field
 
-from codeteam.common.shell import ReadRestrictions, ShellProcesses, run_command
-from codeteam.core.agent.workspace import CLOSED_FILE_NAMES, PRIVATE_ROOT, Workspace
+from codeteam.common.shell import CommandHost, CommandHostRestarted, ShellProcesses
+from codeteam.core.agent.workspace import Workspace
 
 # Предел времени команды, если агент его не задал, секунды.
 BASH_TIMEOUT_SECONDS = 120
@@ -59,9 +58,13 @@ BASH_WORKSPACE_DESCRIPTION = """
 Рабочее место:
 - Команда запускается в папке проекта {project_dir}: cd в неё не нужен, пути пиши относительно неё.
 - Запись разрешена только в: {writable_dirs} и во временные папки системы.
-  Отказ «Operation not permitted» при записи значит, что путь вне этих папок.
-- Чтение закрыто: {closed_dirs}, кроме {open_dirs}; файлы {closed_files} на любой глубине.
-  Отказ «Operation not permitted» при чтении значит, что путь закрыт."""
+  Отказ «Operation not permitted» или «Permission denied» при записи значит, что путь вне этих папок."""
+
+# Отказ bash, если процесс-хозяин команд упал и запущен заново.
+BASH_HOST_RESTARTED_REFUSAL = (
+    "Ошибка: оболочка перезапущена, команда не выполнена. Твои фоновые процессы остановлены. "
+    "Повтори команду."
+)
 
 
 # Код команды, которую остановил сигнал SIGPIPE: следующая команда цепочки перестала читать вывод.
@@ -83,16 +86,16 @@ class BashArguments(BaseModel):
     )
 
 
-def build_bash_tool(*, workspace: Workspace, processes: ShellProcesses) -> BaseTool:
+def build_bash_tool(*, workspace: Workspace, processes: ShellProcesses, host: CommandHost) -> BaseTool:
     """
     Собирает инструмент bash для рабочего места вызова.
 
-    Команда запускается в папке проекта. На macOS запись разрешена только в папки записи рабочего
-    места и временные папки системы; на других системах bash без ограничений. Описание инструмента
-    называет папку запуска, папки записи и закрытое для чтения.
+    Команда запускается в папке проекта через хозяина команд агента. Описание инструмента называет
+    папку запуска и папки записи.
 
         workspace: рабочее место вызова.
         processes: учёт фоновых процессов команд; их снимает владелец учёта.
+        host: хозяин команд агента: выполняет команду в песочнице агента.
 
     Возвращает: Инструмент bash.
     """
@@ -110,13 +113,11 @@ def build_bash_tool(*, workspace: Workspace, processes: ShellProcesses) -> BaseT
         if not 1 <= timeout <= BASH_TIMEOUT_LIMIT_SECONDS:
             raise ToolException(f"Ошибка: timeout_seconds должен быть от 1 до {BASH_TIMEOUT_LIMIT_SECONDS}")
 
-        result = run_command(
-            command = command,
-            working_dir = str(workspace.project_dir),
-            timeout_seconds = timeout,
-            write_roots = workspace.writable_dirs,
-            read_restrictions = workspace_read_restrictions(workspace = workspace),
-        )
+        try:
+            result = host.run(command = command, working_dir = str(workspace.project_dir), timeout_seconds = timeout)
+        except CommandHostRestarted as error:
+            raise ToolException(BASH_HOST_RESTARTED_REFUSAL) from error
+
         processes.remember(process_group_id = result.process_group_id)
         if result.exit_code is None:
             raise ToolException(
@@ -132,13 +133,9 @@ def build_bash_tool(*, workspace: Workspace, processes: ShellProcesses) -> BaseT
 
         return "\n".join(lines)
 
-    read_restrictions = workspace_read_restrictions(workspace = workspace)
     description = BASH_DESCRIPTION + BASH_WORKSPACE_DESCRIPTION.format(
         project_dir = workspace.project_dir,
         writable_dirs = workspace.show_folders(folders = workspace.writable_dirs),
-        closed_dirs = workspace.show_folders(folders = read_restrictions.closed_dirs),
-        open_dirs = workspace.show_folders(folders = read_restrictions.open_dirs),
-        closed_files = ", ".join(read_restrictions.closed_file_names),
     )
 
     return StructuredTool.from_function(
@@ -177,22 +174,6 @@ def build_disabled_bash_tool(*, refusal: str) -> BaseTool:
         description = BASH_DESCRIPTION,
         args_schema = BashArguments,
         handle_tool_error = True,
-    )
-
-
-def workspace_read_restrictions(*, workspace: Workspace) -> ReadRestrictions:
-    """
-    Собирает запреты чтения команды: закрытые файлы проекта и личные папки, кроме своей и входов.
-
-        workspace: рабочее место вызова.
-
-    Возвращает: Запреты чтения для песочницы.
-    """
-    return ReadRestrictions(
-        root = workspace.project_dir,
-        closed_file_names = CLOSED_FILE_NAMES,
-        closed_dirs = (workspace.project_dir / PRIVATE_ROOT,),
-        open_dirs = (workspace.private_dir, *workspace.input_dirs),
     )
 
 

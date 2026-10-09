@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from langchain_core.tools import BaseTool
 
-from codeteam.common.shell import ShellProcesses
+from codeteam.common.shell import CommandHost, ShellProcesses
 from codeteam.core.agent.workspace import Workspace
 from codeteam.core.tools.shell import build_bash_tool, build_stop_process_tool
 from tests.shell_helpers import is_process_alive, wait_process_gone
@@ -55,11 +55,13 @@ def agent_shell(tmp_path: Path) -> Iterator[AgentShell]:
         refusal_hint = None,
     )
     processes = ShellProcesses()
+    host = CommandHost(write_roots = workspace.writable_dirs, processes = processes)
     yield AgentShell(
-        bash = build_bash_tool(workspace = workspace, processes = processes),
+        bash = build_bash_tool(workspace = workspace, processes = processes, host = host),
         stop_process = build_stop_process_tool(processes = processes),
     )
     processes.kill_all()
+    host.close()
 
 
 def test_stop_by_pid_stops_process_and_its_children(agent_shell: AgentShell) -> None:

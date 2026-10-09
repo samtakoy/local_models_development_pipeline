@@ -14,8 +14,6 @@ dependencies = [
     "pydantic==2.13.5",
     "pathspec==1.1.1",
     "python-dotenv==1.2.4",
-    "tree-sitter==0.26.0",
-    "tree-sitter-bash==0.25.1",
 ]
 
 

@@ -18,9 +18,9 @@ from pathlib import Path
 from langchain_core.tools import BaseTool, StructuredTool, ToolException
 from pydantic import BaseModel, Field
 
-from codeteam.common.shell import ShellProcesses, run_command
+from codeteam.common.shell import CommandHost, CommandHostRestarted, ShellProcesses
 from codeteam.core.agent.workspace import CHECK_DIR, PathOutsideWorkspace, Workspace
-from codeteam.core.tools.shell.bash import workspace_read_restrictions
+from codeteam.core.tools.shell.bash import BASH_HOST_RESTARTED_REFUSAL
 
 # Имя инструмента запуска служб.
 START_SERVICE_TOOL_NAME = "start_service"
@@ -88,15 +88,16 @@ class StartServiceArguments(BaseModel):
     )
 
 
-def build_start_service_tool(*, workspace: Workspace, processes: ShellProcesses) -> BaseTool:
+def build_start_service_tool(*, workspace: Workspace, processes: ShellProcesses, host: CommandHost) -> BaseTool:
     """
     Собирает инструмент запуска служб для рабочего места вызова.
 
     Запуск на порту, где работает служба, запущенная этим инструментом раньше, останавливает
     прежнюю службу и запускает новую.
 
-        workspace: рабочее место вызова: папка запуска, права записи и чтения те же, что у bash.
+        workspace: рабочее место вызова: папка запуска и права записи те же, что у bash.
         processes: учёт фоновых процессов; служба попадает в него, её видит и останавливает stop_process.
+        host: хозяин команд агента, общий с bash: служба работает в песочнице агента.
 
     Возвращает: Инструмент start_service.
     """
@@ -147,13 +148,14 @@ def build_start_service_tool(*, workspace: Workspace, processes: ShellProcesses)
 
         log_path = _new_log_path(workspace = workspace)
         shown_log = workspace.display_path(path = log_path)
-        result = run_command(
-            command = f"( {command} ) > {shlex.quote(str(log_path))} 2>&1 & echo $!",
-            working_dir = str(workspace.project_dir),
-            timeout_seconds = LAUNCH_TIMEOUT_SECONDS,
-            write_roots = workspace.writable_dirs,
-            read_restrictions = workspace_read_restrictions(workspace = workspace),
-        )
+        try:
+            result = host.run(
+                command = f"( {command} ) > {shlex.quote(str(log_path))} 2>&1 & echo $!",
+                working_dir = str(workspace.project_dir),
+                timeout_seconds = LAUNCH_TIMEOUT_SECONDS,
+            )
+        except CommandHostRestarted as error:
+            raise ToolException(BASH_HOST_RESTARTED_REFUSAL) from error
         processes.remember(process_group_id = result.process_group_id)
         if result.exit_code != 0 or not result.output.strip().isdigit():
             raise ToolException(f"Ошибка: служба не запущена.\n{result.output}")

@@ -19,7 +19,7 @@ from codeteam.core.agent.step_hooks import draft_section_hook
 from codeteam.core.agent.workspace import CONTEXT_FILE_NAME, PRIVATE_ROOT, Workspace, context_path, draft_dir
 from codeteam.core.tools.files import DELETE_TOOL_NAME, EDIT_TOOL_NAME, READ_TOOL_NAME, WRITE_TOOL_NAME, \
     file_tool_builders, SeenFiles
-from codeteam.common.shell import ShellProcesses
+from codeteam.common.shell import CommandHost, ShellProcesses
 from codeteam.core.tools.disabled import build_disabled_tool
 from codeteam.core.tools.shell import BASH_TOOL_NAME, START_SERVICE_TOOL_NAME, STOP_PROCESS_TOOL_NAME, \
     build_bash_tool, build_disabled_bash_tool, build_disabled_start_service_tool, build_start_service_tool, \
@@ -94,24 +94,22 @@ def run_agent(
         private_dir = private_dir,
         input_dirs = input_dirs,
         readable_dirs = (private_dir, *input_dirs, *extra_readable_dirs),
-        # отдельно укажем папку и файл
-        # writable_dirs = (private_dir,),
-        writable_dirs = (
-            draft_dir(private_dir = private_dir),
-            context_path(private_dir = private_dir),
-            *extra_writable_dirs,
-        ),
+        writable_dirs = (private_dir, *extra_writable_dirs),
         refusal_hint = None
     )
     # Фоновые процессы команд bash агента: снимаются, когда агент закончит работу
     shell_processes = ShellProcesses()
+    # Хозяин команд агента: одна песочница на все команды bash и службы агента
+    command_host = CommandHost(write_roots = workspace.writable_dirs, processes = shell_processes)
     # Остановка фоновых процессов агента: одна и та же в фазе работы и в фазе черновика
     stop_process_tool = build_stop_process_tool(processes = shell_processes)
     tools = _build_tools(
         builders = {
             **file_tool_builders(workspace = workspace, seen_files = seen_files),
-            BASH_TOOL_NAME: lambda: build_bash_tool(workspace = workspace, processes = shell_processes),
-            START_SERVICE_TOOL_NAME: lambda: build_start_service_tool(workspace = workspace, processes = shell_processes),
+            BASH_TOOL_NAME: lambda: build_bash_tool(workspace = workspace, processes = shell_processes, host = command_host),
+            START_SERVICE_TOOL_NAME: lambda: build_start_service_tool(
+                workspace = workspace, processes = shell_processes, host = command_host
+            ),
             STOP_PROCESS_TOOL_NAME: lambda: stop_process_tool,
         },
         tool_names = role.tool_names,
@@ -124,12 +122,7 @@ def run_agent(
         private_dir = private_dir,
         input_dirs = (),
         readable_dirs = (private_dir,),
-        # отдельно укажем папку и файл
-        # writable_dirs = (private_dir,),
-        writable_dirs = (
-            draft_dir(private_dir = private_dir),
-            context_path(private_dir = private_dir),
-        ),
+        writable_dirs = (private_dir,),
         refusal_hint = DRAFT_PHASE_HINT.format(
             private_dir = relative_private_dir,
             context_file_path = CONTEXT_FILE_NAME
@@ -232,6 +225,7 @@ def run_agent(
         raise
     finally:
         shell_processes.kill_all()
+        command_host.close()
 
     journal.finish()
 

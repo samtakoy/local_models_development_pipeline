@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from langchain_core.tools import BaseTool
 
-from codeteam.common.shell import ShellProcesses
+from codeteam.common.shell import CommandHost, ShellProcesses
 from codeteam.core.agent.workspace import Workspace
 from codeteam.core.tools.shell import build_start_service_tool
 
@@ -30,14 +30,14 @@ def processes() -> Iterator[ShellProcesses]:
 
 
 @pytest.fixture
-def start_service(tmp_path: Path, processes: ShellProcesses) -> BaseTool:
+def start_service(tmp_path: Path, processes: ShellProcesses) -> Iterator[BaseTool]:
     """
     Инструмент start_service на рабочем месте в папке теста.
 
         tmp_path: временная папка теста.
         processes: учёт фоновых процессов теста.
 
-    Возвращает: Инструмент start_service.
+    Возвращает: Инструмент start_service; хозяин команд останавливается после теста.
     """
     workspace = Workspace(
         project_dir = tmp_path,
@@ -48,7 +48,9 @@ def start_service(tmp_path: Path, processes: ShellProcesses) -> BaseTool:
         refusal_hint = None,
     )
 
-    return build_start_service_tool(workspace = workspace, processes = processes)
+    host = CommandHost(write_roots = workspace.writable_dirs, processes = processes)
+    yield build_start_service_tool(workspace = workspace, processes = processes, host = host)
+    host.close()
 
 
 def _free_port() -> int:
