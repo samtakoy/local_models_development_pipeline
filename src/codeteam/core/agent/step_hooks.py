@@ -6,8 +6,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from codeteam.core.agent.prompts import DUPLICATE_SECTION_NUMBER_REMARK, LATIN_SECTION_NAME_REMARK, \
-    NOT_DRAFT_SECTION_REMARK
-from codeteam.core.agent.workspace import DRAFT_SECTION_PATTERN, LATIN_DRAFT_SECTION_PATTERN
+    NOT_DRAFT_SECTION_REMARK, STRAY_PRIVATE_FILE_REMARK
+from codeteam.core.agent.workspace import CONTEXT_FILE_NAME, DRAFT_DIR_NAME, DRAFT_SECTION_PATTERN, \
+    LATIN_DRAFT_SECTION_PATTERN, context_path, draft_dir
 
 # Хук после шага: путь и текст изменённого файла → замечание агенту или None.
 StepHook = Callable[[Path, str], str | None]
@@ -61,6 +62,31 @@ def draft_section_hook(path: Path, text: str) -> str | None:
         )
 
     return "\n".join(remarks) if remarks else None
+
+
+def stray_private_file_hook(*, private_dir: Path) -> StepHook:
+    """
+    Собирает хук личной папки: замечание к файлу вне черновика, кроме файла контекста.
+
+        private_dir: личная папка агента.
+
+    Возвращает: Хук после шага для папки Path(".").
+    """
+    agent_draft_dir = draft_dir(private_dir = private_dir)
+    agent_context_file = context_path(private_dir = private_dir)
+
+    def hook(path: Path, text: str) -> str | None:
+        """Находит файл личной папки вне черновика и не файл контекста."""
+        if path.is_relative_to(agent_draft_dir) or path == agent_context_file:
+            return None
+
+        return STRAY_PRIVATE_FILE_REMARK.format(
+            file_name = path.relative_to(private_dir),
+            draft_dir_name = DRAFT_DIR_NAME,
+            context_file_name = CONTEXT_FILE_NAME,
+        )
+
+    return hook
 
 
 def code_block_hook(*, max_lines: int, remark: str, skip_file_names: tuple[str, ...]) -> StepHook:
