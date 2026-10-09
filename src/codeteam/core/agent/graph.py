@@ -54,7 +54,7 @@ def init_node(state: AgentState, config: RunnableConfig):
 
 
 def reinit_node(state: AgentState, config: RunnableConfig):
-    """Пересобирает историю агента после сброса: старт заново и чтение памяти."""
+    """Пересобирает историю агента после сброса: старт заново и чтение памяти; обнуляет счётчик отказов в приёме работы."""
     cfg: AgentConfig = config["configurable"][AGENT_CFG_NAME]
 
     memory_calls = [
@@ -82,7 +82,8 @@ def reinit_node(state: AgentState, config: RunnableConfig):
     # то что модель читала до очистки истории - больше не актуально
     cfg.seen_files.forget_all()
 
-    return {"messages": messages, "reset_count": state["reset_count"] + 1}
+    # новый агент получает свои попытки сдачи
+    return {"messages": messages, "reset_count": state["reset_count"] + 1, "answer_notices": 0}
 
 UNFINISHED_ANSWER_RETRIES = 1
 def agent_node(
