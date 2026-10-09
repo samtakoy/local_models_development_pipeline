@@ -16,6 +16,7 @@ from pathlib import Path
 from langchain_core.runnables import RunnableConfig
 
 from codeteam.app.config import load_project_config
+from codeteam.app.sandbox_check import confirm_unprotected_run
 from codeteam.app.settings import load_settings
 from codeteam.common.git import list_uncommitted_changes
 from codeteam.core.agent.workspace import PRIVATE_ROOT, draft_dir
@@ -47,6 +48,7 @@ def main() -> None:
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
     arguments = parse_arguments()
+    confirm_unprotected_run()
     settings = load_settings()
     project = load_project_config(setup_dir = arguments.setup_dir)
     project_dir = Path(project.path).resolve()

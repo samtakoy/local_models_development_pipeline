@@ -37,20 +37,34 @@ def sandboxed_argv(*, argv: list[str], write_roots: tuple[Path, ...]) -> list[st
 
     Возвращает: Запуск программы под песочницей; без песочницы — исходный argv.
     """
+    if not is_sandbox_available():
+        _warn_unprotected()
+        return argv
+
     roots = (*write_roots, *HOME_CACHE_DIRS)
-    if sys.platform == "darwin" and SANDBOX_EXEC.exists():
+    if sys.platform == "darwin":
         return macos_sandbox_argv(argv = argv, write_roots = roots)
 
-    if sys.platform == "linux" and landlock_exec.landlock_abi_version() >= landlock_exec.MINIMAL_ABI_VERSION:
-        write_options = []
-        for root in (*roots, *LINUX_TEMP_DIRS, *LINUX_WRITABLE_DEVICES):
-            write_options += [landlock_exec.WRITE_OPTION, str(root.resolve())]
+    write_options = []
+    for root in (*roots, *LINUX_TEMP_DIRS, *LINUX_WRITABLE_DEVICES):
+        write_options += [landlock_exec.WRITE_OPTION, str(root.resolve())]
 
-        return [sys.executable, "-I", landlock_exec.__file__, *write_options, landlock_exec.PROGRAM_SEPARATOR, *argv]
+    return [sys.executable, "-I", landlock_exec.__file__, *write_options, landlock_exec.PROGRAM_SEPARATOR, *argv]
 
-    _warn_unprotected()
 
-    return argv
+def is_sandbox_available() -> bool:
+    """
+    Проверяет, есть ли на этой машине песочница: sandbox-exec на macOS или Landlock нужной версии в Linux.
+
+    Возвращает: True, если песочница доступна.
+    """
+    if sys.platform == "darwin":
+        return SANDBOX_EXEC.exists()
+
+    if sys.platform == "linux":
+        return landlock_exec.landlock_abi_version() >= landlock_exec.MINIMAL_ABI_VERSION
+
+    return False
 
 
 @functools.cache

@@ -4,6 +4,7 @@ import sys
 from datetime import datetime
 
 from codeteam.app.config import load_project_config
+from codeteam.app.sandbox_check import confirm_unprotected_run
 from codeteam.app.settings import load_settings
 from codeteam.core.pipeline.run_pipeline import run_pipeline
 from codeteam.core.roles.common import PipelineError
@@ -17,6 +18,7 @@ def main():
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
     arguments = _parse_arguments()
+    confirm_unprotected_run()
     settings = load_settings()
     project = load_project_config(setup_dir = arguments.setup_dir)
     run_dir = settings.runs_dir / datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
