@@ -33,7 +33,7 @@ class ShellProcesses:
 
             process_group_id: номер группы процессов команды.
         """
-        if _is_process_group_alive(process_group_id = process_group_id):
+        if is_process_group_alive(process_group_id = process_group_id):
             self._group_ids.add(process_group_id)
 
     def alive_processes(self) -> list[ShellProcess]:
@@ -63,17 +63,20 @@ class ShellProcesses:
         """
         Снимает запомненную группу, в которой работает процесс.
 
-            process_id: номер процесса.
+            process_id: номер процесса или номер запомненной группы.
 
         Возвращает: True, если группа снята; False, если процесса нет или его группа не запомнена.
         """
-        try:
-            process_group_id = os.getpgid(process_id)
-        except ProcessLookupError:
-            return False
+        if process_id in self._group_ids:
+            process_group_id = process_id
+        else:
+            try:
+                process_group_id = os.getpgid(process_id)
+            except ProcessLookupError:
+                return False
 
-        if process_group_id not in self._group_ids:
-            return False
+            if process_group_id not in self._group_ids:
+                return False
 
         kill_process_group(process_group_id = process_group_id)
         self._group_ids.discard(process_group_id)
@@ -103,7 +106,7 @@ def kill_process_group(*, process_group_id: int) -> None:
         pass
 
 
-def _is_process_group_alive(*, process_group_id: int) -> bool:
+def is_process_group_alive(*, process_group_id: int) -> bool:
     """
     Проверяет, есть ли в группе работающие процессы.
 

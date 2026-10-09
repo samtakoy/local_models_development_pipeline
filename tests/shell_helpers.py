@@ -41,3 +41,22 @@ def wait_process_gone(*, process_id: int) -> bool:
         time.sleep(PROCESS_POLL_SECONDS)
 
     return False
+
+
+def wait_process_group_gone(*, process_group_id: int) -> bool:
+    """
+    Ждёт исчезновения всех процессов группы не дольше PROCESS_GONE_TIMEOUT_SECONDS.
+
+        process_group_id: номер группы процессов.
+
+    Возвращает: True, если в группе не осталось процессов.
+    """
+    deadline = time.monotonic() + PROCESS_GONE_TIMEOUT_SECONDS
+    while time.monotonic() < deadline:
+        try:
+            os.killpg(process_group_id, 0)
+        except ProcessLookupError:
+            return True
+        time.sleep(PROCESS_POLL_SECONDS)
+
+    return False

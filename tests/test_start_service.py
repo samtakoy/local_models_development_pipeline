@@ -12,6 +12,7 @@ from langchain_core.tools import BaseTool
 from codeteam.common.shell import CommandHost, ShellProcesses
 from codeteam.core.agent.workspace import Workspace
 from codeteam.core.tools.shell import build_start_service_tool
+from tests.shell_helpers import wait_process_group_gone
 
 # Номер процесса службы в ответе start_service.
 SERVICE_PROCESS_PATTERN = re.compile(r"Служба готова: процесс (\d+)")
@@ -79,16 +80,16 @@ def _start(*, start_service: BaseTool, port: int) -> str:
     })
 
 
-def _is_alive(*, process_id: int) -> bool:
+def _is_alive(*, process_group_id: int) -> bool:
     """
-    Проверяет, работает ли процесс.
+    Проверяет, работает ли служба: жив ли хоть один процесс её группы.
 
-        process_id: номер процесса.
+        process_group_id: номер группы процессов службы из ответа start_service.
 
-    Возвращает: True, если процесс есть.
+    Возвращает: True, если в группе есть процесс.
     """
     try:
-        os.kill(process_id, 0)
+        os.killpg(process_group_id, 0)
     except ProcessLookupError:
         return False
 
@@ -107,8 +108,8 @@ def test_restart_on_same_port_replaces_previous_service(start_service: BaseTool)
     first_match = SERVICE_PROCESS_PATTERN.search(first)
     second_match = SERVICE_PROCESS_PATTERN.search(second)
     assert first_match is not None and second_match is not None, f"{first}\n{second}"
-    assert not _is_alive(process_id = int(first_match.group(1)))
-    assert _is_alive(process_id = int(second_match.group(1)))
+    assert not _is_alive(process_group_id = int(first_match.group(1)))
+    assert _is_alive(process_group_id = int(second_match.group(1)))
 
 
 def test_port_busy_by_other_program_is_refused(start_service: BaseTool) -> None:
@@ -123,3 +124,20 @@ def test_port_busy_by_other_program_is_refused(start_service: BaseTool) -> None:
         result = _start(start_service = start_service, port = port)
 
     assert result.startswith(f"Ошибка: порт {port} уже занят другой программой")
+
+
+def test_command_with_ampersand_starts_service(start_service: BaseTool, processes: ShellProcesses) -> None:
+    """
+    Команда с & в фоне и внутри кавычек запускает службу; её останавливают по номеру из ответа.
+    """
+    port = _free_port()
+
+    result = start_service.invoke({
+        "command": f'python3 -m http.server {port} --bind 127.0.0.1 & echo "a&b"',
+        "port": port,
+    })
+
+    match = SERVICE_PROCESS_PATTERN.search(result)
+    assert match is not None, result
+    assert processes.kill_group_of(process_id = int(match.group(1)))
+    assert wait_process_group_gone(process_group_id = int(match.group(1)))

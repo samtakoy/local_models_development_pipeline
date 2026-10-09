@@ -19,6 +19,7 @@ from langchain_core.tools import BaseTool, StructuredTool, ToolException
 from pydantic import BaseModel, Field
 
 from codeteam.common.shell import CommandHost, CommandHostRestarted, ShellProcesses
+from codeteam.common.shell.processes import is_process_group_alive
 from codeteam.core.agent.workspace import CHECK_DIR, PathOutsideWorkspace, Workspace
 from codeteam.core.tools.shell.bash import BASH_HOST_RESTARTED_REFUSAL
 
@@ -42,9 +43,6 @@ PORT_RELEASE_TIMEOUT_SECONDS = 5
 
 # Адрес, на котором проверяется порт службы.
 SERVICE_HOST = "127.0.0.1"
-
-# Одиночный & в команде: запуск в фоне; && и перенаправления вида 2>&1, &> им не считаются.
-BACKGROUND_PATTERN = re.compile(r"(?<![&>])&(?![&>])")
 
 # Папка логов служб внутри папки временных файлов проверки CHECK_DIR.
 SERVICE_LOG_DIR_NAME = "services"
@@ -75,7 +73,7 @@ class StartServiceArguments(BaseModel):
     """
 
     command: str = Field(
-        description = "команда запуска службы, без & и без перенаправления вывода (> файл): вывод в лог пишет сам инструмент"
+        description = "команда запуска службы, без перенаправления вывода (> файл): вывод в лог пишет сам инструмент"
     )
     port: int | None = Field(default = None, description = "порт, который служба откроет на 127.0.0.1")
     log_pattern: str | None = Field(
@@ -130,8 +128,6 @@ def build_start_service_tool(*, workspace: Workspace, processes: ShellProcesses,
                 "(например port = 8050; обычно этого достаточно), или log_pattern — регулярное выражение "
                 "строки, которую служба выводит, когда готова."
             )
-        if BACKGROUND_PATTERN.search(command):
-            raise ToolException("Ошибка: убери & из команды: инструмент сам запускает службу в фоне.")
         try:
             pattern = re.compile(log_pattern) if log_pattern else None
         except re.error as error:
@@ -150,17 +146,19 @@ def build_start_service_tool(*, workspace: Workspace, processes: ShellProcesses,
         shown_log = workspace.display_path(path = log_path)
         try:
             result = host.run(
-                command = f"( {command} ) > {shlex.quote(str(log_path))} 2>&1 & echo $!",
+                command = f"( {command} ) > {shlex.quote(str(log_path))} 2>&1 &",
                 working_dir = str(workspace.project_dir),
                 timeout_seconds = LAUNCH_TIMEOUT_SECONDS,
             )
         except CommandHostRestarted as error:
             raise ToolException(BASH_HOST_RESTARTED_REFUSAL) from error
         processes.remember(process_group_id = result.process_group_id)
-        if result.exit_code != 0 or not result.output.strip().isdigit():
+        if result.exit_code != 0:
             raise ToolException(f"Ошибка: служба не запущена.\n{result.output}")
 
-        process_id = int(result.output.strip())
+        # номер группы процессов службы: группа жива, пока жив любой её процесс, в том числе
+        # запущенный в фоне командой службы
+        process_id = result.process_group_id
         if port is not None:
             service_by_port[port] = process_id
         deadline = time.monotonic() + timeout
@@ -171,7 +169,7 @@ def build_start_service_tool(*, workspace: Workspace, processes: ShellProcesses,
                     f"Остановить: stop_process(pid = {process_id}).\n"
                     f"Последние строки лога:\n{_log_tail(log_path = log_path)}"
                 )
-            if not _is_process_alive(process_id = process_id):
+            if not is_process_group_alive(process_group_id = process_id):
                 raise ToolException(
                     f"Ошибка: служба не запустилась — процесс {process_id} завершился. Лог {shown_log}.\n"
                     f"Последние строки лога:\n{_log_tail(log_path = log_path)}"
@@ -294,24 +292,6 @@ def _wait_port_released(*, port: int) -> None:
     deadline = time.monotonic() + PORT_RELEASE_TIMEOUT_SECONDS
     while _is_port_open(port = port) and time.monotonic() < deadline:
         time.sleep(CHECK_INTERVAL_SECONDS)
-
-
-def _is_process_alive(*, process_id: int) -> bool:
-    """
-    Проверяет, работает ли процесс.
-
-        process_id: номер процесса.
-
-    Возвращает: True, если процесс есть.
-    """
-    try:
-        os.kill(process_id, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-
-    return True
 
 
 def _log_tail(*, log_path: Path) -> str:
