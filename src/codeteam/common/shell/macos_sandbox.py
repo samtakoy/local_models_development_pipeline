@@ -16,11 +16,13 @@ logger = logging.getLogger(__name__)
 # Программа песочницы macOS.
 SANDBOX_EXEC = Path("/usr/bin/sandbox-exec")
 
-# Папки, куда запись разрешена всегда: временные папки системы и кэш uv.
+# Папки, куда запись разрешена всегда: временные папки системы и кэши uv, npm, pip.
 ALWAYS_WRITABLE = (
     Path("/private/tmp"),
     Path("/private/var/folders"),
     Path.home() / ".cache" / "uv",
+    Path.home() / ".npm",
+    Path.home() / ".cache" / "pip",
 )
 
 # Знаки, которые в регулярном выражении профиля значат не сами себя.
