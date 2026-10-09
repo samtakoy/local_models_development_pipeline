@@ -30,9 +30,15 @@ class GetAdviceArguments(BaseModel):
     Аргументы get_advice.
     """
 
-    question: str = Field(description = "вопрос: что нужно решить")
-    context: str = Field(description = "контекст вопроса - дополнительное описание для понимания, из какой ситуации задано")
-    related_files: list[str] = Field(description = "пути файлов проекта, которые советнику нужно прочитать")
+    question: str = Field(description = "Задача, проблема, что уже пробовал, конкретный вопрос")
+    context: str | None = Field(
+        default = None,
+        description = "контекст вопроса - дополнительное описание для понимания, из какой ситуации задано",
+    )
+    related_files: list[str] | None = Field(
+        default = None,
+        description = "Файлы, с которых советчику стоит начать (он может читать и другие)",
+    )
 
 
 def build_get_advice_tool(caller_context: CallerContext) -> BaseTool:
@@ -52,13 +58,13 @@ def build_get_advice_tool(caller_context: CallerContext) -> BaseTool:
     # номера вызовов: next() выдаёт номер атомарно, параллельные вызовы из одного ответа модели не совпадут
     call_numbers = itertools.count(1)
 
-    def get_advice(*, question: str, context: str, related_files: list[str]) -> str:
+    def get_advice(*, question: str, context: str | None = None, related_files: list[str] | None = None) -> str:
         """
         Запускает советника на вопросе и возвращает его ответ.
 
             question: вопрос.
-            context: что спросивший уже знает и пробовал.
-            related_files: пути файлов проекта по вопросу.
+            context: что спросивший уже знает и пробовал; None — не указан.
+            related_files: пути файлов проекта по вопросу; None — не указаны.
 
         Возвращает: Ответ советника; длиннее ADVICE_LENGTH_LIMIT — начало ответа и путь к файлу.
             Ошибку для агента поднимает ToolException.
@@ -69,7 +75,7 @@ def build_get_advice_tool(caller_context: CallerContext) -> BaseTool:
 
         private_dir_name = caller_context.caller_private_dir_name / f"{ADVISOR_ROLE.name}_{call_number}"
         related_paths = _copy_private_files(
-            file_paths = related_files,
+            file_paths = related_files or [],
             project_dir = project_dir,
             target_dir = project_dir / PRIVATE_ROOT / private_dir_name / RELATED_DIR_NAME,
         )
@@ -80,7 +86,7 @@ def build_get_advice_tool(caller_context: CallerContext) -> BaseTool:
             task = ADVISOR_TASK.format(
                 caller_name = caller_context.caller_name,
                 question = question,
-                context = context,
+                context = context or "(не указан)",
                 related_files = _show_files(file_paths = related_paths),
             ),
             input_dirs = (),
