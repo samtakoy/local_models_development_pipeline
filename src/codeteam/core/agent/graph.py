@@ -235,10 +235,10 @@ def make_tools_node(*, tools: list[BaseTool]) -> Callable:
         if not cfg.step_hooks and not cfg.step_checks and not is_answer_command:
             return tool_node.invoke(state, config)
 
-        before = _answer_snapshot(cfg = cfg)
+        before = _private_dir_snapshot(cfg = cfg)
         update = tool_node.invoke(state, config)
         remarks = [
-            *_step_hook_remarks(cfg = cfg, before = before, after = _answer_snapshot(cfg = cfg)),
+            *_step_hook_remarks(cfg = cfg, before = before, after = _private_dir_snapshot(cfg = cfg)),
             *(remark for check in cfg.step_checks if (remark := check()) is not None),
         ]
         if is_answer_command:
@@ -513,39 +513,42 @@ def _step_hook_remarks(
     after: dict[Path, tuple[int, int]],
 ) -> list[str]:
     """
-    Запускает хуки после шага на файлах черновика, которые появились или изменились за шаг.
+    Запускает хуки после шага на файлах личной папки, которые появились или изменились за шаг: каждый
+    файл получают хуки, в чьей папке он лежит.
 
         cfg: настройки агента.
-        before: состояние файлов ответа до шага.
-        after: состояние файлов ответа после шага.
+        before: состояние файлов личной папки до шага.
+        after: состояние файлов личной папки после шага.
 
     Возвращает: Замечания хуков по порядку файлов и хуков; пустой список, если замечаний нет.
     """
-    agent_draft_dir = draft_dir(private_dir = cfg.project_dir / cfg.relative_private_dir)
-    changed_files = sorted(
-        path for path, state in after.items()
-        if before.get(path) != state and path.is_relative_to(agent_draft_dir)
-    )
+    private_dir = cfg.project_dir / cfg.relative_private_dir
+    changed_files = sorted(path for path, state in after.items() if before.get(path) != state)
 
     remarks = []
     for path in changed_files:
+        folder_hooks = [
+            folder_hook for folder_hook in cfg.step_hooks if path.is_relative_to(private_dir / folder_hook.folder)
+        ]
+        if not folder_hooks:
+            continue
+
         text = path.read_text(encoding = "utf-8", errors = "replace")
-        for hook in cfg.step_hooks:
-            remark = hook(path, text)
+        for folder_hook in folder_hooks:
+            remark = folder_hook.hook(path, text)
             if remark is not None:
                 remarks.append(remark)
 
     return remarks
 
-def _answer_snapshot(*, cfg: AgentConfig) -> dict[Path, tuple[int, int]]:
+def _private_dir_snapshot(*, cfg: AgentConfig) -> dict[Path, tuple[int, int]]:
     """
-    Снимает состояние файлов ответа: черновика и контекста.
+    Снимает состояние файлов личной папки агента со всеми подпапками.
 
         cfg: настройки агента.
 
-    Возвращает: Время изменения и размер каждого файла ответа по пути.
+    Возвращает: Время изменения и размер каждого файла по пути.
     """
     private_dir = cfg.project_dir / cfg.relative_private_dir
-    paths = [*draft_dir(private_dir = private_dir).glob("**/*"), context_path(private_dir = private_dir)]
 
-    return {path: (path.stat().st_mtime_ns, path.stat().st_size) for path in paths if path.is_file()}
+    return {path: (path.stat().st_mtime_ns, path.stat().st_size) for path in private_dir.glob("**/*") if path.is_file()}

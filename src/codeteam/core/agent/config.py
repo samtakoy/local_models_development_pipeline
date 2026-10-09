@@ -5,7 +5,7 @@ from langchain_core.runnables import Runnable
 
 from codeteam.common.shell import ShellProcesses
 from codeteam.core.agent.answer_checks import AnswerCheck
-from codeteam.core.agent.step_hooks import StepCheck, StepHook
+from codeteam.core.agent.step_hooks import FolderHook, StepCheck
 from codeteam.core.tools.files import SeenFiles
 
 
@@ -29,8 +29,8 @@ class AgentConfig:
     reinit_notice: str
     # ответ агенту, который сдал работу с пустым черновиком
     empty_draft_notice: str
-    # хуки после шага инструментов: замечания к изменённым файлам черновика
-    step_hooks: tuple[StepHook, ...]
+    # хуки после шага инструментов: замечания к изменённым файлам своих папок
+    step_hooks: tuple[FolderHook, ...]
     # проверки после шага инструментов: замечания не к черновику, а, например, к проекту
     step_checks: tuple[StepCheck, ...]
     # проверки сдачи роли: при DONE замечания к черновику, после которых агент продолжает работу

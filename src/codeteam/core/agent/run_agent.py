@@ -15,8 +15,9 @@ from codeteam.core.agent.role import AgentRole
 from codeteam.core.agent.prompts import DRAFT_PHASE_HINT, DRAFT_PHASE_BASH_REFUSAL, AGENT_SYSTEM_INSTRUCTIONS, LIMIT_NOTICE, \
     DRAFT_PHASE_HELPER_TOOL_REFUSAL, DRAFT_PHASE_START_SERVICE_REFUSAL, REINIT_NOTICE, EMPTY_DRAFT_NOTICE, PROJECT_RULES_FILE_NAME, PROJECT_RULES_INSTRUCTIONS, PROJECT_DOCS_DIR_NAME, \
     TODAY_INSTRUCTIONS
-from codeteam.core.agent.step_hooks import draft_section_hook
-from codeteam.core.agent.workspace import CONTEXT_FILE_NAME, PRIVATE_ROOT, Workspace, context_path, draft_dir
+from codeteam.core.agent.step_hooks import FolderHook, draft_section_hook
+from codeteam.core.agent.workspace import CONTEXT_FILE_NAME, DRAFT_DIR_NAME, PRIVATE_ROOT, Workspace, context_path, \
+    draft_dir
 from codeteam.core.tools.files import DELETE_TOOL_NAME, EDIT_TOOL_NAME, READ_TOOL_NAME, WRITE_TOOL_NAME, \
     file_tool_builders, SeenFiles
 from codeteam.common.shell import CommandHost, ShellProcesses
@@ -203,7 +204,7 @@ def run_agent(
                 reinit_notice = reinit_notice,
                 empty_draft_notice = empty_draft_notice,
                 # правило разделов черновика общее для всех ролей, к нему добавляются хуки роли
-                step_hooks = (draft_section_hook, *role.step_hooks),
+                step_hooks = (FolderHook(folder = Path(DRAFT_DIR_NAME), hook = draft_section_hook), *role.step_hooks),
                 step_checks = role.step_checks,
                 answer_checks = role.answer_checks,
                 relative_private_dir = relative_private_dir,

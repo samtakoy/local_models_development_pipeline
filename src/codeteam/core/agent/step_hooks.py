@@ -1,18 +1,33 @@
-"""Хуки после шага инструментов: проверяют изменённые на шаге файлы черновика и дают агенту замечания."""
+"""Хуки после шага инструментов: проверяют изменённые на шаге файлы личной папки агента и дают агенту замечания."""
 
 import re
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 from codeteam.core.agent.prompts import DUPLICATE_SECTION_NUMBER_REMARK, LATIN_SECTION_NAME_REMARK, \
     NOT_DRAFT_SECTION_REMARK
 from codeteam.core.agent.workspace import DRAFT_SECTION_PATTERN, LATIN_DRAFT_SECTION_PATTERN
 
-# Хук после шага: путь и текст изменённого файла черновика → замечание агенту или None.
+# Хук после шага: путь и текст изменённого файла → замечание агенту или None.
 StepHook = Callable[[Path, str], str | None]
 
 # Проверка после шага: смотрит не на черновик, а на что угодно ещё (например, на проект) → замечание агенту или None.
 StepCheck = Callable[[], str | None]
+
+
+@dataclass(frozen = True)
+class FolderHook:
+    """
+    Хук после шага и папка, за которой он следит.
+
+        folder: папка относительно личной папки агента, подпапки входят; Path(".") — вся личная папка.
+        hook: хук: получает каждый изменённый за шаг файл из папки.
+    """
+
+    folder: Path
+    hook: StepHook
+
 
 # Строка, открывающая блок с указанным языком: ``` и имя языка.
 LANGUAGE_BLOCK_START_PATTERN = re.compile(r"^```[A-Za-z0-9_+#.-]+$")

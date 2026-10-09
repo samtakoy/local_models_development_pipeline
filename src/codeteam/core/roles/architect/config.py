@@ -4,7 +4,8 @@ from pathlib import Path
 
 from codeteam.common.llm import ReasoningLevel
 from codeteam.core.agent.answer_checks import required_files_check
-from codeteam.core.agent.step_hooks import code_block_hook
+from codeteam.core.agent.step_hooks import FolderHook, code_block_hook
+from codeteam.core.agent.workspace import DRAFT_DIR_NAME
 from codeteam.core.roles.architect.prompts import ARCHITECT_CODE_BLOCK_REMARK
 from codeteam.core.roles.common import PROJECT_TOOL_NAMES, RoleSettings
 
@@ -22,10 +23,13 @@ ARCHITECT_ROLE = RoleSettings(
     reasoning_level = ReasoningLevel.LOW,
     tool_names = PROJECT_TOOL_NAMES,
     step_hooks = (
-        code_block_hook(
-            max_lines = ARCHITECT_CODE_BLOCK_LINE_LIMIT,
-            remark = ARCHITECT_CODE_BLOCK_REMARK,
-            skip_file_names = (ARCHITECTURE_FILE_NAME,),
+        FolderHook(
+            folder = Path(DRAFT_DIR_NAME),
+            hook = code_block_hook(
+                max_lines = ARCHITECT_CODE_BLOCK_LINE_LIMIT,
+                remark = ARCHITECT_CODE_BLOCK_REMARK,
+                skip_file_names = (ARCHITECTURE_FILE_NAME,),
+            ),
         ),
     ),
     step_checks = (),

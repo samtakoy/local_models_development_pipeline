@@ -3,7 +3,8 @@
 from pathlib import Path
 
 from codeteam.common.llm import ReasoningLevel
-from codeteam.core.agent.step_hooks import code_block_hook
+from codeteam.core.agent.step_hooks import FolderHook, code_block_hook
+from codeteam.core.agent.workspace import DRAFT_DIR_NAME
 from codeteam.core.roles.common import PROJECT_TOOL_NAMES, RoleSettings
 from codeteam.core.roles.senior.prompts import SENIOR_CODE_BLOCK_REMARK
 
@@ -18,10 +19,13 @@ SENIOR_ROLE = RoleSettings(
     reasoning_level = ReasoningLevel.LOW,
     tool_names = PROJECT_TOOL_NAMES,
     step_hooks = (
-        code_block_hook(
-            max_lines = SENIOR_CODE_BLOCK_LINE_LIMIT,
-            remark = SENIOR_CODE_BLOCK_REMARK,
-            skip_file_names = (),
+        FolderHook(
+            folder = Path(DRAFT_DIR_NAME),
+            hook = code_block_hook(
+                max_lines = SENIOR_CODE_BLOCK_LINE_LIMIT,
+                remark = SENIOR_CODE_BLOCK_REMARK,
+                skip_file_names = (),
+            ),
         ),
     ),
     step_checks = (),
