@@ -33,6 +33,15 @@ DISPROPORTION_CHARACTER_FACTOR = 4
 # На сколько знаков найденный кусок может быть длиннее old_string.
 DISPROPORTION_CHARACTER_MARGIN = 500
 
+# Доля строк old_string, на которую могут расходиться начала, указанные якорями одного места.
+ANCHOR_SPREAD_SHARE = 0.25
+
+# Наибольшее число строк места, для которого агенту показывается похожий кусок файла.
+SIMILAR_FRAGMENT_LINE_LIMIT = 50
+
+# Сколько строк файла показывается до и после похожего места.
+SIMILAR_FRAGMENT_MARGIN = 2
+
 IDENTICAL_STRINGS_MESSAGE = "old_string и new_string совпадают: правка ничего не меняет."
 
 EMPTY_OLD_STRING_MESSAGE = (
@@ -115,6 +124,55 @@ def replace_text(*, content: str, old_string: str, new_string: str, replace_all:
         raise TextNotFoundError(NOT_FOUND_MESSAGE)
 
     raise TextMatchError(MULTIPLE_MATCHES_MESSAGE)
+
+
+def similar_fragment(*, content: str, old_string: str) -> tuple[int, int] | None:
+    """
+    Ищет единственное место файла, на которое указывают якоря: строки old_string, которые
+    встречаются в файле ровно один раз (без пробелов по краям).
+
+    Каждый якорь указывает начало места: свой номер в файле минус свой номер в old_string.
+    Место — от самого раннего начала до самого позднего начала плюс длина old_string, с запасом
+    SIMILAR_FRAGMENT_MARGIN строк с каждой стороны.
+
+        content: текст файла с переводами строк \\n.
+        old_string: фрагмент от модели.
+
+    Возвращает: Номера первой и последней строки места с запасом, от 1; None, если якорей нет,
+        они указывают в разные места или место длиннее SIMILAR_FRAGMENT_LINE_LIMIT строк.
+    """
+    content_lines = content.split("\n")
+    old_lines = _without_trailing_empty_line(lines = old_string.split("\n"))
+
+    # номера строк файла для каждого текста строки
+    line_numbers: dict[str, list[int]] = {}
+    for number, line in enumerate(content_lines):
+        if line.strip():
+            line_numbers.setdefault(line.strip(), []).append(number)
+
+    # начало места по каждому якорю
+    starts = []
+    for old_number, line in enumerate(old_lines):
+        found = line_numbers.get(line.strip(), [])
+        if len(found) == 1:
+            starts.append(found[0] - old_number)
+
+    if not starts:
+        return None
+
+    spread = max(starts) - min(starts)
+    allowed_spread = max(1, math.floor(len(old_lines) * ANCHOR_SPREAD_SHARE))
+    # якоря указывают в разные места
+    if spread > allowed_spread:
+        return None
+
+    if max(starts) + len(old_lines) - min(starts) > SIMILAR_FRAGMENT_LINE_LIMIT:
+        return None
+
+    first_index = max(0, min(starts) - SIMILAR_FRAGMENT_MARGIN)
+    last_index = min(len(content_lines) - 1, max(starts) + len(old_lines) - 1 + SIMILAR_FRAGMENT_MARGIN)
+
+    return first_index + 1, last_index + 1
 
 
 def levenshtein(*, first: str, second: str) -> int:

@@ -9,19 +9,28 @@ from pathlib import Path
 from langchain_core.tools import BaseTool, StructuredTool, ToolException
 from pydantic import BaseModel, Field
 
-from codeteam.common.files import decode_text
+from codeteam.common.files import decode_text, number_lines
 from codeteam.core.agent.workspace import PathOutsideWorkspace, Workspace
 from codeteam.core.tools.files._hints import NOT_TEXT_REFUSAL, PATH_HINT
 from codeteam.core.tools.files._internal._seen_files import SeenFiles
-from codeteam.core.tools.files.read import is_read_header_line, is_read_summary_line
+from codeteam.core.tools.files.read import (
+    READ_CHARACTER_LIMIT,
+    READ_LINE_WIDTH,
+    is_read_header_line,
+    is_read_summary_line,
+)
 from codeteam.core.tools.files._internal.edit_utils import (
     EMPTY_OLD_STRING_MESSAGE,
     TextMatchError,
     TextNotFoundError,
     replace_text,
+    similar_fragment,
 )
 
 EDIT_TOOL_NAME = "edit"
+
+# Дополнение к отказу «не найден»: единственное похожее место файла в виде вывода read.
+SIMILAR_FRAGMENT_NOTE = "Похожее место в файле, строки {first_number}-{last_number}:\n{numbered_lines}"
 
 TEXT_REPLACE_EDIT_DESCRIPTION = """Заменяет в существующем файле точный фрагмент old_string на new_string.
 Новый файл создаётся инструментом write.
@@ -139,13 +148,21 @@ def _edit(
         raise ToolException(NOT_TEXT_REFUSAL.format(shown_path = shown_path))
 
     is_crlf = "\r\n" in text
+    content = _to_lf(text = text)
+    normalized_old_string = _to_lf(text = old_string)
     try:
         new_text, service_lines = _replace(
-            content = _to_lf(text = text),
-            old_string = _to_lf(text = old_string),
+            content = content,
+            old_string = normalized_old_string,
             new_string = _to_lf(text = new_string),
             replace_all = replace_all,
         )
+    except TextNotFoundError as error:
+        note = _similar_fragment_note(content = content, old_string = normalized_old_string)
+        message = f"Ошибка в {shown_path}: {error}"
+        if note is not None:
+            message += f"\n\n{note}"
+        raise ToolException(message) from error
     except TextMatchError as error:
         raise ToolException(f"Ошибка в {shown_path}: {error}") from error
 
@@ -221,6 +238,36 @@ def _without_read_edges(*, text: str) -> tuple[str, list[str]]:
         return text, []
 
     return trimmed, service_lines
+
+
+def _similar_fragment_note(*, content: str, old_string: str) -> str | None:
+    """
+    Собирает дополнение к отказу «не найден» с единственным похожим местом файла.
+
+        content: текст файла с переводами строк \\n.
+        old_string: фрагмент от модели с переводами строк \\n.
+
+    Возвращает: Текст дополнения со строками места в виде вывода read; None, если похожего места
+        нет или их несколько.
+    """
+    fragment = similar_fragment(content = content, old_string = old_string)
+    if fragment is None:
+        return None
+
+    first_number, last_number = fragment
+    page = number_lines(
+        lines = content.split("\n"),
+        offset = first_number,
+        limit = last_number - first_number + 1,
+        line_width = READ_LINE_WIDTH,
+        character_limit = READ_CHARACTER_LIMIT,
+    )
+
+    return SIMILAR_FRAGMENT_NOTE.format(
+        first_number = page.first_number,
+        last_number = page.last_number,
+        numbered_lines = "\n".join(page.lines),
+    )
 
 
 def _service_lines_note(*, service_lines: list[str]) -> str:

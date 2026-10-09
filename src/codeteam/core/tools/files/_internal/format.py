@@ -1,4 +1,4 @@
-"""Вид файла для агента: заголовок [путь], строки с номерами."""
+"""Вид файла для агента: заголовок [путь]."""
 
 
 def format_header(*, path: str) -> str:
@@ -11,17 +11,6 @@ def format_header(*, path: str) -> str:
     """
     return f"[{path}]"
 
-
-def format_line(*, number: int, text: str) -> str:
-    """
-    Собирает строку файла с номером для вывода агенту.
-
-        number: номер строки, от 1.
-        text: текст строки.
-
-    Возвращает: Строку вида "номер:текст".
-    """
-    return f"{number}:{text}"
 
 def parse_header(*, line: str) -> str | None:
     """
