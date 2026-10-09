@@ -15,9 +15,11 @@ from ollama import ResponseError
 from typing import TypedDict, Annotated
 
 from codeteam.core.agent.config import AgentConfig
-from codeteam.core.agent.prompts import ANSWER_CHECK_NOTICE, DONE_ANSWER, TODO_ANSWER, UNFINISHED_ANSWER_NOTICE
+from codeteam.core.agent.prompts import ANSWER_CHECK_NOTICE, ANSWER_COMMAND_REMARK, DONE_ANSWER, TODO_ANSWER, \
+    UNFINISHED_ANSWER_NOTICE
 from codeteam.core.agent.workspace import context_path, draft_dir
 from codeteam.core.tools.files import READ_TOOL_NAME
+from codeteam.core.tools.shell import BASH_TOOL_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -215,7 +217,7 @@ def route_after_agent(state: AgentState, config: RunnableConfig) -> str:
 def make_tools_node(*, tools: list[BaseTool]) -> Callable:
     """
     Собирает узел инструментов, который после шага запускает хуки на изменённых файлах черновика
-    и проверки после шага.
+    и проверки после шага, а на попытку сдать работу командой даёт замечание.
 
         tools: инструменты узла.
 
@@ -224,9 +226,13 @@ def make_tools_node(*, tools: list[BaseTool]) -> Callable:
     tool_node = ToolNode(tools)
 
     def tools_node(state: AgentState, config: RunnableConfig):
-        """Выполняет вызовы инструментов и дописывает замечания хуков и проверок к результату последнего вызова."""
+        """
+        Выполняет вызовы инструментов и дописывает к результату последнего вызова замечания хуков,
+        проверок и замечание о сдаче работы командой.
+        """
         cfg: AgentConfig = config["configurable"][AGENT_CFG_NAME]
-        if not cfg.step_hooks and not cfg.step_checks:
+        is_answer_command = _is_answer_command(response = state["messages"][-1])
+        if not cfg.step_hooks and not cfg.step_checks and not is_answer_command:
             return tool_node.invoke(state, config)
 
         before = _answer_snapshot(cfg = cfg)
@@ -235,6 +241,8 @@ def make_tools_node(*, tools: list[BaseTool]) -> Callable:
             *_step_hook_remarks(cfg = cfg, before = before, after = _answer_snapshot(cfg = cfg)),
             *(remark for check in cfg.step_checks if (remark := check()) is not None),
         ]
+        if is_answer_command:
+            remarks.append(ANSWER_COMMAND_REMARK)
         if not remarks:
             return update
 
@@ -252,6 +260,9 @@ def route_after_tools(state: AgentState, config: RunnableConfig) -> str:
     """
     Выбирает узел после выполнения инструментов: продолжение работы или фаза черновика.
 
+    Мягкий лимит history_token_limit не действует на шаге, где агент работал со своим ответом
+    или пытался сдать работу командой; жёсткий лимит history_token_hard_limit действует всегда.
+
         state: состояние агента.
         config: конфигурация запуска с настройками агента.
 
@@ -262,10 +273,48 @@ def route_after_tools(state: AgentState, config: RunnableConfig) -> str:
     if input_tokens >= cfg.history_token_hard_limit:
         return LIMIT_NOTICE_NODE_ID
 
-    if input_tokens >= cfg.history_token_limit and not _works_with_answer(cfg = cfg, messages = state["messages"]):
+    is_answer_step = (
+        _works_with_answer(cfg = cfg, messages = state["messages"])
+        or _is_answer_command(response = _last_response(messages = state["messages"]))
+    )
+    if input_tokens >= cfg.history_token_limit and not is_answer_step:
         return LIMIT_NOTICE_NODE_ID
 
     return AGENT_NODE_ID
+
+
+def _is_answer_command(*, response: BaseMessage | None) -> bool:
+    """
+    Проверяет, что ответ модели — попытка сдать работу командой: все вызовы — bash с командой
+    из одного echo или printf со словом DONE или TODO.
+
+        response: ответ модели.
+
+    Возвращает: True, если в ответе есть вызовы инструментов и все они такие команды.
+    """
+    if not isinstance(response, AIMessage) or not response.tool_calls:
+        return False
+
+    return all(
+        call["name"] == BASH_TOOL_NAME
+        and ANSWER_COMMAND_PATTERN.fullmatch(str(call["args"].get("command", ""))) is not None
+        for call in response.tool_calls
+    )
+
+
+def _last_response(*, messages: Sequence[BaseMessage]) -> AIMessage | None:
+    """
+    Находит последний ответ модели в истории.
+
+        messages: история агента.
+
+    Возвращает: Последний ответ модели или None, если ответов нет.
+    """
+    for message in reversed(messages):
+        if isinstance(message, AIMessage):
+            return message
+
+    return None
 
 def _works_with_answer(*, cfg: AgentConfig, messages: Sequence[BaseMessage]) -> bool:
     """
@@ -439,6 +488,9 @@ def _last_input_tokens(*, messages: Sequence[BaseMessage]) -> int:
 
 DONE_PATTERN = re.compile(rf"\b{DONE_ANSWER}\b")
 TODO_PATTERN = re.compile(rf"\b{TODO_ANSWER}\b")
+
+# Команда bash, которой агент пытается сдать работу: один echo или printf со словом DONE или TODO.
+ANSWER_COMMAND_PATTERN = re.compile(rf"""\s*(echo|printf)\s+["']?({DONE_ANSWER}|{TODO_ANSWER})["']?\s*""")
 
 def _is_unfinished(*, response: AIMessage) -> bool:
     """
