@@ -1,10 +1,12 @@
 import argparse
 import logging
+import sys
 from datetime import datetime
 
 from codeteam.app.config import load_project_config
 from codeteam.app.settings import load_settings
 from codeteam.core.pipeline.run_pipeline import run_pipeline
+from codeteam.core.roles.common import PipelineError
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +24,12 @@ def main():
     logger.info(f"задача: {project.task}")
     logger.info(f"прогон: {run_dir}")
 
-    result = run_pipeline(project = project, run_dir = run_dir, model_name = "qwen3.5:9b", settings = settings)
+    try:
+        result = run_pipeline(project = project, run_dir = run_dir, model_name = "qwen3.5:9b", settings = settings)
+    except PipelineError as error:
+        logger.error(f"прогон остановлен: {error}")
+        sys.exit(1)
+
     logger.info(f"отчёт исследователя: {result['research_dir']}")
     logger.info(f"этапы архитектора: {result['plan_dir']}")
 
