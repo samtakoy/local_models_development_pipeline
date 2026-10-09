@@ -78,7 +78,8 @@ def create_pipeline_graph(*, review: ReviewSettings) -> CompiledStateGraph:
     """
     Собирает граф пайплайна: менеджер продукта, исследователь, архитектор, затем по каждому этапу
     сеньор, разработчик и коммит этапа. Ревьюеры и приёмщик этапа встают после ролей, у которых ревью включено;
-    веб-тестировщик, если включён, — после последнего этапа.
+    веб-тестировщик, если включён, — после последнего этапа; если он не принял приложение, команда делает
+    этап исправлений и проверка повторяется.
 
         review: режимы ревью ролей.
 
@@ -89,7 +90,8 @@ def create_pipeline_graph(*, review: ReviewSettings) -> CompiledStateGraph:
         route_next_stage = make_stage_route(after_stages = END)
     else:
         workflow.add_node(WEB_TESTER_ROLE.name, web_tester_node)
-        workflow.add_edge(WEB_TESTER_ROLE.name, END)
+        # после проверки: этап исправлений, если веб-тестировщик его добавил, иначе конец
+        workflow.add_conditional_edges(WEB_TESTER_ROLE.name, make_stage_route(after_stages = END))
         route_next_stage = make_stage_route(after_stages = WEB_TESTER_ROLE.name)
 
     workflow.add_node(PM_ROLE.name, pm_node)

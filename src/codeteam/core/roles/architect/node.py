@@ -54,7 +54,7 @@ def architect_node(state: PipelineState, config: RunnableConfig):
 
     return {
         "plan_dir": plan_dir,
-        "stages": Stages(files = find_stage_files(plan_dir = plan_dir), index = 0, plan_dir = None),
+        "stages": Stages(files = find_stage_files(plan_dir = plan_dir), index = 0, plan_dir = None, fix_rounds = 0),
         "journal_count": state["journal_count"] + 1,
     }
 

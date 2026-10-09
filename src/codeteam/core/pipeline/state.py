@@ -19,11 +19,13 @@ class Stages:
         files: файлы этапов из черновика архитектора по порядку имён.
         index: номер текущего этапа в files, с нуля.
         plan_dir: папка плана сеньора текущего этапа; None, пока он не отработал.
+        fix_rounds: сколько этапов исправлений добавила финальная проверка приложения.
     """
 
     files: tuple[Path, ...]
     index: int
     plan_dir: Path | None
+    fix_rounds: int
 
     @property
     def current_file(self) -> Path:
