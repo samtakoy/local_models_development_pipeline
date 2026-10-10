@@ -7,6 +7,8 @@ from pydantic import BaseModel, Field
 
 from codeteam.common.files import IgnoreRules, split_lines
 from codeteam.core.agent.workspace import PathOutsideWorkspace, Workspace
+from codeteam.core.tools.files.common_prompts import DIRECTORY_ERROR, FILE_PATH_DESCRIPTION, PATH_ACCESS_ERROR
+from codeteam.core.tools.files.write_prompts import WRITE_CONTENT_DESCRIPTION, WRITE_DESCRIPTION, WRITE_RESULT
 from codeteam.core.tools.files._internal._draft import draft_file_refusal
 from codeteam.core.tools.files._internal._paths import refuse_hidden_path
 from codeteam.core.tools.files._internal._seen_files import SeenFiles
@@ -15,19 +17,14 @@ from codeteam.core.tools.files._internal.format import format_header
 # Имя инструмента записи файла.
 WRITE_TOOL_NAME = "write"
 
-WRITE_DESCRIPTION = """Записывает файл целиком, создаёт недостающие папки.
-Существующий файл сначала прочитай инструментом read, иначе запись будет отклонена.
-Для точечных изменений существующего файла используй edit.
-Закрытые файлы проекта (.env, личные папки других агентов) не записывает."""
-
 
 class WriteArguments(BaseModel):
     """
     Аргументы write.
     """
 
-    file_path: str = Field(description = "путь файла, абсолютный или относительно папки проекта")
-    content: str = Field(description = "полное содержимое файла")
+    file_path: str = Field(description = FILE_PATH_DESCRIPTION)
+    content: str = Field(description = WRITE_CONTENT_DESCRIPTION)
 
 
 def build_write_tool(
@@ -58,7 +55,7 @@ def build_write_tool(
         try:
             path = workspace.resolve_writable(path = file_path)
         except PathOutsideWorkspace as error:
-            raise ToolException(f"Ошибка: {error}") from error
+            raise ToolException(PATH_ACCESS_ERROR.format(error = error)) from error
 
         refuse_hidden_path(workspace = workspace, ignore_rules = ignore_rules, path = path)
 
@@ -86,7 +83,7 @@ def _write(*, workspace: Workspace, seen_files: SeenFiles, path: Path, content: 
     """
     shown_path = workspace.display_path(path = path)
     if path.is_dir():
-        raise ToolException(f"Ошибка: {shown_path} — папка")
+        raise ToolException(DIRECTORY_ERROR.format(shown_path = shown_path))
 
     draft_refusal = draft_file_refusal(workspace = workspace, path = path)
     if draft_refusal is not None:
@@ -105,4 +102,4 @@ def _write(*, workspace: Workspace, seen_files: SeenFiles, path: Path, content: 
     seen_files.remember(path = path, content = raw_content)
     header = format_header(path = shown_path)
 
-    return f"{header}\nЗаписан файл {shown_path}: строк {line_count}"
+    return header + "\n" + WRITE_RESULT.format(shown_path = shown_path, line_count = line_count)

@@ -19,6 +19,24 @@ from codeteam.common.files import (
 )
 from codeteam.core.agent.workspace import Workspace
 from codeteam.core.tools.files.common_prompts import NOT_TEXT_REFUSAL
+from codeteam.core.tools.files.read_prompts import (
+    READ_BINARY_ENTRY,
+    READ_DESCRIPTION,
+    READ_DIRECTORY_HEADER,
+    READ_EMPTY_DIRECTORY,
+    READ_EMPTY_FILE,
+    READ_END_SUMMARY,
+    READ_FILE_PATH_DESCRIPTION,
+    READ_LARGE_ENTRY,
+    READ_LIMIT_DESCRIPTION,
+    READ_OFFSET_DESCRIPTION,
+    READ_OFFSET_ERROR,
+    READ_OFFSET_LIMIT_ERROR,
+    READ_PART_SUMMARY,
+    READ_SIZE_KILOBYTES,
+    READ_SIZE_MEGABYTES,
+    READ_TEXT_ENTRY,
+)
 from codeteam.core.tools.files._internal._paths import resolve_visible_path
 from codeteam.core.tools.files._internal._seen_files import SeenFiles
 from codeteam.core.tools.files._internal.format import format_header, parse_header
@@ -39,19 +57,11 @@ READ_CHARACTER_LIMIT = 30_000
 BYTES_IN_KILOBYTE = 1024
 BYTES_IN_MEGABYTE = 1024 * 1024
 
-# Итоговая строка read, когда файл показан до конца: вид задаёт _summary.
+# Итоговая строка read, когда файл показан до конца: вид задаёт READ_END_SUMMARY.
 _END_SUMMARY_PATTERN = re.compile(r"\(Конец файла, всего строк: \d+\)")
 
-# Итоговая строка read, когда показана часть файла: вид задаёт _summary.
+# Итоговая строка read, когда показана часть файла: вид задаёт READ_PART_SUMMARY.
 _PART_SUMMARY_PATTERN = re.compile(r"\(Показаны строки \d+-\d+ из \d+\. Продолжение: offset = \d+\)")
-
-READ_DESCRIPTION = f"""Читает текстовый файл. Первая строка вывода — заголовок [путь],
-дальше строки файла в виде "номер:строка". Заголовка и номеров в файле нет.
-За раз показывает до {READ_LINE_LIMIT} строк; большой файл читай частями через offset и limit.
-Для папки показывает её содержимое: у текстового файла число строк, у двоичного и большого — размер.
-Чтобы найти нужный текст в большом файле, используй grep.
-Если не уверен в пути к файлу, найди его через glob по маске.
-Закрытые файлы проекта (.env, личные папки других агентов) не читает и в папке не показывает."""
 
 
 class ReadArguments(BaseModel):
@@ -59,9 +69,9 @@ class ReadArguments(BaseModel):
     Аргументы read.
     """
 
-    file_path: str = Field(description = "путь файла или папки, абсолютный или относительно папки проекта")
-    offset: int | None = Field(default = None, description = "номер строки, с которой читать, от 1")
-    limit: int | None = Field(default = None, description = f"сколько строк прочитать, до {READ_LINE_LIMIT}")
+    file_path: str = Field(description = READ_FILE_PATH_DESCRIPTION)
+    offset: int | None = Field(default = None, description = READ_OFFSET_DESCRIPTION)
+    limit: int | None = Field(default = None, description = READ_LIMIT_DESCRIPTION.format(line_limit = READ_LINE_LIMIT))
 
 
 def build_read_tool(*, workspace: Workspace, seen_files: SeenFiles, ignore_rules: IgnoreRules) -> BaseTool:
@@ -99,7 +109,7 @@ def build_read_tool(*, workspace: Workspace, seen_files: SeenFiles, ignore_rules
     return StructuredTool.from_function(
         func = read,
         name = READ_TOOL_NAME,
-        description = READ_DESCRIPTION,
+        description = READ_DESCRIPTION.format(line_limit = READ_LINE_LIMIT),
         args_schema = ReadArguments,
         handle_tool_error = True,
     )
@@ -134,12 +144,12 @@ def _read(
             if not ignore_rules.is_closed(path = entry.path)
         ]
         if not entries:
-            return f"Папка {shown_path} пуста"
+            return READ_EMPTY_DIRECTORY.format(shown_path = shown_path)
 
-        return f"Папка {shown_path}:\n" + "\n".join(_show_entry(entry = entry) for entry in entries)
+        return READ_DIRECTORY_HEADER.format(shown_path = shown_path) + "\n" + "\n".join(_show_entry(entry = entry) for entry in entries)
 
     if offset < 1 or limit < 1:
-        raise ToolException("Ошибка: offset и limit должны быть не меньше 1")
+        raise ToolException(READ_OFFSET_LIMIT_ERROR)
 
     raw_content = path.read_bytes()
     text = decode_text(content = raw_content)
@@ -149,10 +159,10 @@ def _read(
     lines = split_lines(text = text)
     if not lines:
         seen_files.remember(path = path, content = raw_content)
-        return format_header(path = shown_path) + "\n(Файл пуст)"
+        return format_header(path = shown_path) + "\n" + READ_EMPTY_FILE
 
     if offset > len(lines):
-        raise ToolException(f"Ошибка: offset {offset} больше числа строк в файле ({len(lines)})")
+        raise ToolException(READ_OFFSET_ERROR.format(offset = offset, line_count = len(lines)))
 
     page = number_lines(
         lines = lines,
@@ -203,12 +213,14 @@ def _summary(*, first_number: int, last_number: int, total: int) -> str:
     Возвращает: «(Конец файла, …)», если показано до конца, иначе «(Показаны строки …)» с продолжением.
     """
     if last_number < total:
-        return (
-            f"(Показаны строки {first_number}-{last_number} из {total}. "
-            f"Продолжение: offset = {last_number + 1})"
+        return READ_PART_SUMMARY.format(
+            first_number = first_number,
+            last_number = last_number,
+            total = total,
+            next_offset = last_number + 1,
         )
 
-    return f"(Конец файла, всего строк: {total})"
+    return READ_END_SUMMARY.format(total = total)
 
 
 def _show_entry(*, entry: DirectoryEntry) -> str:
@@ -229,12 +241,12 @@ def _show_entry(*, entry: DirectoryEntry) -> str:
         return entry.name
 
     if stats.kind is FileKind.TEXT:
-        return f"{entry.name} (строк: {stats.line_count})"
+        return READ_TEXT_ENTRY.format(name = entry.name, line_count = stats.line_count)
 
     if stats.kind is FileKind.BINARY:
-        return f"{entry.name} (двоичный или не UTF-8, {_show_size(size_bytes = stats.size_bytes)})"
+        return READ_BINARY_ENTRY.format(name = entry.name, size = _show_size(size_bytes = stats.size_bytes))
 
-    return f"{entry.name} (большой, {_show_size(size_bytes = stats.size_bytes)})"
+    return READ_LARGE_ENTRY.format(name = entry.name, size = _show_size(size_bytes = stats.size_bytes))
 
 
 def _show_size(*, size_bytes: int) -> str:
@@ -246,6 +258,6 @@ def _show_size(*, size_bytes: int) -> str:
     Возвращает: «48 КБ» до 1 МБ, с округлением вверх; «3.2 МБ» от 1 МБ.
     """
     if size_bytes < BYTES_IN_MEGABYTE:
-        return f"{math.ceil(size_bytes / BYTES_IN_KILOBYTE)} КБ"
+        return READ_SIZE_KILOBYTES.format(size = math.ceil(size_bytes / BYTES_IN_KILOBYTE))
 
-    return f"{size_bytes / BYTES_IN_MEGABYTE:.1f} МБ"
+    return READ_SIZE_MEGABYTES.format(size = size_bytes / BYTES_IN_MEGABYTE)

@@ -7,6 +7,14 @@ from pydantic import BaseModel, Field
 
 from codeteam.common.files import IgnoreRules, visible_files
 from codeteam.core.agent.workspace import Workspace
+from codeteam.core.tools.files.glob_prompts import (
+    GLOB_DESCRIPTION,
+    GLOB_LIMIT_NOTE,
+    GLOB_NOT_DIRECTORY_ERROR,
+    GLOB_NOTHING_FOUND,
+    GLOB_PATH_DESCRIPTION,
+    GLOB_PATTERN_DESCRIPTION,
+)
 from codeteam.core.tools.files._internal._paths import compile_path_mask, resolve_visible_path
 
 # Имя инструмента поиска файлов по маске.
@@ -15,23 +23,14 @@ GLOB_TOOL_NAME = "glob"
 # Сколько путей glob отдаёт за раз.
 GLOB_RESULT_LIMIT = 100
 
-GLOB_DESCRIPTION = """- Поиск файлов по маске пути.
-- Поддерживает маски вида "**/*.js" или "src/**/*.ts".
-- Возвращает пути найденных файлов.
-- Используй, когда нужно найти файлы по шаблону имени.
-- В одном ответе можно вызвать несколько инструментов: выгоднее сразу сделать пачку поисков,
-  которые могут пригодиться.
-- Закрытые файлы проекта (.env, личные папки других агентов) не показывает.
-- Не заходит в служебные папки (.git, .venv, кеши) и в файлы из .gitignore, если в path не указан путь внутрь них."""
-
 
 class GlobArguments(BaseModel):
     """
     Аргументы glob.
     """
 
-    pattern: str = Field(description = "маска пути, например **/*.py или *.{ts,tsx}")
-    path: str | None = Field(default = None, description = "папка поиска, по умолчанию папка проекта")
+    pattern: str = Field(description = GLOB_PATTERN_DESCRIPTION)
+    path: str | None = Field(default = None, description = GLOB_PATH_DESCRIPTION)
 
 
 def build_glob_tool(*, workspace: Workspace, ignore_rules: IgnoreRules) -> BaseTool:
@@ -60,7 +59,7 @@ def build_glob_tool(*, workspace: Workspace, ignore_rules: IgnoreRules) -> BaseT
         )
         if not search_dir.is_dir():
             shown_path = workspace.display_path(path = search_dir)
-            raise ToolException(f"Ошибка: path должен быть папкой: {shown_path}")
+            raise ToolException(GLOB_NOT_DIRECTORY_ERROR.format(shown_path = shown_path))
 
         mask = compile_path_mask(mask = pattern)
         matched_files = (
@@ -69,11 +68,11 @@ def build_glob_tool(*, workspace: Workspace, ignore_rules: IgnoreRules) -> BaseT
         )
         found = list(islice(matched_files, GLOB_RESULT_LIMIT + 1))
         if not found:
-            return "Файлы не найдены"
+            return GLOB_NOTHING_FOUND
 
         shown = [workspace.display_path(path = file_path) for file_path in found[:GLOB_RESULT_LIMIT]]
         if len(found) > GLOB_RESULT_LIMIT:
-            shown.append(f"\n(Показаны первые {GLOB_RESULT_LIMIT} файлов. Уточни папку или маску.)")
+            shown.append("\n" + GLOB_LIMIT_NOTE.format(limit = GLOB_RESULT_LIMIT))
 
         return "\n".join(shown)
 

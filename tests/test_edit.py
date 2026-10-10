@@ -7,7 +7,7 @@ from langchain_core.tools import BaseTool
 
 from codeteam.core.agent.workspace import Workspace
 from codeteam.core.tools.files import SeenFiles, build_file_tools
-from codeteam.core.tools.files._internal.edit_utils import (
+from codeteam.core.tools.files.edit_prompts import (
     EMPTY_OLD_STRING_MESSAGE,
     IDENTICAL_STRINGS_MESSAGE,
     NOT_FOUND_MESSAGE,

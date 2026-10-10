@@ -11,6 +11,16 @@ from pydantic import BaseModel, Field
 
 from codeteam.common.files import IgnoreRules, decode_text, split_lines, visible_files
 from codeteam.core.agent.workspace import Workspace
+from codeteam.core.tools.files.grep_prompts import (
+    GREP_DESCRIPTION,
+    GREP_INCLUDE_DESCRIPTION,
+    GREP_LIMIT_NOTE,
+    GREP_MATCH_COUNT,
+    GREP_NOTHING_FOUND,
+    GREP_PATH_DESCRIPTION,
+    GREP_PATTERN_DESCRIPTION,
+    GREP_PATTERN_ERROR,
+)
 from codeteam.core.tools.files._internal._paths import compile_path_mask, resolve_visible_path
 
 # Имя инструмента поиска текста.
@@ -22,30 +32,15 @@ GREP_RESULT_LIMIT = 100
 # Длина строки в выводе grep, дальше строка обрезается.
 GREP_LINE_WIDTH = 2000
 
-GREP_DESCRIPTION = """- Поиск по содержимому файлов.
-- Ищет по содержимому файлов регулярным выражением.
-- Поддерживает полный синтаксис регулярных выражений Python (например "log.*Error", "def\\s+\\w+").
-- Файлы можно отобрать маской в параметре include (например "*.js", "*.{ts,tsx}").
-- Возвращает пути файлов и номера строк с совпавшими строками.
-- Используй, когда нужно найти файлы, содержащие определённый текст.
-- Закрытые файлы проекта (.env, личные папки других агентов) не просматривает.
-- Не заходит в служебные папки (.git, .venv, кеши) и в файлы из .gitignore, если в path не указан путь внутрь них."""
-
 
 class GrepArguments(BaseModel):
     """
     Аргументы grep.
     """
 
-    pattern: str = Field(description = "регулярное выражение для поиска в строках")
-    path: str | None = Field(
-        default = None,
-        description = "папка или файл поиска, по умолчанию папка проекта",
-    )
-    include: str | None = Field(
-        default = None,
-        description = "маска пути файлов, например *.py или *.{ts,tsx}",
-    )
+    pattern: str = Field(description = GREP_PATTERN_DESCRIPTION)
+    path: str | None = Field(default = None, description = GREP_PATH_DESCRIPTION)
+    include: str | None = Field(default = None, description = GREP_INCLUDE_DESCRIPTION)
 
 
 @dataclass(frozen = True)
@@ -86,7 +81,7 @@ def build_grep_tool(*, workspace: Workspace, ignore_rules: IgnoreRules) -> BaseT
         try:
             regex = re.compile(pattern)
         except re.error as error:
-            raise ToolException(f"Ошибка: неверное регулярное выражение {pattern}: {error}") from error
+            raise ToolException(GREP_PATTERN_ERROR.format(pattern = pattern, error = error)) from error
 
         search_path = resolve_visible_path(
             workspace = workspace,
@@ -96,7 +91,7 @@ def build_grep_tool(*, workspace: Workspace, ignore_rules: IgnoreRules) -> BaseT
         files = _searched_files(ignore_rules = ignore_rules, search_path = search_path, include = include)
         found = list(islice(_matching_lines(files = files, regex = regex), GREP_RESULT_LIMIT + 1))
         if not found:
-            return "Совпадений нет"
+            return GREP_NOTHING_FOUND
 
         return _render(workspace = workspace, found = found)
 
@@ -180,7 +175,7 @@ def _render(*, workspace: Workspace, found: list[_LineMatch]) -> str:
     Возвращает: Текст ответа.
     """
     shown_matches = found[:GREP_RESULT_LIMIT]
-    output = [f"Совпадений: {len(shown_matches)}"]
+    output = [GREP_MATCH_COUNT.format(count = len(shown_matches))]
     current_path = None
     for match in shown_matches:
         if match.path != current_path:
@@ -191,6 +186,6 @@ def _render(*, workspace: Workspace, found: list[_LineMatch]) -> str:
         output.append(f"  {match.number}:{text}")
 
     if len(found) > GREP_RESULT_LIMIT:
-        output.append(f"\n(Показаны первые {GREP_RESULT_LIMIT} совпадений. Уточни шаблон, path или include.)")
+        output.append("\n" + GREP_LIMIT_NOTE.format(limit = GREP_RESULT_LIMIT))
 
     return "\n".join(output)

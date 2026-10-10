@@ -4,6 +4,8 @@
 import hashlib
 from pathlib import Path
 
+from codeteam.core.tools.files.common_prompts import CHANGED_AFTER_READ_ERROR, NOT_READ_ERROR
+
 
 class SeenFiles:
     """
@@ -39,16 +41,10 @@ class SeenFiles:
         """
         seen_hash = self._hashes.get(path)
         if seen_hash is None:
-            return (
-                f"Ошибка: файл {shown_path} существует, но нельзя писать в файлы, которые ты не читал до этого. "
-                "Сначала прочитай его инструментом read, потом повтори запись."
-            )
+            return NOT_READ_ERROR.format(shown_path = shown_path)
 
         if seen_hash != _hash(content = path.read_bytes()):
-            return (
-                f"Ошибка: файл {shown_path} изменился после твоего чтения. "
-                "Прочитай его заново инструментом read и повтори."
-            )
+            return CHANGED_AFTER_READ_ERROR.format(shown_path = shown_path)
 
         return None
 

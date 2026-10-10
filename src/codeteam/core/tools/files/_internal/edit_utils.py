@@ -12,6 +12,14 @@ import math
 import re
 from collections.abc import Callable, Iterator
 
+from codeteam.core.tools.files.edit_prompts import (
+    DISPROPORTIONATE_MATCH_MESSAGE,
+    EMPTY_OLD_STRING_MESSAGE,
+    IDENTICAL_STRINGS_MESSAGE,
+    MULTIPLE_MATCHES_MESSAGE,
+    NOT_FOUND_MESSAGE,
+)
+
 # Наименьшее сходство средних строк куска для поиска по первой и последней строке.
 BLOCK_SIMILARITY_THRESHOLD = 0.65
 
@@ -41,26 +49,6 @@ SIMILAR_FRAGMENT_LINE_LIMIT = 50
 
 # Сколько строк файла показывается до и после похожего места.
 SIMILAR_FRAGMENT_MARGIN = 2
-
-IDENTICAL_STRINGS_MESSAGE = "old_string и new_string совпадают: правка ничего не меняет."
-
-EMPTY_OLD_STRING_MESSAGE = (
-    "old_string пуст. Укажи точный текст, который нужно заменить; новый файл создаётся инструментом write."
-)
-
-NOT_FOUND_MESSAGE = (
-    "old_string не найден в файле. Текст должен совпадать с файлом, включая отступы и переводы строк; "
-    "заголовок и номера «N:» из вывода read в него не входят."
-)
-
-MULTIPLE_MATCHES_MESSAGE = (
-    "old_string найден в нескольких местах. Добавь соседние строки, чтобы место стало единственным, "
-    "или задай replace_all, чтобы заменить все."
-)
-
-DISPROPORTIONATE_MATCH_MESSAGE = (
-    "Найденный кусок намного больше old_string, замена отклонена. Перечитай файл и укажи old_string точно."
-)
 
 # Экранированные знаки, которые модель пишет вместо настоящих, и их значения.
 _ESCAPES = {"n": "\n", "t": "\t", "r": "\r", "'": "'", '"': '"', "`": "`", "\\": "\\", "\n": "\n", "$": "$"}

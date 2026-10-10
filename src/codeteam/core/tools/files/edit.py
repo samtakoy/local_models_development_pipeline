@@ -1,7 +1,7 @@
 """Инструмент агента edit с заменой текста: фрагмент old_string в файле заменяется на new_string.
 
-Устройство и описание для модели перенесены из opencode (https://github.com/anomalyco/opencode,
-packages/opencode/src/tool/edit.ts и edit.txt, коммит 9b4882db54), лицензия MIT; см. THIRD_PARTY_NOTICES.md.
+Устройство перенесено из opencode (https://github.com/anomalyco/opencode,
+packages/opencode/src/tool/edit.ts, коммит 9b4882db54), лицензия MIT; см. THIRD_PARTY_NOTICES.md.
 """
 
 from pathlib import Path
@@ -11,7 +11,26 @@ from pydantic import BaseModel, Field
 
 from codeteam.common.files import decode_text, number_lines
 from codeteam.core.agent.workspace import PathOutsideWorkspace, Workspace
-from codeteam.core.tools.files.common_prompts import NOT_TEXT_REFUSAL, PATH_HINT
+from codeteam.core.tools.files.common_prompts import (
+    DIRECTORY_ERROR,
+    FILE_PATH_DESCRIPTION,
+    NOT_TEXT_REFUSAL,
+    PATH_ACCESS_ERROR,
+)
+from codeteam.core.tools.files.edit_prompts import (
+    EDIT_ERROR,
+    EDIT_FILE_ERROR,
+    EDIT_FILE_NOT_FOUND_ERROR,
+    EDIT_NEW_STRING_DESCRIPTION,
+    EDIT_OLD_STRING_DESCRIPTION,
+    EDIT_REPLACE_ALL_DESCRIPTION,
+    EDIT_RESULT,
+    EDIT_SERVICE_LINE_NOTE,
+    EDIT_SERVICE_LINES_NOTE,
+    EMPTY_OLD_STRING_MESSAGE,
+    SIMILAR_FRAGMENT_NOTE,
+    TEXT_REPLACE_EDIT_DESCRIPTION,
+)
 from codeteam.core.tools.files._internal._seen_files import SeenFiles
 from codeteam.core.tools.files.read import (
     READ_CHARACTER_LIMIT,
@@ -20,7 +39,6 @@ from codeteam.core.tools.files.read import (
     is_read_summary_line,
 )
 from codeteam.core.tools.files._internal.edit_utils import (
-    EMPTY_OLD_STRING_MESSAGE,
     TextMatchError,
     TextNotFoundError,
     replace_text,
@@ -29,37 +47,16 @@ from codeteam.core.tools.files._internal.edit_utils import (
 
 EDIT_TOOL_NAME = "edit"
 
-# Дополнение к отказу «не найден»: единственное похожее место файла в виде вывода read.
-SIMILAR_FRAGMENT_NOTE = "Похожее место в файле, строки {first_number}-{last_number}:\n{numbered_lines}"
-
-TEXT_REPLACE_EDIT_DESCRIPTION = """Заменяет в существующем файле точный фрагмент old_string на new_string.
-Новый файл создаётся инструментом write.
-
-Удобен и приоритетен для небольших правок, а также когда надо заменить только блок в большом файле (чтобы не перегенерировать весь файл целиком).
-
-Правила:
-- Сначала прочитай файл инструментом read, иначе правка будет отклонена.
-- Вывод read: первая строка — заголовок [путь], дальше строки в виде «номер:текст». Заголовок
-  и номер с двоеточием — не текст файла: не включай их в old_string и new_string, а отступы после
-  двоеточия сохраняй в точности.
-- Если old_string не найден в файле, правка отклоняется.
-- Если old_string найден в нескольких местах, правка отклоняется: добавь в old_string соседние строки,
-  чтобы место стало единственным, или задай replace_all, чтобы заменить все вхождения.
-- replace_all подходит для замены и переименования по всему файлу, например имени переменной."""
-
 
 class TextReplaceEditArguments(BaseModel):
     """
     Аргументы edit с заменой текста.
     """
 
-    file_path: str = Field(description = "путь файла, абсолютный или относительно папки проекта")
-    old_string: str = Field(description = "точный фрагмент файла, который нужно заменить")
-    new_string: str = Field(description = "текст на замену, отличный от old_string")
-    replace_all: bool | None = Field(
-        default = None,
-        description = "заменить все вхождения old_string, по умолчанию нет",
-    )
+    file_path: str = Field(description = FILE_PATH_DESCRIPTION)
+    old_string: str = Field(description = EDIT_OLD_STRING_DESCRIPTION)
+    new_string: str = Field(description = EDIT_NEW_STRING_DESCRIPTION)
+    replace_all: bool | None = Field(default = None, description = EDIT_REPLACE_ALL_DESCRIPTION)
 
 
 def build_edit_tool(*, workspace: Workspace, seen_files: SeenFiles) -> BaseTool:
@@ -86,10 +83,10 @@ def build_edit_tool(*, workspace: Workspace, seen_files: SeenFiles) -> BaseTool:
         try:
             path = workspace.resolve_writable(path = file_path)
         except PathOutsideWorkspace as error:
-            raise ToolException(f"Ошибка: {error}") from error
+            raise ToolException(PATH_ACCESS_ERROR.format(error = error)) from error
 
         if not old_string:
-            raise ToolException(f"Ошибка: {EMPTY_OLD_STRING_MESSAGE}")
+            raise ToolException(EDIT_ERROR.format(message = EMPTY_OLD_STRING_MESSAGE))
 
         return _edit(
             workspace = workspace,
@@ -132,12 +129,10 @@ def _edit(
     """
     shown_path = workspace.display_path(path = path)
     if path.is_dir():
-        raise ToolException(f"Ошибка: {shown_path} — папка")
+        raise ToolException(DIRECTORY_ERROR.format(shown_path = shown_path))
 
     if not path.is_file():
-        raise ToolException(
-            f"Ошибка: файл не найден: {shown_path}. {PATH_HINT} Новый файл создаётся инструментом write."
-        )
+        raise ToolException(EDIT_FILE_NOT_FOUND_ERROR.format(shown_path = shown_path))
 
     stale_reason = seen_files.stale_reason(path = path, shown_path = shown_path)
     if stale_reason is not None:
@@ -159,12 +154,12 @@ def _edit(
         )
     except TextNotFoundError as error:
         note = _similar_fragment_note(content = content, old_string = normalized_old_string)
-        message = f"Ошибка в {shown_path}: {error}"
+        message = EDIT_FILE_ERROR.format(shown_path = shown_path, message = error)
         if note is not None:
             message += f"\n\n{note}"
         raise ToolException(message) from error
     except TextMatchError as error:
-        raise ToolException(f"Ошибка в {shown_path}: {error}") from error
+        raise ToolException(EDIT_FILE_ERROR.format(shown_path = shown_path, message = error)) from error
 
     if is_crlf:
         new_text = new_text.replace("\n", "\r\n")
@@ -173,7 +168,7 @@ def _edit(
     path.write_bytes(raw_content)
     seen_files.remember(path = path, content = raw_content)
 
-    answer = f"Правка применена: {shown_path}"
+    answer = EDIT_RESULT.format(shown_path = shown_path)
     if not service_lines:
         return answer
 
@@ -279,13 +274,9 @@ def _service_lines_note(*, service_lines: list[str]) -> str:
     Возвращает: Текст замечания для агента.
     """
     if len(service_lines) == 1:
-        return (
-            "Замечание: old_string в вызове инструмента содержала лишнюю служебную строку: "
-            f"{service_lines[0]}"
-        )
+        return EDIT_SERVICE_LINE_NOTE.format(line = service_lines[0])
 
-    listed = ", ".join(service_lines)
-    return f"Замечание: old_string в вызове инструмента содержала лишние служебные строки: {listed}"
+    return EDIT_SERVICE_LINES_NOTE.format(lines = ", ".join(service_lines))
 
 
 def _to_lf(*, text: str) -> str:

@@ -4,12 +4,14 @@ import re
 
 import pytest
 
-from codeteam.core.tools.files._internal.edit_utils import (
+from codeteam.core.tools.files.edit_prompts import (
     DISPROPORTIONATE_MATCH_MESSAGE,
     EMPTY_OLD_STRING_MESSAGE,
     IDENTICAL_STRINGS_MESSAGE,
     MULTIPLE_MATCHES_MESSAGE,
     NOT_FOUND_MESSAGE,
+)
+from codeteam.core.tools.files._internal.edit_utils import (
     SIMILAR_FRAGMENT_LINE_LIMIT,
     TextMatchError,
     context_aware_candidates,

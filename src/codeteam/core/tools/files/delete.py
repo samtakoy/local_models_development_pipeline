@@ -7,12 +7,8 @@ from pydantic import BaseModel, Field
 
 from codeteam.common.files import IgnoreRules
 from codeteam.core.agent.workspace import PathOutsideWorkspace, Workspace
-from codeteam.core.tools.files.common_prompts import FILE_NOT_FOUND_ERROR, PATH_ACCESS_ERROR
-from codeteam.core.tools.files.delete_prompts import (
-    DELETE_DESCRIPTION,
-    DELETE_DIRECTORY_ERROR,
-    DELETE_FILE_PATH_DESCRIPTION,
-)
+from codeteam.core.tools.files.common_prompts import FILE_NOT_FOUND_ERROR, FILE_PATH_DESCRIPTION, PATH_ACCESS_ERROR
+from codeteam.core.tools.files.delete_prompts import DELETE_DESCRIPTION, DELETE_DIRECTORY_ERROR, DELETE_RESULT
 from codeteam.core.tools.files._internal._paths import refuse_hidden_path
 
 # Имя инструмента удаления файла.
@@ -24,7 +20,7 @@ class DeleteArguments(BaseModel):
     Аргументы delete.
     """
 
-    file_path: str = Field(description = DELETE_FILE_PATH_DESCRIPTION)
+    file_path: str = Field(description = FILE_PATH_DESCRIPTION)
 
 
 def build_delete_tool(*, workspace: Workspace, ignore_rules: IgnoreRules) -> BaseTool:
@@ -81,4 +77,4 @@ def _delete(*, workspace: Workspace, path: Path) -> str:
 
     path.unlink()
 
-    return f"Удалён файл {shown_path}"
+    return DELETE_RESULT.format(shown_path = shown_path)
