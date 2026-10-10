@@ -20,6 +20,9 @@ FULL_ROLES = DEFAULT_ROLES
 # Список ролей без ревьюеров и веб-тестировщика.
 NO_REVIEW_ROLES = ("pm", "researcher", "architect", "senior", "developer")
 
+# Полный список ролей с тестировщиком вместо веб-тестировщика.
+TESTER_ROLES = (*DEFAULT_ROLES[:-1], "tester")
+
 
 def _state(*, started: int, total: int, rework: Rework | None) -> PipelineState:
     """
@@ -144,7 +147,7 @@ def test_web_tester_fix_stage_loops() -> None:
     "roles",
     [
         (),
-        ("pm", "tester"),
+        ("pm", "translator"),
         ("pm", "pm"),
         ("senior", "architect", "developer"),
     ],
@@ -157,10 +160,10 @@ def test_bad_roles_fail(roles: tuple[str, ...]) -> None:
         check_roles(roles = roles)
 
 
-@pytest.mark.parametrize("roles", [FULL_ROLES, NO_REVIEW_ROLES])
+@pytest.mark.parametrize("roles", [FULL_ROLES, NO_REVIEW_ROLES, TESTER_ROLES])
 def test_graph_builds(roles: tuple[str, ...]) -> None:
     """
-    Граф собирается для полного списка и для списка без ревьюеров.
+    Граф собирается для полного списка, для списка без ревьюеров и для списка с тестировщиком.
     """
     assert create_pipeline_graph(roles = roles) is not None
 
@@ -207,13 +210,14 @@ def test_config_browser_check_error(tmp_path: Path, pipeline: str) -> None:
         load_project_config(setup_dir = _write_set_file(setup_dir = tmp_path / "setup", pipeline = pipeline))
 
 
-def test_config_browser_check_off(tmp_path: Path) -> None:
+@pytest.mark.parametrize("roles", ['["pm", "researcher"]', '["pm", "researcher", "tester"]'])
+def test_config_browser_check_off(tmp_path: Path, roles: str) -> None:
     """
-    browser_check = false читается, если веб-тестировщика нет в списке ролей.
+    browser_check = false читается, если веб-тестировщика нет в списке ролей; тестировщик работает и без браузера.
     """
     setup_dir = _write_set_file(
         setup_dir = tmp_path / "setup",
-        pipeline = 'browser_check = false\nroles = ["pm", "researcher"]\n',
+        pipeline = f"browser_check = false\nroles = {roles}\n",
     )
 
     assert load_project_config(setup_dir = setup_dir).browser_check is False

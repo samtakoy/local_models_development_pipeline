@@ -19,6 +19,7 @@ from codeteam.core.roles.developer_review import DEVELOPER_REVIEW_ROLE, develope
 from codeteam.core.roles.pm import PM_ROLE, pm_node
 from codeteam.core.roles.researcher import RESEARCHER_ROLE, researcher_node
 from codeteam.core.roles.senior import SENIOR_ROLE, senior_node
+from codeteam.core.roles.tester import TESTER_ROLE, tester_node
 from codeteam.core.roles.web_tester import WEB_TESTER_ROLE, web_tester_node
 
 # Узел графа, который запускает роль из next_role.
@@ -34,6 +35,7 @@ ROLE_NODES: dict[str, Callable[[PipelineState, RunnableConfig], dict]] = {
     DEVELOPER_ROLE.name: developer_node,
     DEVELOPER_REVIEW_ROLE.name: developer_review_node,
     WEB_TESTER_ROLE.name: web_tester_node,
+    TESTER_ROLE.name: tester_node,
 }
 
 # Роли этапа: в списке ролей идут подряд и повторяются для каждого этапа плана архитектора.

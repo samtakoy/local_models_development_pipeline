@@ -7,12 +7,10 @@ from codeteam.core.agent.workspace import CHECK_DIR, CONTEXT_FILE_NAME
 from codeteam.core.roles.common import ACCEPTED_VERDICT, REWORK_VERDICT, VERDICT_FILE_NAME, RoleSettings, \
     check_verdict_file
 from codeteam.core.roles.common.browser import playwright_server
+from codeteam.core.roles.common.final_check import REPORT_FILE_NAME
 from codeteam.core.tools.files import DELETE_TOOL_NAME, EDIT_TOOL_NAME, GLOB_TOOL_NAME, GREP_TOOL_NAME, \
     READ_TOOL_NAME, WRITE_TOOL_NAME
 from codeteam.core.tools.shell import START_SERVICE_TOOL_NAME, STOP_PROCESS_TOOL_NAME
-
-# Файл отчёта по требованиям в черновике веб-тестировщика.
-REPORT_FILE_NAME = "100_report.md"
 
 # Инструменты веб-тестировщика: без bash — приложение он запускает только через start_service.
 WEB_TESTER_TOOL_NAMES = (
