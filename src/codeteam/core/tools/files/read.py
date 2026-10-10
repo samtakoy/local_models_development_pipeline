@@ -57,11 +57,28 @@ READ_CHARACTER_LIMIT = 30_000
 BYTES_IN_KILOBYTE = 1024
 BYTES_IN_MEGABYTE = 1024 * 1024
 
-# Итоговая строка read, когда файл показан до конца: вид задаёт READ_END_SUMMARY.
-_END_SUMMARY_PATTERN = re.compile(r"\(Конец файла, всего строк: \d+\)")
+# Заготовка {имя} в экранированном тексте шаблона.
+_ESCAPED_PLACEHOLDER_PATTERN = re.compile(r"\\\{\w+\\\}")
 
-# Итоговая строка read, когда показана часть файла: вид задаёт READ_PART_SUMMARY.
-_PART_SUMMARY_PATTERN = re.compile(r"\(Показаны строки \d+-\d+ из \d+\. Продолжение: offset = \d+\)")
+
+def _summary_pattern(*, template: str) -> re.Pattern[str]:
+    """
+    Собирает шаблон поиска итоговой строки read по её тексту: заготовки {имя} становятся числами.
+
+        template: текст итоговой строки с заготовками.
+
+    Возвращает: Шаблон поиска итоговой строки.
+    """
+    escaped = re.escape(template)
+
+    return re.compile(_ESCAPED_PLACEHOLDER_PATTERN.sub(r"\\d+", escaped))
+
+
+# Итоговая строка read, когда файл показан до конца.
+_END_SUMMARY_PATTERN = _summary_pattern(template = READ_END_SUMMARY)
+
+# Итоговая строка read, когда показана часть файла.
+_PART_SUMMARY_PATTERN = _summary_pattern(template = READ_PART_SUMMARY)
 
 
 class ReadArguments(BaseModel):
