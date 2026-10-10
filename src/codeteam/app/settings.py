@@ -15,12 +15,15 @@ class Settings:
         ollama_base_url: адрес сервера ollama без /v1.
         runs_dir: каталог папок прогонов: журналы запусков агентов; относительный путь считается
             от папки файла .env.
+        prompts_db_dir: папка базы промптов: копии версий файлов промптов; относительный путь считается
+            от папки файла .env.
         browser_headless: браузер агентов без окна; BROWSER_HEADLESS, не задана — без окна.
     """
 
     ollama_base_url: str
     agent_ctx_window: int
     runs_dir: Path
+    prompts_db_dir: Path
     browser_headless: bool
 
 
@@ -38,6 +41,7 @@ def load_settings() -> Settings:
         ollama_base_url = _require(name = "OLLAMA_BASE_URL"),
         agent_ctx_window = int(os.getenv("AGENT_CTX_WINDOW", 120000)),
         runs_dir = dotenv_path.parent / _require(name = "CODETEAM_RUNS_DIR"),
+        prompts_db_dir = dotenv_path.parent / _require(name = "CODETEAM_PROMPTS_DB_DIR"),
         browser_headless = os.getenv("BROWSER_HEADLESS", "true").strip().lower() != "false",
     )
 

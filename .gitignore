@@ -18,5 +18,8 @@ wheels/
 /runs/
 /docs/docker_todo.md
 
+# База промптов
+/prompts_db/
+
 # Снимки и журналы Playwright MCP
 /.playwright-mcp/

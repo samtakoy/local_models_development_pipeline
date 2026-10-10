@@ -4,6 +4,7 @@ import sys
 from datetime import datetime
 
 from codeteam.app.config import load_project_config
+from codeteam.app.prompts_db import PROMPTS_ROOT, save_prompts
 from codeteam.app.sandbox_check import confirm_unprotected_run
 from codeteam.app.settings import load_settings
 from codeteam.core.pipeline.run_pipeline import run_pipeline
@@ -25,6 +26,8 @@ def main():
     logger.info(f"проект: {project.path}")
     logger.info(f"задача: {project.task}")
     logger.info(f"прогон: {run_dir}")
+    prompts_list = save_prompts(prompts_root = PROMPTS_ROOT, db_dir = settings.prompts_db_dir, run_dir = run_dir)
+    logger.info(f"промпты прогона: {prompts_list}")
 
     try:
         result = run_pipeline(project = project, run_dir = run_dir, model_name = "qwen3.5:9b", settings = settings)
