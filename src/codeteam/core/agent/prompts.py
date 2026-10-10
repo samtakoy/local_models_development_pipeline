@@ -1,3 +1,5 @@
+from codeteam.core.tools.shell.tool_names import START_SERVICE_TOOL_NAME
+
 DONE_ANSWER = "DONE"
 TODO_ANSWER = "TODO"
 
@@ -102,7 +104,7 @@ DRAFT_PHASE_BASH_REFUSAL = """Ошибка:
 
 # Отказ start_service в фазе сдачи черновика
 DRAFT_PHASE_START_SERVICE_REFUSAL = (
-    "Ошибка: в фазе фиксации промежуточного результата start_service недоступен. "
+    f"Ошибка: в фазе фиксации промежуточного результата {START_SERVICE_TOOL_NAME} недоступен. "
     "Файлы черновика пиши инструментами write и edit, читай read, если удалить лишний файл - delete."
 )
 
