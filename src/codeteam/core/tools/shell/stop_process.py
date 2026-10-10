@@ -44,7 +44,7 @@ def build_stop_process_tool(*, processes: ShellProcesses) -> BaseTool:
         """
         if pid is None:
             alive = processes.alive_processes()
-            processes.kill_all()
+            processes.kill_background()
             if not alive:
                 return STOP_PROCESS_NONE_RUNNING
 

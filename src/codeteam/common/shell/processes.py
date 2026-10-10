@@ -45,6 +45,13 @@ class ProcessSandbox(Protocol):
     Песочница агента: отбирает и снимает свои процессы среди любых номеров.
     """
 
+    def running_command_group_ids(self) -> set[int]:
+        """
+        Перечисляет группы процессов команд, которые сейчас выполняются: их результат ещё ждут.
+
+        Возвращает: Номера групп.
+        """
+
     def own_process_ids(self, *, process_ids: list[int]) -> list[int] | None:
         """
         Отбирает номера процессов песочницы агента.
@@ -66,7 +73,8 @@ class ProcessSandbox(Protocol):
 
 class ShellProcesses:
     """
-    Фоновые процессы агента. Запомненные команды дают имена запускам в списке процессов.
+    Процессы агента. Фоновые — все свои, кроме групп команд, которые сейчас выполняются. Запомненные
+    команды дают имена запускам в списке процессов.
     """
 
     def __init__(self) -> None:
@@ -99,11 +107,11 @@ class ShellProcesses:
 
     def alive_processes(self) -> list[ShellProcess]:
         """
-        Перечисляет запуски агента, в группах которых работают процессы.
+        Перечисляет запуски агента, в группах которых работают фоновые процессы.
 
         Возвращает: Запуски по возрастанию номера.
         """
-        return self._launches(running = self._running_processes())
+        return self._launches(running = self._background_processes())
 
     def port_listeners(self, *, port: int) -> list[ShellProcess]:
         """
@@ -124,13 +132,13 @@ class ShellProcesses:
 
     def kill_group_of(self, *, process_id: int) -> bool:
         """
-        Снимает группу своих процессов, в которой работает процесс.
+        Снимает группу фоновых процессов, в которой работает процесс.
 
-            process_id: номер запуска из списка, номер запомненной группы или номер любого своего процесса.
+            process_id: номер запуска из списка, номер запомненной группы или номер любого своего фонового процесса.
 
-        Возвращает: True, если группа снята; False, если среди своих работающих процессов такого нет.
+        Возвращает: True, если группа снята; False, если среди фоновых процессов такого нет.
         """
-        running = self._running_processes()
+        running = self._background_processes()
         process_group_id = self._group_of(process_id = process_id, running = running)
         if process_group_id is None:
             return False
@@ -140,12 +148,35 @@ class ShellProcesses:
 
         return True
 
+    def kill_background(self) -> None:
+        """
+        Снимает все фоновые процессы; команды, которые сейчас выполняются, не трогает.
+        """
+        background = self._background_processes()
+        self._kill(running = background)
+        for process in background:
+            self._processes.pop(process.process_group_id, None)
+
     def kill_all(self) -> None:
         """
-        Снимает все свои процессы.
+        Снимает все свои процессы, в том числе команды, которые сейчас выполняются.
         """
         self._kill(running = self._running_processes())
         self._processes.clear()
+
+    def _background_processes(self) -> list[_RunningProcess]:
+        """
+        Находит свои фоновые процессы: свои работающие, кроме групп команд, которые сейчас выполняются.
+
+        Возвращает: Фоновые процессы.
+        """
+        running_command_group_ids = set() if self._sandbox is None else self._sandbox.running_command_group_ids()
+
+        return [
+            process
+            for process in self._running_processes()
+            if process.process_group_id not in running_command_group_ids
+        ]
 
     def _running_processes(self) -> list[_RunningProcess]:
         """

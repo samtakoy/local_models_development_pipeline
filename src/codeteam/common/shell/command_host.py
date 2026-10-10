@@ -61,6 +61,9 @@ class CommandHost:
         self._processes = processes
         self._lock = threading.Lock()
         self._connection: _HostConnection | None = None
+        # группы процессов команд, результат которых ещё ждут
+        self._running_lock = threading.Lock()
+        self._running_group_ids: set[int] = set()
         if is_sandbox_available():
             processes.use_sandbox(sandbox = self)
 
@@ -83,6 +86,8 @@ class CommandHost:
             self._restart(connection = connection, process_group_id = None)
 
         process_group_id = started[host_process.PROCESS_GROUP_ID_FIELD]
+        with self._running_lock:
+            self._running_group_ids.add(process_group_id)
         try:
             finished = replies.get(timeout = timeout_seconds)
             timed_out = False
@@ -92,6 +97,8 @@ class CommandHost:
             timed_out = True
         finally:
             connection.forget(request_id = request_id)
+            with self._running_lock:
+                self._running_group_ids.discard(process_group_id)
 
         if finished is _HOST_GONE:
             self._restart(connection = connection, process_group_id = process_group_id)
@@ -113,6 +120,15 @@ class CommandHost:
             process_group_id = process_group_id,
             background_process_id = finished[host_process.BACKGROUND_PROCESS_ID_FIELD],
         )
+
+    def running_command_group_ids(self) -> set[int]:
+        """
+        Перечисляет группы процессов команд, которые сейчас выполняются: их результат ещё ждут.
+
+        Возвращает: Номера групп.
+        """
+        with self._running_lock:
+            return set(self._running_group_ids)
 
     def own_process_ids(self, *, process_ids: list[int]) -> list[int] | None:
         """

@@ -1,6 +1,8 @@
 """Тесты инструмента stop_process: остановка фоновых процессов, запущенных агентом через bash."""
 
 import subprocess
+import threading
+import time
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,6 +18,9 @@ from tests.shell_helpers import error_page_server_command, free_port, is_process
 
 # Окончание фоновой команды агента: вывод в никуда, номер фонового процесса в ответе bash.
 BACKGROUND_SUFFIX = " > /dev/null 2>&1 & echo $!"
+
+# Сколько ждать запуска команды в соседнем потоке, секунды.
+COMMAND_START_TIMEOUT_SECONDS = 10
 
 
 @dataclass(frozen = True)
@@ -157,3 +162,25 @@ def test_detached_process_is_listed_and_stopped(agent_shell: AgentShell) -> None
 
     assert f"- {process_id}: " in refusal
     assert wait_process_gone(process_id = process_id)
+
+
+@requires_sandbox
+def test_stop_without_pid_keeps_running_command(agent_shell: AgentShell, tmp_path: Path) -> None:
+    """
+    Остановка всех фоновых процессов не обрывает команду, результат которой агент сейчас ждёт.
+    """
+    started_file = tmp_path / "started"
+    answers: list[str] = []
+    command = threading.Thread(target = lambda: answers.append(
+        agent_shell.bash.invoke({"command": f"touch {started_file}; sleep 2; echo готово"})
+    ))
+    command.start()
+    deadline = time.monotonic() + COMMAND_START_TIMEOUT_SECONDS
+    while not started_file.exists() and time.monotonic() < deadline:
+        time.sleep(0.05)
+
+    agent_shell.stop_process.invoke({})
+    command.join()
+
+    assert started_file.exists()
+    assert "готово" in answers[0]
