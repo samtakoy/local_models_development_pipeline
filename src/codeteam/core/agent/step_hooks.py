@@ -5,8 +5,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from codeteam.core.agent.prompts import DUPLICATE_SECTION_NUMBER_REMARK, LATIN_SECTION_NAME_REMARK, \
-    NOT_DRAFT_SECTION_REMARK, STRAY_PRIVATE_FILE_REMARK
+from codeteam.core.agent.prompts import CODE_BLOCK_LINES, DUPLICATE_SECTION_NUMBER_REMARK, \
+    LATIN_SECTION_NAME_REMARK, NOT_DRAFT_SECTION_REMARK, STRAY_PRIVATE_FILE_REMARK
 from codeteam.core.agent.workspace import CONTEXT_FILE_NAME, DRAFT_DIR_NAME, DRAFT_SECTION_PATTERN, \
     LATIN_DRAFT_SECTION_PATTERN, context_path, draft_dir
 
@@ -15,6 +15,21 @@ StepHook = Callable[[Path, str], str | None]
 
 # Проверка после шага: смотрит не на черновик, а на что угодно ещё (например, на проект) → замечание агенту или None.
 StepCheck = Callable[[], str | None]
+
+
+@dataclass(frozen = True)
+class _CodeBlock:
+    """
+    Блок с указанным языком в тексте файла.
+
+        first_line: номер строки открывающей ограды, с 1.
+        last_line: номер строки закрывающей ограды; у незакрытого блока - последняя строка файла.
+        line_count: число строк внутри блока.
+    """
+
+    first_line: int
+    last_line: int
+    line_count: int
 
 
 @dataclass(frozen = True)
@@ -94,22 +109,27 @@ def code_block_hook(*, max_lines: int, remark: str, skip_file_names: tuple[str, 
     Собирает хук, который замечает в файле черновика блоки с указанным языком длиннее предела.
 
         max_lines: наибольшее число строк внутри одного блока с указанным языком.
-        remark: текст замечания агенту; поля {file_name} и {max_lines} в нём заменяются
-            именем файла и пределом.
+        remark: текст замечания агенту; поля {file_name}, {max_lines} и {long_blocks} в нём заменяются
+            именем файла, пределом и строками всех блоков длиннее предела.
         skip_file_names: имена файлов черновика, которые хук не проверяет.
 
     Возвращает: Хук после шага.
     """
     def hook(path: Path, text: str) -> str | None:
-        """Находит самый длинный блок с указанным языком и сравнивает его с пределом."""
+        """Находит блоки с указанным языком длиннее предела и называет их строки."""
         if path.name in skip_file_names:
             return None
 
-        longest_block = max(_language_block_lengths(text = text), default = 0)
-        if longest_block <= max_lines:
+        long_blocks = [block for block in _language_blocks(text = text) if block.line_count > max_lines]
+        if not long_blocks:
             return None
 
-        return remark.format(file_name = path.name, max_lines = max_lines)
+        shown_blocks = "; ".join(
+            CODE_BLOCK_LINES.format(first_line = block.first_line, last_line = block.last_line)
+            for block in long_blocks
+        )
+
+        return remark.format(file_name = path.name, max_lines = max_lines, long_blocks = shown_blocks)
 
     return hook
 
@@ -132,36 +152,39 @@ def _same_number_section_names(*, path: Path, number: str) -> list[str]:
     return names
 
 
-def _language_block_lengths(*, text: str) -> list[int]:
+def _language_blocks(*, text: str) -> list[_CodeBlock]:
     """
-    Считает строки внутри блоков с указанным языком; блоки без языка пропускает.
+    Находит блоки с указанным языком; блоки без языка пропускает.
 
         text: текст файла.
 
-    Возвращает: Число строк внутри каждого блока с указанным языком по порядку.
+    Возвращает: Блоки с указанным языком по порядку.
     """
-    lengths = []
+    blocks = []
     inside_block = False
     is_language_block = False
+    first_line = 0
     line_count = 0
-    for line in text.splitlines():
+    lines = text.splitlines()
+    for number, line in enumerate(lines, start = 1):
         stripped_line = line.strip()
         if not inside_block:
             if stripped_line.startswith(BLOCK_FENCE):
                 inside_block = True
                 is_language_block = LANGUAGE_BLOCK_START_PATTERN.match(stripped_line) is not None
+                first_line = number
                 line_count = 0
             continue
 
         if stripped_line == BLOCK_FENCE:
             if is_language_block:
-                lengths.append(line_count)
+                blocks.append(_CodeBlock(first_line = first_line, last_line = number, line_count = line_count))
             inside_block = False
             continue
 
         line_count += 1
 
     if inside_block and is_language_block:
-        lengths.append(line_count)
+        blocks.append(_CodeBlock(first_line = first_line, last_line = len(lines), line_count = line_count))
 
-    return lengths
+    return blocks
