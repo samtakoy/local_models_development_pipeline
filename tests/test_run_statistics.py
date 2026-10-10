@@ -5,7 +5,8 @@ from pathlib import Path
 from langchain_core.messages import AIMessage, ToolMessage
 
 from codeteam.app.run_statistics import agent_totals, load_run_statistics, role_totals, run_report, sum_totals
-from codeteam.core.agent.statistics import SERVER_ERROR_RETRY_COUNTER, STATISTICS_FILE_SUFFIX, AgentStatistics
+from codeteam.core.agent.statistics import REPEATED_RESULT_STOP_COUNTER, SERVER_ERROR_RETRY_COUNTER, \
+    STATISTICS_FILE_SUFFIX, WORK_PHASE, AgentStatistics
 
 
 def _write_agent(*, run_dir: Path, role_name: str, journal_name: str, input_tokens: int, tool_errors: int) -> None:
@@ -49,6 +50,20 @@ def test_totals_by_agent_role_and_run(tmp_path: Path) -> None:
     assert (roles["developer"].agents, roles["developer"].input_tokens) == (2, 300)
     assert (roles["developer"].tool_calls, roles["developer"].tool_errors) == (5, 3)
     assert (run_total.agents, run_total.input_tokens, run_total.server_errors) == (3, 350, 3)
+
+
+def test_loop_to_draft_is_not_counted_as_limit(tmp_path: Path) -> None:
+    """
+    Переход в фазу черновика из-за петли считается отдельно от перехода по лимиту истории.
+    """
+    statistics = AgentStatistics(role_name = "browser_checker", journal_name = "01_browser_checker_r1", model_name = "model")
+    statistics.record(event = {"limit_notice": {"messages": []}})
+    statistics.count_in_phase(name = REPEATED_RESULT_STOP_COUNTER, phase = WORK_PHASE)
+    statistics.write(path = tmp_path / f"01_browser_checker_r1{STATISTICS_FILE_SUFFIX}")
+
+    totals = agent_totals(statistics = load_run_statistics(run_dir = tmp_path)[0])
+
+    assert (totals.limit_notices, totals.loops_to_draft, totals.loops_to_reset) == (0, 1, 0)
 
 
 def test_report_without_statistics(tmp_path: Path) -> None:

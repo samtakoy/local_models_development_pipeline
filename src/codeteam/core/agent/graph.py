@@ -1,3 +1,4 @@
+import json
 import logging
 import re
 from collections.abc import Callable, Sequence
@@ -17,10 +18,11 @@ from typing import TypedDict, Annotated
 from codeteam.core.agent.config import AgentConfig
 from codeteam.core.agent.node_ids import AGENT_NODE_ID, ANSWER_NOTICE_NODE_ID, DRAFT_AGENT_NODE_ID, \
     DRAFT_TOOL_NODE_ID, INIT_NODE_ID, LIMIT_NOTICE_NODE_ID, REINIT_NODE_ID, TOOL_NODE_ID
-from codeteam.core.agent.statistics import ANSWER_COMMAND_REMARK_COUNTER, SERVER_ERROR_RETRY_COUNTER, \
-    STEP_CHECK_REMARK_COUNTER, STEP_HOOK_REMARK_COUNTER, UNFINISHED_ANSWER_RETRY_COUNTER
+from codeteam.core.agent.statistics import ANSWER_COMMAND_REMARK_COUNTER, DRAFT_PHASE, REPEATED_RESULT_REMARK_COUNTER, \
+    REPEATED_RESULT_STOP_COUNTER, SERVER_ERROR_RETRY_COUNTER, STEP_CHECK_REMARK_COUNTER, STEP_HOOK_REMARK_COUNTER, \
+    UNFINISHED_ANSWER_RETRY_COUNTER, WORK_PHASE
 from codeteam.core.agent.prompts import ANSWER_CHECK_NOTICE, ANSWER_COMMAND_REMARK, DONE_ANSWER, TODO_ANSWER, \
-    UNFINISHED_ANSWER_NOTICE
+    REPEATED_RESULT_REMARKS, REPEATED_RESULT_STOP_REMARK, UNFINISHED_ANSWER_NOTICE
 from codeteam.core.agent.workspace import context_path, draft_dir
 from codeteam.core.tools.files import READ_TOOL_NAME
 from codeteam.core.tools.shell import BASH_TOOL_NAME
@@ -33,8 +35,19 @@ class AgentState(TypedDict):
     reset_count: int
     # сколько раз агент сдавал работу, не прошедшую проверку сдачи, и получал отказ
     answer_notices: int
+    # сколько шагов инструментов подряд повторили один из REPEAT_WINDOW прошлых шагов: те же вызовы с тем же результатом
+    repeated_results: int
+    # вызовы и результаты без замечаний последних REPEAT_WINDOW шагов инструментов: с ними сравнивается следующий шаг
+    recent_tool_steps: list[str]
 
 AGENT_CFG_NAME = "agent"
+
+# Сколько прошлых шагов инструментов помнит проверка повторов: повтор — тот же шаг среди них, так ловится и петля
+# из нескольких чередующихся вызовов.
+REPEAT_WINDOW = 1 # 5
+
+# Сколько повторов подряд переводят работу к записи ответа: после всех замечаний REPEATED_RESULT_REMARKS.
+REPEATED_RESULTS_LIMIT = len(REPEATED_RESULT_REMARKS) + 1
 
 # Сколько раз отказывать агенту, чья работа не прошла проверку сдачи; дальше работа переходит к новому агенту.
 ANSWER_NOTICE_LIMIT = 3
@@ -85,8 +98,14 @@ def reinit_node(state: AgentState, config: RunnableConfig):
     # фоновые процессы прежнего агента снимаются
     cfg.shell_processes.kill_all()
 
-    # новый агент получает свои попытки сдачи
-    return {"messages": messages, "reset_count": state["reset_count"] + 1, "answer_notices": 0}
+    # новый агент получает свои попытки сдачи и начинает счёт повторов заново
+    return {
+        "messages": messages,
+        "reset_count": state["reset_count"] + 1,
+        "answer_notices": 0,
+        "repeated_results": 0,
+        "recent_tool_steps": [],
+    }
 
 UNFINISHED_ANSWER_RETRIES = 1
 def agent_node(
@@ -211,12 +230,14 @@ def route_after_agent(state: AgentState, config: RunnableConfig) -> str:
 
     return END
 
-def make_tools_node(*, tools: list[BaseTool]) -> Callable:
+def make_tools_node(*, tools: list[BaseTool], phase: str) -> Callable:
     """
     Собирает узел инструментов, который после шага запускает хуки на изменённых файлах черновика
-    и проверки после шага, а на попытку сдать работу командой даёт замечание.
+    и проверки после шага, на попытку сдать работу командой даёт замечание, а на повтор шага — тех же вызовов
+    с тем же результатом, что на одном из REPEAT_WINDOW прошлых шагов, — замечания REPEATED_RESULT_REMARKS.
 
         tools: инструменты узла.
+        phase: фаза работы агента, в которой работает узел: для счётчиков петли в статистике.
 
     Возвращает: Узел графа.
     """
@@ -225,16 +246,16 @@ def make_tools_node(*, tools: list[BaseTool]) -> Callable:
     def tools_node(state: AgentState, config: RunnableConfig):
         """
         Выполняет вызовы инструментов и дописывает к результату последнего вызова замечания хуков,
-        проверок и замечание о сдаче работы командой.
+        проверок, замечание о сдаче работы командой и замечание на повтор шага.
         """
         cfg: AgentConfig = config["configurable"][AGENT_CFG_NAME]
         is_answer_command = _is_answer_command(response = state["messages"][-1])
-        if not cfg.step_hooks and not cfg.step_checks and not is_answer_command:
-            return tool_node.invoke(state, config)
-
-        before = _private_dir_snapshot(cfg = cfg)
+        before = _private_dir_snapshot(cfg = cfg) if cfg.step_hooks else {}
         update = tool_node.invoke(state, config)
-        hook_remarks = _step_hook_remarks(cfg = cfg, before = before, after = _private_dir_snapshot(cfg = cfg))
+        hook_remarks = (
+            _step_hook_remarks(cfg = cfg, before = before, after = _private_dir_snapshot(cfg = cfg))
+            if cfg.step_hooks else []
+        )
         check_remarks = [remark for check in cfg.step_checks if (remark := check()) is not None]
         for _ in hook_remarks:
             cfg.statistics.count(name = STEP_HOOK_REMARK_COUNTER)
@@ -244,6 +265,21 @@ def make_tools_node(*, tools: list[BaseTool]) -> Callable:
         if is_answer_command:
             cfg.statistics.count(name = ANSWER_COMMAND_REMARK_COUNTER)
             remarks.append(ANSWER_COMMAND_REMARK)
+
+        tool_step = _tool_step_key(response = state["messages"][-1], tool_messages = update["messages"])
+        repeated_results = state["repeated_results"] + 1 if tool_step in state["recent_tool_steps"] else 0
+        if repeated_results >= REPEATED_RESULTS_LIMIT:
+            cfg.statistics.count_in_phase(name = REPEATED_RESULT_STOP_COUNTER, phase = phase)
+            remarks.append(REPEATED_RESULT_STOP_REMARK)
+        elif repeated_results > 0:
+            cfg.statistics.count_in_phase(name = REPEATED_RESULT_REMARK_COUNTER, phase = phase)
+            remarks.append(REPEATED_RESULT_REMARKS[repeated_results - 1])
+
+        update = {
+            **update,
+            "repeated_results": repeated_results,
+            "recent_tool_steps": [*state["recent_tool_steps"], tool_step][-REPEAT_WINDOW:],
+        }
         if not remarks:
             return update
 
@@ -259,7 +295,8 @@ def make_tools_node(*, tools: list[BaseTool]) -> Callable:
 
 def route_after_tools(state: AgentState, config: RunnableConfig) -> str:
     """
-    Выбирает узел после выполнения инструментов: продолжение работы или фаза черновика.
+    Выбирает узел после выполнения инструментов: продолжение работы или фаза черновика. Фаза черновика
+    включается и после REPEATED_RESULTS_LIMIT повторов шага инструментов подряд.
 
     Мягкий лимит history_token_limit не действует на шаге, где агент работал со своим ответом
     или пытался сдать работу командой; жёсткий лимит history_token_hard_limit действует всегда.
@@ -270,6 +307,9 @@ def route_after_tools(state: AgentState, config: RunnableConfig) -> str:
     Возвращает: Имя следующего узла.
     """
     cfg: AgentConfig = config["configurable"][AGENT_CFG_NAME]
+    if state["repeated_results"] >= REPEATED_RESULTS_LIMIT:
+        return LIMIT_NOTICE_NODE_ID
+
     input_tokens = _last_input_tokens(messages = state["messages"])
     if input_tokens >= cfg.history_token_hard_limit:
         return LIMIT_NOTICE_NODE_ID
@@ -361,11 +401,13 @@ def route_after_draft(state: AgentState, config: RunnableConfig) -> str:
         config: конфигурация запуска с настройками агента.
 
     Возвращает: Имя следующего узла: инструменты черновика, пересборка истории или конец работы.
-        Когда история дошла до края окна модели, инструменты не выполняются.
+        Когда история дошла до края окна модели или шаг инструментов повторился REPEATED_RESULTS_LIMIT раз подряд,
+        инструменты не выполняются.
     """
     cfg: AgentConfig = config["configurable"][AGENT_CFG_NAME]
     is_window_full = _last_input_tokens(messages = state["messages"]) >= cfg.context_window_limit
-    if tools_condition(state) == TOOL_NODE_ID and not is_window_full:
+    is_looped = state["repeated_results"] >= REPEATED_RESULTS_LIMIT
+    if tools_condition(state) == TOOL_NODE_ID and not is_window_full and not is_looped:
         return DRAFT_TOOL_NODE_ID
 
     if state["reset_count"] >= cfg.max_resets:
@@ -397,11 +439,11 @@ def create_agent_graph(
 
     workflow.add_node(INIT_NODE_ID, init_node)
     workflow.add_node(AGENT_NODE_ID, agent_node)
-    workflow.add_node(TOOL_NODE_ID, make_tools_node(tools = tools))
+    workflow.add_node(TOOL_NODE_ID, make_tools_node(tools = tools, phase = WORK_PHASE))
     workflow.add_node(LIMIT_NOTICE_NODE_ID, limit_notice_node)
     workflow.add_node(ANSWER_NOTICE_NODE_ID, answer_notice_node)
     workflow.add_node(DRAFT_AGENT_NODE_ID, agent_node)
-    workflow.add_node(DRAFT_TOOL_NODE_ID, make_tools_node(tools = draft_tools))
+    workflow.add_node(DRAFT_TOOL_NODE_ID, make_tools_node(tools = draft_tools, phase = DRAFT_PHASE))
     workflow.add_node(REINIT_NODE_ID, reinit_node)
 
     workflow.add_edge(START, INIT_NODE_ID)
@@ -472,6 +514,25 @@ def _warmup_message(*, calls: list[tuple[str, dict]]) -> AIMessage:
             for index, (name, args) in enumerate(calls, start = 1)
         ],
     )
+
+def _tool_step_key(*, response: BaseMessage, tool_messages: Sequence[BaseMessage]) -> str:
+    """
+    Собирает шаг инструментов в строку для сравнения с прошлыми шагами: вызовы и их результаты.
+
+        response: ответ модели с вызовами инструментов.
+        tool_messages: сообщения шага узла инструментов, до замечаний.
+
+    Возвращает: Имя, аргументы и текст результата каждого вызова строкой JSON.
+    """
+    arguments = {call["id"]: call["args"] for call in getattr(response, "tool_calls", [])}
+    steps = [
+        [str(message.name), arguments.get(message.tool_call_id), message.text]
+        for message in tool_messages
+        if isinstance(message, ToolMessage)
+    ]
+
+    return json.dumps(steps, ensure_ascii = False, sort_keys = True)
+
 
 def _last_input_tokens(*, messages: Sequence[BaseMessage]) -> int:
     """

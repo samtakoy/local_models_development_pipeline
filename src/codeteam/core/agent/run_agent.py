@@ -249,7 +249,13 @@ def run_agent(
         }
     )
 
-    initial_state = AgentState(messages = [], reset_count = 0, answer_notices = 0)
+    initial_state = AgentState(
+        messages = [],
+        reset_count = 0,
+        answer_notices = 0,
+        repeated_results = 0,
+        recent_tool_steps = [],
+    )
     journal = AgentJournal(path = journal_path, agent_name = role.name, model_name = role.model_name)
     journal.write_tools(tools = bound_chat_model.kwargs["tools"])
     try:

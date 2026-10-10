@@ -13,7 +13,7 @@ from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 
 from codeteam.core.agent.graph import AGENT_CFG_NAME, AgentState, agent_node, make_tools_node
-from codeteam.core.agent.statistics import AgentStatistics
+from codeteam.core.agent.statistics import WORK_PHASE, AgentStatistics
 
 # Длительности ответа модели в наносекундах: весь ответ и вывод токенов.
 TOTAL_DURATION = 2_000_000_000
@@ -180,7 +180,7 @@ def test_server_error_and_unfinished_answer_retries_are_counted(tmp_path: Path) 
     ])
 
     agent_node(
-        {"messages": [], "reset_count": 0, "answer_notices": 0},
+        {"messages": [], "reset_count": 0, "answer_notices": 0, "repeated_results": 0, "recent_tool_steps": []},
         _graph_config(statistics = statistics, model = model, tmp_path = tmp_path, step_checks = ()),
     )
 
@@ -195,13 +195,13 @@ def test_step_check_remark_is_counted(tmp_path: Path) -> None:
     noop = StructuredTool.from_function(func = lambda: "ок", name = "noop", description = "ничего")
     # узел инструментов langgraph работает только внутри графа
     workflow = StateGraph(AgentState)
-    workflow.add_node("tools", make_tools_node(tools = [noop]))
+    workflow.add_node("tools", make_tools_node(tools = [noop], phase = WORK_PHASE))
     workflow.add_edge(START, "tools")
     workflow.add_edge("tools", END)
     call = AIMessage(content = "", tool_calls = [{"id": "call_1", "name": "noop", "args": {}}])
 
     workflow.compile().invoke(
-        {"messages": [call], "reset_count": 0, "answer_notices": 0},
+        {"messages": [call], "reset_count": 0, "answer_notices": 0, "repeated_results": 0, "recent_tool_steps": []},
         _graph_config(
             statistics = statistics,
             model = FlakyModel(answers = []),

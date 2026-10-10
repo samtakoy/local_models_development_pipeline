@@ -5,9 +5,9 @@ from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Any
 
-from codeteam.core.agent.statistics import DRAFT_PHASE, LIMIT_NOTICE_EVENT, RESET_EVENT, SERVER_ERROR_RETRY_COUNTER, \
-    STATISTICS_FILE_SUFFIX, STEP_CHECK_REMARK_COUNTER, STEP_HOOK_REMARK_COUNTER, UNFINISHED_ANSWER_HINT_EVENT, \
-    UNFINISHED_ANSWER_RETRY_COUNTER
+from codeteam.core.agent.statistics import DRAFT_PHASE, LIMIT_NOTICE_EVENT, REPEATED_RESULT_STOP_COUNTER, RESET_EVENT, \
+    SERVER_ERROR_RETRY_COUNTER, STATISTICS_FILE_SUFFIX, STEP_CHECK_REMARK_COUNTER, STEP_HOOK_REMARK_COUNTER, \
+    UNFINISHED_ANSWER_HINT_EVENT, UNFINISHED_ANSWER_RETRY_COUNTER, WORK_PHASE
 
 
 @dataclass(frozen = True)
@@ -23,7 +23,9 @@ class RunTotals:
         tool_calls: вызовов инструментов.
         tool_errors: ошибок инструментов.
         draft_tool_errors: ошибок инструментов в фазе черновика.
-        limit_notices: замечаний о лимите.
+        limit_notices: переходов в фазу черновика по лимиту истории.
+        loops_to_draft: переходов в фазу черновика из-за петли: одинаковый результат инструментов подряд.
+        loops_to_reset: пересборок истории из-за петли в фазе черновика.
         resets: сбросов истории.
         unfinished_answers: ответов без инструмента и без DONE: тихие повторы и подсказки.
         server_errors: повторов после ошибки сервера ollama.
@@ -41,6 +43,8 @@ class RunTotals:
     tool_errors: int
     draft_tool_errors: int
     limit_notices: int
+    loops_to_draft: int
+    loops_to_reset: int
     resets: int
     unfinished_answers: int
     server_errors: int
@@ -60,6 +64,8 @@ COLUMN_TITLES = {
     "tool_errors": "ошибок вызовов",
     "draft_tool_errors": "из них в черновике",
     "limit_notices": "лимит",
+    "loops_to_draft": "петля → черновик",
+    "loops_to_reset": "петля → сброс",
     "resets": "сбросов",
     "unfinished_answers": "без инструмента",
     "server_errors": "ошибок ollama",
@@ -93,6 +99,9 @@ def agent_totals(*, statistics: dict[str, Any]) -> RunTotals:
     tool_phases = [phases for phases in statistics["tools"].values()]
     events = statistics["events"]
     counters = statistics["counters"]
+    # в файлах, записанных до появления счётчиков по фазам, их нет
+    loop_stops = statistics.get("phase_counters", {}).get(REPEATED_RESULT_STOP_COUNTER, {})
+    loops_to_draft = loop_stops.get(WORK_PHASE, 0)
 
     return RunTotals(
         agents = 1,
@@ -103,7 +112,9 @@ def agent_totals(*, statistics: dict[str, Any]) -> RunTotals:
         tool_calls = sum(counts.get("calls", 0) for phases in tool_phases for counts in phases.values()),
         tool_errors = sum(counts.get("errors", 0) for phases in tool_phases for counts in phases.values()),
         draft_tool_errors = sum(phases.get(DRAFT_PHASE, {}).get("errors", 0) for phases in tool_phases),
-        limit_notices = events.get(LIMIT_NOTICE_EVENT, 0),
+        limit_notices = events.get(LIMIT_NOTICE_EVENT, 0) - loops_to_draft,
+        loops_to_draft = loops_to_draft,
+        loops_to_reset = loop_stops.get(DRAFT_PHASE, 0),
         resets = events.get(RESET_EVENT, 0),
         unfinished_answers = events.get(UNFINISHED_ANSWER_HINT_EVENT, 0) + counters.get(UNFINISHED_ANSWER_RETRY_COUNTER, 0),
         server_errors = counters.get(SERVER_ERROR_RETRY_COUNTER, 0),

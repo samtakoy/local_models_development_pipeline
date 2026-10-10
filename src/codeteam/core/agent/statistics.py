@@ -57,6 +57,11 @@ STEP_HOOK_REMARK_COUNTER = "step_hook_remarks"
 STEP_CHECK_REMARK_COUNTER = "step_check_remarks"
 ANSWER_COMMAND_REMARK_COUNTER = "answer_command_remarks"
 
+# Явные счётчики петель по фазам: замечания на одинаковый результат инструментов подряд и остановки петли
+# после последнего замечания: в фазе работы — переход в фазу черновика, в фазе черновика — пересборка истории.
+REPEATED_RESULT_REMARK_COUNTER = "repeated_result_remarks"
+REPEATED_RESULT_STOP_COUNTER = "repeated_result_stops"
+
 # Знаков после запятой у секунд и скоростей в файле.
 ROUND_DIGITS = 3
 
@@ -85,6 +90,8 @@ class AgentStatistics:
         self._tool_counts: dict[str, dict[str, Counter[str]]] = {}
         self._events: Counter[str] = Counter()
         self._counters: Counter[str] = Counter()
+        # счётчик -> фаза -> число
+        self._phase_counters: dict[str, Counter[str]] = {}
         self._previous_node: str | None = None
         self._draft_started: float | None = None
         self._draft_seconds = 0.0
@@ -129,6 +136,15 @@ class AgentStatistics:
         """
         self._counters[name] += 1
 
+    def count_in_phase(self, *, name: str, phase: str) -> None:
+        """
+        Прибавляет событие фазы, которого нет в потоке событий графа.
+
+            name: имя события.
+            phase: фаза работы агента.
+        """
+        self._phase_counters.setdefault(name, Counter())[phase] += 1
+
     def fail(self, *, error: Exception) -> None:
         """
         Запоминает ошибку, прервавшую запуск.
@@ -151,7 +167,7 @@ class AgentStatistics:
         Собирает статистику словарём.
 
         Возвращает: Роль, журнал, модель, время, шаги по узлам, запросы к модели и их сумму, инструменты
-            по фазам, события, явные счётчики, фазу черновика и ошибку запуска.
+            по фазам, события, явные счётчики, явные счётчики по фазам, фазу черновика и ошибку запуска.
         """
         now = time.monotonic()
         draft_seconds = self._draft_seconds
@@ -179,6 +195,7 @@ class AgentStatistics:
             },
             "events": dict(self._events),
             "counters": dict(self._counters),
+            "phase_counters": {name: dict(phases) for name, phases in self._phase_counters.items()},
             "draft": {
                 "seconds": round(draft_seconds, ROUND_DIGITS),
                 "first_response_seconds": self._first_draft_response_seconds,
