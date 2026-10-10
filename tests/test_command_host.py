@@ -25,6 +25,9 @@ pytestmark = pytest.mark.skipif(
 # Предел времени команды в тестах, секунды.
 COMMAND_TIMEOUT_SECONDS = 20
 
+# Сколько может длиться вызов, оставивший процесс в фоне: дочитывание вывода и запас, секунды.
+BACKGROUND_CALL_LIMIT_SECONDS = 3
+
 
 class AgentCommands:
     """
@@ -198,6 +201,44 @@ def test_background_process_id(agent: AgentCommands) -> None:
 
     assert background.background_process_id == int(background.output.split()[-1])
     assert foreground.background_process_id is None
+
+
+def test_background_list_does_not_block_call(agent: AgentCommands) -> None:
+    """
+    Фоновая цепочка `cd && программа > файл &` держит вывод вызова, но вызов не ждёт её;
+    программа продолжает работать.
+    """
+    started = time.monotonic()
+
+    result = agent.run(command = "cd . && sleep 307 > /dev/null 2>&1 & echo $!")
+
+    assert result.exit_code == 0
+    assert time.monotonic() - started < BACKGROUND_CALL_LIMIT_SECONDS
+    assert is_process_alive(process_id = int(result.output.split()[-1]))
+
+
+def test_background_without_redirect_does_not_block_call(agent: AgentCommands) -> None:
+    """
+    Фоновая программа без перенаправления вывода не держит вызов; программа продолжает работать.
+    """
+    started = time.monotonic()
+
+    result = agent.run(command = "sleep 308 & echo запущен $!")
+
+    assert result.output.split()[0] == "запущен"
+    assert time.monotonic() - started < BACKGROUND_CALL_LIMIT_SECONDS
+    assert is_process_alive(process_id = int(result.output.split()[-1]))
+
+
+def test_foreground_output_is_complete(agent: AgentCommands) -> None:
+    """
+    Вывод основной команды приходит целиком: и большой, и с паузой перед концом.
+    """
+    large = agent.run(command = "seq 1 200000")
+    paused = agent.run(command = "echo начало; sleep 1; echo конец")
+
+    assert large.output.split() == [str(number) for number in range(1, 200001)]
+    assert paused.output.split() == ["начало", "конец"]
 
 
 def test_timeout_kills_command(agent: AgentCommands) -> None:

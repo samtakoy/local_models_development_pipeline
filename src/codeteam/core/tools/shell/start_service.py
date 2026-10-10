@@ -61,11 +61,6 @@ START_SERVICE_DESCRIPTION = """Запускает долго работающу�
 Повторный запуск с тем же port останавливает прежнюю службу и запускает новую: так перезапускай службу после правки кода.
 Служба работает между вызовами и останавливается, когда ты закончишь работу.
 
-Ответ:
-- готово — номер процесса и файл лога;
-- порт port уже занят другой программой — ошибка, служба не запускается: выбери другой порт;
-- процесс завершился или не стал готов за timeout_seconds — ошибка с последними строками лога.
-
 Обращайся к службе по 127.0.0.1. Остановить — инструментом stop_process с номером процесса.
 Лог читай инструментом read: путь к нему — в ответе."""
 
@@ -120,7 +115,9 @@ def build_start_service_tool(*, workspace: Workspace, processes: ShellProcesses,
             log_pattern: регулярное выражение строки вывода, после которой служба готова.
             timeout_seconds: предел ожидания готовности, секунды.
 
-        Возвращает: Номер процесса и файл лога готовой службы. Ошибку для агента поднимает ToolException.
+        Возвращает:
+            Номер процесса и файл лога готовой службы; состояние условий готовности, если служба
+            работает, но не стала готовой за отведённое время. Ошибку для агента поднимает ToolException.
         """
         timeout = READY_TIMEOUT_SECONDS if timeout_seconds is None else timeout_seconds
         if not 1 <= timeout <= READY_TIMEOUT_LIMIT_SECONDS:
@@ -183,10 +180,13 @@ def build_start_service_tool(*, workspace: Workspace, processes: ShellProcesses,
                     f"Последние строки лога:\n{_log_tail(log_path = log_path)}"
                 )
             if time.monotonic() >= deadline:
-                raise ToolException(
-                    f"Ошибка: служба не готова за {timeout} с, процесс {process_id} работает. Лог {shown_log}.\n"
-                    f"Остановить: stop_process(pid = {process_id}).\n"
-                    f"Последние строки лога:\n{_log_tail(log_path = log_path)}"
+                return _not_ready_answer(
+                    timeout = timeout,
+                    process_id = process_id,
+                    port = port,
+                    pattern = pattern,
+                    log_path = log_path,
+                    shown_log = shown_log,
                 )
             time.sleep(CHECK_INTERVAL_SECONDS)
 
@@ -274,6 +274,49 @@ def _is_ready(*, port: int | None, pattern: re.Pattern[str] | None, log_path: Pa
         return False
 
     return True
+
+
+def _not_ready_answer(
+    *,
+    timeout: int,
+    process_id: int,
+    port: int | None,
+    pattern: re.Pattern[str] | None,
+    log_path: Path,
+    shown_log: str,
+) -> str:
+    """
+    Собирает ответ агенту о службе, которая не стала готовой за отведённое время.
+
+        timeout: предел ожидания готовности, секунды.
+        process_id: номер процесса службы.
+        port: порт службы; None — не проверялся.
+        pattern: регулярное выражение строки лога; None — не проверялось.
+        log_path: файл лога службы.
+        shown_log: путь к логу в том виде, в каком его видит агент.
+
+    Возвращает: Состояние условий готовности, где искать вывод службы и как её остановить.
+    """
+    log_text = log_path.read_text(encoding = "utf-8", errors = "replace")
+    lines = [f"Процесс {process_id} работает, но за {timeout} с условия готовности не выполнены."]
+
+    if port is not None:
+        if _is_port_open(port = port):
+            lines.append(f"Порт {port} открыт.")
+        else:
+            lines.append(f"Порт {port} закрыт.")
+
+    if not log_text:
+        lines.append("Лог пуст: если в command есть перенаправление вывода (> файл), вывод ушёл в этот файл — читай его.")
+    else:
+        if pattern is not None and pattern.search(log_text) is None:
+            lines.append("Строка log_pattern в логе не найдена.")
+        lines.append(f"Лог {shown_log}.")
+        lines.append(f"Последние строки лога:\n{_log_tail(log_path = log_path)}")
+
+    lines.append(f"Остановить: stop_process(pid = {process_id}).")
+
+    return "\n".join(lines)
 
 
 def _is_port_open(*, port: int) -> bool:

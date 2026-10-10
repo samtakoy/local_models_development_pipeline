@@ -201,6 +201,55 @@ def test_unknown_number_refusal_lists_service(start_service: BaseTool, stop_proc
     )
 
 
+def test_not_ready_reports_conditions_and_empty_log(start_service: BaseTool) -> None:
+    """
+    Служба, чей вывод перенаправлен в свой файл, не становится готовой: ответ называет открытый порт
+    и отправляет к файлу из перенаправления, без пути к пустому логу.
+    """
+    port = _free_port()
+
+    answer = start_service.invoke({
+        "command": f"python3 -m http.server {port} --bind 127.0.0.1 > served.log 2>&1",
+        "port": port,
+        "log_pattern": "Serving HTTP",
+        "timeout_seconds": 2,
+    })
+
+    assert re.fullmatch(
+        rf"Процесс (\d+) работает, но за 2 с условия готовности не выполнены\.\n"
+        rf"Порт {port} открыт\.\n"
+        r"Лог пуст: если в command есть перенаправление вывода \(> файл\), вывод ушёл в этот файл — читай его\.\n"
+        r"Остановить: stop_process\(pid = \1\)\.",
+        answer,
+    ), answer
+
+
+def test_not_ready_with_output_shows_log(start_service: BaseTool) -> None:
+    """
+    Служба с выводом, где нет строки log_pattern, не становится готовой: ответ называет условия,
+    путь к логу и последние строки лога.
+    """
+    port = _free_port()
+
+    answer = start_service.invoke({
+        "command": f"python3 -u -m http.server {port} --bind 127.0.0.1",
+        "port": port,
+        "log_pattern": "Server started",
+        "timeout_seconds": 2,
+    })
+
+    assert re.fullmatch(
+        rf"Процесс (\d+) работает, но за 2 с условия готовности не выполнены\.\n"
+        rf"Порт {port} открыт\.\n"
+        r"Строка log_pattern в логе не найдена\.\n"
+        r"Лог \S+\.log\.\n"
+        r"Последние строки лога:\n.*Serving HTTP.*\n"
+        r"Остановить: stop_process\(pid = \1\)\.",
+        answer,
+        flags = re.DOTALL,
+    ), answer
+
+
 def test_failed_service_is_not_listed(start_service: BaseTool, stop_process: BaseTool) -> None:
     """
     Служба, которая сразу завершилась, получает ошибку старта и не попадает в список stop_process.

@@ -2,8 +2,9 @@
 
 Читает запросы построчно в JSON из stdin, каждую команду выполняет в отдельном потоке как `bash -c`
 в своей группе процессов и пишет ответы построчно в JSON в stdout: сначала номер группы команды,
-по завершении — код возврата, вывод, коды цепочки через | и номер последнего фонового процесса. Все команды агента — дочерние процессы
-хозяина и потому в одной песочнице: сигналы между ними разрешены.
+по завершении — код возврата, вывод, коды цепочки через | и номер последнего фонового процесса.
+Команда завершена, когда завершилась её оболочка: фоновые процессы команды хозяин не ждёт. Все команды
+агента — дочерние процессы хозяина и потому в одной песочнице: сигналы между ними разрешены.
 
 Запускается как отдельная программа и использует только стандартную библиотеку: песочница ставится
 до его запуска.
@@ -11,10 +12,12 @@
 
 import json
 import os
+import select
 import signal
 import subprocess
 import sys
 import threading
+import time
 
 # Поля запроса: номер запроса, команда bash, папка запуска.
 REQUEST_ID_FIELD = "request_id"
@@ -43,6 +46,18 @@ STATUS_SUFFIX = (
 
 # Сколько байт итога команды читать из канала: итог занимает две короткие строки.
 STATUS_READ_LIMIT = 4096
+
+# После завершения оболочки вывод дочитывается, пока не закроется или не замолчит на
+# OUTPUT_IDLE_SECONDS, но не дольше OUTPUT_DRAIN_LIMIT_SECONDS: фоновые процессы команды могут
+# держать вывод открытым. Значения взяты из oh-my-pi (crates/pi-shell/src/shell.rs).
+OUTPUT_IDLE_SECONDS = 0.25
+OUTPUT_DRAIN_LIMIT_SECONDS = 2
+
+# Как часто проверять, завершилась ли оболочка, пока вывод молчит, секунды.
+EXIT_POLL_SECONDS = 0.05
+
+# Сколько байт вывода читать за раз.
+OUTPUT_READ_SIZE = 65536
 
 # Сигналы остановки, которые хозяин пропускает: команда агента вроде pkill -f python не снимает его.
 IGNORED_STOP_SIGNALS = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
@@ -94,7 +109,7 @@ def _run_request(*, request: dict) -> None:
     os.close(status_write_fd)
     _send(message = {REQUEST_ID_FIELD: request_id, EVENT_FIELD: STARTED_EVENT, PROCESS_GROUP_ID_FIELD: process.pid})
 
-    raw_output, _ = process.communicate()
+    raw_output = _collect_output(process = process)
     pipe_exit_codes, background_process_id = _read_status(status_read_fd = status_read_fd)
     _send(
         message = {
@@ -106,6 +121,53 @@ def _run_request(*, request: dict) -> None:
             BACKGROUND_PROCESS_ID_FIELD: background_process_id,
         }
     )
+
+
+def _collect_output(*, process: subprocess.Popen) -> bytes:
+    """
+    Читает вывод команды, пока работает её оболочка, и дочитывает после её завершения: до закрытия
+    вывода, затишья на OUTPUT_IDLE_SECONDS, не дольше OUTPUT_DRAIN_LIMIT_SECONDS. Затем закрывает
+    вывод и ждёт код возврата оболочки.
+
+        process: оболочка команды с выводом в канал.
+
+    Возвращает: Вывод команды.
+    """
+    output_fd = process.stdout.fileno()
+    chunks: list[bytes] = []
+    exit_time: float | None = None
+    last_output_time = 0.0
+    while True:
+        now = time.monotonic()
+        if exit_time is None and process.poll() is not None:
+            exit_time = now
+            last_output_time = now
+
+        if exit_time is None:
+            wait_seconds = EXIT_POLL_SECONDS
+        else:
+            idle_deadline = last_output_time + OUTPUT_IDLE_SECONDS
+            drain_deadline = exit_time + OUTPUT_DRAIN_LIMIT_SECONDS
+            wait_seconds = min(idle_deadline, drain_deadline) - now
+            if wait_seconds <= 0:
+                break
+
+        readable, _, _ = select.select([output_fd], [], [], wait_seconds)
+        if not readable:
+            continue
+
+        chunk = os.read(output_fd, OUTPUT_READ_SIZE)
+        # вывод закрыли все процессы команды
+        if not chunk:
+            break
+
+        chunks.append(chunk)
+        last_output_time = time.monotonic()
+
+    process.stdout.close()
+    process.wait()
+
+    return b"".join(chunks)
 
 
 def _read_status(*, status_read_fd: int) -> tuple[list[int], int | None]:
