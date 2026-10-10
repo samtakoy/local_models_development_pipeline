@@ -143,7 +143,7 @@ def _find_sampling(*, model: str, generation_mode: GenerationMode) -> SamplingPr
     return sampling
 
 
-def _sampling_parameters(*, sampling: SamplingProfile | None) -> dict[str, float]:
+def _sampling_parameters(*, sampling: SamplingProfile | None) -> dict[str, float | None]:
     """
     Переводит набор параметров выборки в поля клиента.
 

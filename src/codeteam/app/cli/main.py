@@ -38,7 +38,7 @@ def main():
         result = run_pipeline(
             project = project,
             run_dir = run_dir,
-            model_name = "qwen3.5:9b",
+            model_name = settings.agent_model,
             settings = settings,
             resume_state = resume_state,
         )

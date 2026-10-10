@@ -29,8 +29,9 @@ class CallerContext:
     caller_journal_name: str
 
 
-# Сборщик инструмента вызова другого агента: агент → инструмент.
-HelperToolBuilder = Callable[[CallerContext], BaseTool]
+# Сборщик инструмента-помощника: агент → инструмент; None - инструмент в этом запуске недоступен,
+# например не задана нужная ему модель.
+HelperToolBuilder = Callable[[CallerContext], BaseTool | None]
 
 # Сборщик сервера MCP: агент → описание сервера, аргументы которого зависят от запуска.
 McpServerBuilder = Callable[[CallerContext], McpServer]

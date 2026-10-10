@@ -59,7 +59,9 @@ def run_role(
         caller_private_dir_name = private_dir_name,
         caller_journal_name = journal_name,
     )
-    helper_tools = [build_tool(caller_context) for build_tool in role.helper_tools]
+    helper_tools = [
+        tool for build_tool in role.helper_tools if (tool := build_tool(caller_context)) is not None
+    ]
     mcp_servers = tuple(build_server(caller_context) for build_server in role.mcp_servers)
     with McpTools(servers = mcp_servers) as mcp_tools:
         return run_agent(

@@ -22,6 +22,8 @@ class GenerationMode(Enum):
 class SamplingProfile:
     """Набор параметров выборки для одного режима модели.
 
+    None у поля - карточка параметр не задаёт, берётся значение сервера.
+
     Поля:
         temperature: температура.
         top_p: доля вероятности, в которой выбирается следующий токен.
@@ -31,12 +33,12 @@ class SamplingProfile:
         repeat_penalty: множитель штрафа за повтор токенов.
     """
 
-    temperature: float
-    top_p: float
-    top_k: int
-    min_p: float
-    presence_penalty: float
-    repeat_penalty: float
+    temperature: float | None
+    top_p: float | None
+    top_k: int | None
+    min_p: float | None
+    presence_penalty: float | None
+    repeat_penalty: float | None
 
 
 @dataclass(frozen = True)
@@ -54,7 +56,25 @@ class ModelProfile:
     samplings: dict[GenerationMode, SamplingProfile]
 
 
+# Набор Gemma 4: карточка задаёт один набор для всех режимов.
+GEMMA4_SAMPLING = SamplingProfile(
+    temperature = 1.0,
+    top_p = 0.95,
+    top_k = 64,
+    min_p = None,
+    presence_penalty = None,
+    repeat_penalty = None,
+)
+
 PROFILES: tuple[ModelProfile, ...] = (
+    ModelProfile(
+        name = "gemma4-26b-a4b",
+        source = "https://huggingface.co/google/gemma-4-26B-A4B-it",
+        samplings = {
+            GenerationMode.THINKING: GEMMA4_SAMPLING,
+            GenerationMode.NON_THINKING: GEMMA4_SAMPLING,
+        },
+    ),
     ModelProfile(
         name = "qwen3.6-35b-a3b",
         source = "https://huggingface.co/Qwen/Qwen3.6-35B-A3B",
