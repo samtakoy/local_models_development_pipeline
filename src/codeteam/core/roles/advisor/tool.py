@@ -9,7 +9,19 @@ from pydantic import BaseModel, Field
 
 from codeteam.core.agent.workspace import CHECK_DIR, PRIVATE_ROOT
 from codeteam.core.roles.advisor.config import ADVICE_FILE_NAME, ADVISOR_ROLE
-from codeteam.core.roles.advisor.prompts import ADVISOR_TASK, GET_ADVICE_DESCRIPTION
+from codeteam.core.roles.advisor.prompts import (
+    ADVICE_LIMIT_ERROR,
+    ADVICE_TRUNCATED_NOTE,
+    ADVISOR_TASK,
+    CONTEXT_NOT_GIVEN,
+    GET_ADVICE_CONTEXT_DESCRIPTION,
+    GET_ADVICE_DESCRIPTION,
+    GET_ADVICE_QUESTION_DESCRIPTION,
+    GET_ADVICE_RELATED_FILES_DESCRIPTION,
+    NO_ADVICE_ERROR,
+    RELATED_FILE_LINE,
+    RELATED_FILES_NOT_GIVEN,
+)
 from codeteam.core.roles.common import CallerContext, run_role
 
 # Имя инструмента вызова советника.
@@ -30,15 +42,9 @@ class GetAdviceArguments(BaseModel):
     Аргументы get_advice.
     """
 
-    question: str = Field(description = "Задача, проблема, что уже пробовал, конкретный вопрос")
-    context: str | None = Field(
-        default = None,
-        description = "контекст вопроса - дополнительное описание для понимания, из какой ситуации задано",
-    )
-    related_files: list[str] | None = Field(
-        default = None,
-        description = "Файлы, с которых советчику стоит начать (он может читать и другие)",
-    )
+    question: str = Field(description = GET_ADVICE_QUESTION_DESCRIPTION)
+    context: str | None = Field(default = None, description = GET_ADVICE_CONTEXT_DESCRIPTION)
+    related_files: list[str] | None = Field(default = None, description = GET_ADVICE_RELATED_FILES_DESCRIPTION)
 
 
 def build_get_advice_tool(caller_context: CallerContext) -> BaseTool:
@@ -71,7 +77,7 @@ def build_get_advice_tool(caller_context: CallerContext) -> BaseTool:
         """
         call_number = next(call_numbers)
         if call_number > ADVICE_CALL_LIMIT:
-            raise ToolException(f"Ошибка: советника уже спрашивали {ADVICE_CALL_LIMIT} раз, больше нельзя.")
+            raise ToolException(ADVICE_LIMIT_ERROR.format(limit = ADVICE_CALL_LIMIT))
 
         private_dir_name = caller_context.caller_private_dir_name / f"{ADVISOR_ROLE.name}_{call_number}"
         related_paths = _copy_private_files(
@@ -86,7 +92,7 @@ def build_get_advice_tool(caller_context: CallerContext) -> BaseTool:
             task = ADVISOR_TASK.format(
                 caller_name = caller_context.caller_name,
                 question = question,
-                context = context or "(не указан)",
+                context = context or CONTEXT_NOT_GIVEN,
                 related_files = _show_files(file_paths = related_paths),
             ),
             input_dirs = (),
@@ -96,9 +102,7 @@ def build_get_advice_tool(caller_context: CallerContext) -> BaseTool:
         )
         advice_path = advice_dir / ADVICE_FILE_NAME
         if not advice_path.is_file():
-            raise ToolException(
-                f"Ошибка: советник не дал ответа. Его черновик: {advice_dir.relative_to(project_dir)}"
-            )
+            raise ToolException(NO_ADVICE_ERROR.format(draft_dir = advice_dir.relative_to(project_dir)))
 
         advice = advice_path.read_text(encoding = "utf-8", errors = "replace")
         if len(advice) <= ADVICE_LENGTH_LIMIT:
@@ -106,8 +110,8 @@ def build_get_advice_tool(caller_context: CallerContext) -> BaseTool:
 
         return (
             advice[:ADVICE_LENGTH_LIMIT]
-            + f"\n\n(Ответ обрезан: всего знаков {len(advice)}. Полностью — в файле "
-            f"{advice_path.relative_to(project_dir)})"
+            + "\n\n"
+            + ADVICE_TRUNCATED_NOTE.format(length = len(advice), advice_file = advice_path.relative_to(project_dir))
         )
 
     return StructuredTool.from_function(
@@ -153,6 +157,6 @@ def _show_files(*, file_paths: list[str]) -> str:
     Возвращает: Пути по одному в строке; пометку, если файлов нет.
     """
     if not file_paths:
-        return "(не указаны)"
+        return RELATED_FILES_NOT_GIVEN
 
-    return "\n".join(f"- {path}" for path in file_paths)
+    return "\n".join(RELATED_FILE_LINE.format(path = path) for path in file_paths)

@@ -11,6 +11,7 @@ from langgraph.graph import StateGraph
 from codeteam.core.pipeline.project import ReviewMode
 from codeteam.core.pipeline.state import PipelineState, Review
 from codeteam.core.roles.common.errors import PipelineError
+from codeteam.core.roles.common.prompts import MISSING_VERDICT_REMARK, WRONG_VERDICT_REMARK
 
 logger = logging.getLogger(__name__)
 
@@ -31,18 +32,6 @@ REWORK_VERDICT = "FIX"
 
 # Слово вердикта в первой строке файла вердикта: отдельное слово, а не часть другого.
 VERDICT_WORD_PATTERN = re.compile(rf"\b({re.escape(ACCEPTED_VERDICT)}|{re.escape(REWORK_VERDICT)})\b")
-
-# Замечание ревьюеру при сдаче: нет файла вердикта.
-MISSING_VERDICT_REMARK = (
-    "Нет файла вердикта {verdict_file}. Запиши вердикт в файл {verdict_file}: "
-    "первая строка — ровно одно слово {accepted_verdict} или {rework_verdict}."
-)
-
-# Замечание ревьюеру при сдаче: в первой строке файла вердикта нет вердикта или их два.
-WRONG_VERDICT_REMARK = (
-    "В файле вердикта {verdict_file} первая строка «{first_line}». "
-    "Первая строка должна содержать одно из слов {accepted_verdict} или {rework_verdict}, только одно."
-)
 
 # Выбор следующего узла графа по состоянию пайплайна.
 Route = Callable[[PipelineState], str]

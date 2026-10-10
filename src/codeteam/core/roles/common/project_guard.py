@@ -5,18 +5,7 @@ from pathlib import Path
 from codeteam.common.git import UNTRACKED_STATUS, list_uncommitted_changes
 from codeteam.core.agent.answer_checks import AnswerCheck
 from codeteam.core.agent.step_hooks import StepCheck
-
-# Замечание после шага: роль изменила отслеживаемые файлы проекта.
-TRACKED_CHANGES_REMARK = (
-    "Ты изменил файлы проекта: {paths}. Ты не можешь менять код проекта. "
-    "Верни файлы как было: git checkout -- <файл>."
-)
-
-# Замечание при сдаче: проект не вернулся в состояние на начало работы роли.
-PROJECT_CHANGES_REMARK = (
-    "Проект изменён с начала твоей работы: {paths}. Перед сдачей верни проект как было: "
-    "изменённые файлы — git checkout -- <файл>, новые файлы, которые создали ты или приложение, удали."
-)
+from codeteam.core.roles.common.prompts import PROJECT_CHANGES_REMARK, TRACKED_CHANGES_REMARK
 
 
 def tracked_changes_check(*, project_dir: Path) -> StepCheck:

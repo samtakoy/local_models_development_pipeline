@@ -7,6 +7,7 @@ from codeteam.common.llm import ReasoningLevel
 from codeteam.core.agent.workspace import CHECK_DIR
 from codeteam.core.roles.common import ACCEPTED_VERDICT, REWORK_VERDICT, VERDICT_FILE_NAME, CallerContext, \
     RoleSettings, check_verdict_file
+from codeteam.core.roles.web_tester.prompts import PLAYWRIGHT_FILENAME_ERROR
 from codeteam.core.tools.files import DELETE_TOOL_NAME, EDIT_TOOL_NAME, GLOB_TOOL_NAME, GREP_TOOL_NAME, \
     READ_TOOL_NAME, WRITE_TOOL_NAME
 from codeteam.core.tools.mcp import McpServer
@@ -72,10 +73,7 @@ def check_playwright_filename(tool_name: str, arguments: dict, *, project_dir: P
     if (project_dir / filename).resolve().is_relative_to(files_dir):
         return None
 
-    return (
-        f"Ошибка: filename {filename} вне папки {CHECK_DIR}/ проекта. "
-        f"Сохраняй файлы в {CHECK_DIR}/, например {CHECK_DIR}/{Path(filename).name}."
-    )
+    return PLAYWRIGHT_FILENAME_ERROR.format(filename = filename, check_dir = CHECK_DIR, file_name = Path(filename).name)
 
 
 WEB_TESTER_ROLE = RoleSettings(
