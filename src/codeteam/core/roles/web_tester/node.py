@@ -11,7 +11,6 @@ from codeteam.core.agent.workspace import CHECK_DIR, PRIVATE_ROOT
 from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState
 from codeteam.core.roles.common import clean_project_check, make_journal_name, read_verdict, role_private_dir_name, \
     run_role, tracked_changes_check
-from codeteam.core.roles.pm import REQUIREMENTS_FILE_NAME
 from codeteam.core.roles.web_tester.config import WEB_TESTER_ROLE
 from codeteam.core.roles.web_tester.prompts import FIX_STAGE_TEXT, TRACKED_CHANGES_REMARK, WEB_TESTER_TASK
 
@@ -57,7 +56,7 @@ def web_tester_node(state: PipelineState, config: RunnableConfig):
         journal_name = make_journal_name(journal_count = state["journal_count"], private_dir_name = private_dir_name),
         task = WEB_TESTER_TASK.format(
             task = state["task"],
-            requirements_file = (requirements_dir / REQUIREMENTS_FILE_NAME).relative_to(project_dir),
+            requirements_file = state["requirements_file"].relative_to(project_dir),
         ),
         input_dirs = (requirements_dir,),
         private_dir_name = private_dir_name,

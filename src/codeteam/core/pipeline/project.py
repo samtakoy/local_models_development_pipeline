@@ -1,35 +1,6 @@
-"""Настройки проекта из файла состава: папка проекта, задача, режимы ревью."""
+"""Настройки проекта из файла состава: папка проекта, задача, последовательность ролей."""
 
 from dataclasses import dataclass
-from enum import StrEnum
-
-
-class ReviewMode(StrEnum):
-    """
-    Режим ревью роли.
-
-        OFF: ревьюера нет.
-        ON: ревью есть; после последнего круга с вердиктом «доработать» пайплайн идёт дальше
-            с предупреждением в лог.
-    """
-
-    OFF = "off"
-    ON = "on"
-
-
-@dataclass(frozen = True)
-class ReviewSettings:
-    """
-    Режимы ревью ролей: поле на каждую роль, у которой есть ревьюер.
-
-        architect: режим ревью архитектора.
-        developer: режим приёмки этапа после разработчика.
-        web_tester: режим финальной проверки приложения в браузере после последнего этапа.
-    """
-
-    architect: ReviewMode
-    developer: ReviewMode
-    web_tester: ReviewMode
 
 
 @dataclass(frozen = True)
@@ -39,9 +10,9 @@ class ProjectSettings:
 
         path: папка проекта.
         task: задача пользователя.
-        review: режимы ревью ролей.
+        roles: последовательность ролей пайплайна.
     """
 
     path: str
     task: str
-    review: ReviewSettings
+    roles: tuple[str, ...]

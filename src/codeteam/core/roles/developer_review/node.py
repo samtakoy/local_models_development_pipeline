@@ -6,12 +6,12 @@ from pathlib import Path
 
 from langchain_core.runnables import RunnableConfig
 
-from codeteam.common.git import commit_all, list_uncommitted_changes
+from codeteam.common.git import list_uncommitted_changes
 from codeteam.core.agent.workspace import PRIVATE_ROOT
 from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState, Review
 from codeteam.core.roles.common import STAGE_TASK_DIR_NAME, build_stage_dir_name, clean_project_check, \
-    make_journal_name, make_rework, next_review_round, parse_stage_number, read_stage_title, read_verdict, \
-    role_private_dir_name, run_role, tracked_changes_check
+    make_journal_name, make_rework, next_review_round, read_verdict, role_private_dir_name, run_role, \
+    tracked_changes_check
 from codeteam.core.roles.developer import DEVELOPER_ROLE
 from codeteam.core.roles.developer_review.config import DEVELOPER_REVIEW_ROLE
 from codeteam.core.roles.developer_review.prompts import DEVELOPER_REVIEW_TASK, TRACKED_CHANGES_REMARK
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 def developer_review_node(state: PipelineState, config: RunnableConfig):
     """
-    Коммитит работу разработчика и запускает приёмщика этапа: он запускает тесты и приложение,
+    Запускает приёмщика этапа на закоммиченном коде разработчика: он запускает тесты и приложение,
     проходит шаги проверки этапа и пишет вердикт с замечаниями.
     Правки проекта приёмщиком ловят проверки после шага и при сдаче; оставшиеся правки — предупреждение в лог.
     """
@@ -30,16 +30,6 @@ def developer_review_node(state: PipelineState, config: RunnableConfig):
     stages = state["stages"]
     stage_dir_name = build_stage_dir_name(stage_file = stages.current_file)
     review_round = next_review_round(review = state["review"], target = DEVELOPER_ROLE.name)
-
-    message = (
-        f"codeteam: этап {parse_stage_number(stage_file = stages.current_file)} — "
-        f"{read_stage_title(stage_file = stages.current_file)}: код разработчика, приёмка круг {review_round}"
-    )
-    if commit_all(project_dir = project_dir, message = message):
-        logger.info(f"[git] коммит: {message}")
-    else:
-        logger.info(f"[git] перед приёмкой круг {review_round} новых изменений нет, коммита нет")
-
     stage_task_dir = project_dir / PRIVATE_ROOT / stage_dir_name / STAGE_TASK_DIR_NAME
     # проверки правок проекта знают папку проекта только при запуске, поэтому добавляются к описанию роли здесь
     guarded_role = replace(

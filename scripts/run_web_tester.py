@@ -20,7 +20,7 @@ from codeteam.app.sandbox_check import confirm_unprotected_run
 from codeteam.app.settings import load_settings
 from codeteam.common.git import list_uncommitted_changes
 from codeteam.core.agent.workspace import PRIVATE_ROOT, draft_dir
-from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState
+from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState, Stages
 from codeteam.core.roles.common import last_private_dir_name
 from codeteam.core.roles.pm import PM_ROLE, REQUIREMENTS_FILE_NAME
 from codeteam.core.roles.web_tester import web_tester_node
@@ -59,8 +59,9 @@ def main() -> None:
         raise SystemExit(f"нет папки менеджера продукта в {project_dir / PRIVATE_ROOT}: нужен прошлый прогон")
 
     requirements_dir = draft_dir(private_dir = project_dir / PRIVATE_ROOT / pm_dir_name)
-    if not (requirements_dir / REQUIREMENTS_FILE_NAME).is_file():
-        raise SystemExit(f"нет чеклиста требований {requirements_dir / REQUIREMENTS_FILE_NAME}: нужен прошлый прогон")
+    requirements_file = requirements_dir / REQUIREMENTS_FILE_NAME
+    if not requirements_file.is_file():
+        raise SystemExit(f"нет чеклиста требований {requirements_file}: нужен прошлый прогон")
 
     changes = list_uncommitted_changes(project_dir = project_dir)
     if changes:
@@ -79,7 +80,7 @@ def main() -> None:
                 project_path = project.path,
                 run_dir = run_dir,
                 model_name = arguments.model,
-                review = project.review,
+                roles = project.roles,
                 settings = settings,
             )
         }
@@ -87,11 +88,15 @@ def main() -> None:
     state = PipelineState(
         task = project.task,
         requirements_dir = requirements_dir,
+        requirements_file = requirements_file,
         research_dir = None,
         plan_dir = None,
-        stages = None,
+        architecture_file = None,
+        # этапов нет: веб-тестировщик проверяет готовый проект, этап исправлений скрипт не запускает
+        stages = Stages(files = (), started = 0, plan_dir = None, fix_rounds = 0),
         review = None,
         rework = None,
+        next_role = None,
         journal_count = 0,
     )
     web_tester_node(state, config)

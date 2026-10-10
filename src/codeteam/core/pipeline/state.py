@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import TypedDict
 
 from codeteam.app.settings import Settings
-from codeteam.core.pipeline.project import ReviewSettings
 
 # Ключ настроек пайплайна в configurable настроек запуска графа.
 PIPELINE_CFG_NAME = "pipeline"
@@ -16,21 +15,26 @@ class Stages:
     """
     Этапы плана архитектора и ход по ним.
 
-        files: файлы этапов из черновика архитектора по порядку имён.
-        index: номер текущего этапа в files, с нуля.
+        files: файлы этапов из черновика архитектора по порядку имён и этапы исправлений после них.
+        started: сколько этапов начато; текущий этап - последний начатый.
         plan_dir: папка плана сеньора текущего этапа; None, пока он не отработал.
         fix_rounds: сколько этапов исправлений добавила финальная проверка приложения.
     """
 
     files: tuple[Path, ...]
-    index: int
+    started: int
     plan_dir: Path | None
     fix_rounds: int
 
     @property
     def current_file(self) -> Path:
-        """Файл текущего этапа."""
-        return self.files[self.index]
+        """Файл текущего этапа: последнего начатого."""
+        return self.files[self.started - 1]
+
+    @property
+    def has_unstarted(self) -> bool:
+        """Есть этапы, которые ещё не начаты."""
+        return self.started < len(self.files)
 
 
 @dataclass(frozen = True)
@@ -71,21 +75,27 @@ class PipelineState(TypedDict):
 
         task: задача пользователя.
         requirements_dir: папка черновика менеджера продукта: чеклист требований; None, пока он не отработал.
+        requirements_file: файл чеклиста требований; None, пока менеджер продукта не отработал.
         research_dir: папка черновика исследователя; None, пока он не отработал.
         plan_dir: папка черновика архитектора: общее решение и файлы этапов; None, пока он не отработал.
+        architecture_file: файл общего решения архитектора; None, пока он не отработал.
         stages: этапы плана архитектора и ход по ним; None, пока архитектор не отработал.
         review: последнее ревью; None, пока ревьюеры не работали.
         rework: возврат работы роли; None, если возврата нет.
+        next_role: роль, которую пайплайн запустит следующей; None - пайплайн закончен.
         journal_count: число журналов агентов, уже начатых в прогоне.
     """
 
     task: str
     requirements_dir: Path | None
+    requirements_file: Path | None
     research_dir: Path | None
     plan_dir: Path | None
+    architecture_file: Path | None
     stages: Stages | None
     review: Review | None
     rework: Rework | None
+    next_role: str | None
     journal_count: int
 
 
@@ -97,12 +107,12 @@ class PipelineConfig:
         project_path: папка рабочего проекта.
         run_dir: папка прогона: журналы агентов.
         model_name: модель агентов.
-        review: режимы ревью ролей.
+        roles: последовательность ролей пайплайна.
         settings: настройки приложения.
     """
 
     project_path: str
     run_dir: Path
     model_name: str
-    review: ReviewSettings
+    roles: tuple[str, ...]
     settings: Settings

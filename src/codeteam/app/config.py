@@ -1,9 +1,9 @@
 import tomllib
-from dataclasses import fields
 from pathlib import Path
 from typing import Any
 
-from codeteam.core.pipeline.project import ProjectSettings, ReviewMode, ReviewSettings
+from codeteam.core.pipeline.graph import DEFAULT_ROLES
+from codeteam.core.pipeline.project import ProjectSettings
 
 
 class ConfigError(ValueError):
@@ -14,32 +14,25 @@ def load_project_config(setup_dir: str) -> ProjectSettings:
     return ProjectSettings(
         path = config_data["project"],
         task = config_data["task"]["question"],
-        review = _parse_review(review_data = config_data.get("review", {})),
+        roles = _parse_roles(pipeline_data = config_data.get("pipeline", {})),
     )
 
-def _parse_review(*, review_data: dict[str, Any]) -> ReviewSettings:
+def _parse_roles(*, pipeline_data: dict[str, Any]) -> tuple[str, ...]:
     """
-    Собирает режимы ревью ролей из раздела [review] файла состава.
+    Читает последовательность ролей из раздела [pipeline] файла состава.
 
-        review_data: содержимое раздела [review]: имя роли → режим.
+        pipeline_data: содержимое раздела [pipeline].
 
-    Возвращает: Режимы ревью; у ролей без записи в разделе — ReviewMode.OFF.
+    Возвращает: Роли из списка roles; без списка - DEFAULT_ROLES, полный пайплайн.
     """
-    role_names = [field.name for field in fields(ReviewSettings)]
-    unknown_names = sorted(set(review_data) - set(role_names))
-    if unknown_names:
-        raise ConfigError(f"[review]: у ролей {', '.join(unknown_names)} нет ревьюера; есть у: {', '.join(role_names)}")
+    roles = pipeline_data.get("roles")
+    if roles is None:
+        return DEFAULT_ROLES
 
-    modes = {}
-    for role_name in role_names:
-        value = review_data.get(role_name, ReviewMode.OFF.value)
-        try:
-            modes[role_name] = ReviewMode(value)
-        except ValueError as error:
-            allowed = ", ".join(mode.value for mode in ReviewMode)
-            raise ConfigError(f"[review] {role_name} = {value!r}: допустимо {allowed}") from error
+    if not isinstance(roles, list) or not all(isinstance(role, str) for role in roles):
+        raise ConfigError(f"[pipeline] roles = {roles!r}: нужен список имён ролей")
 
-    return ReviewSettings(**modes)
+    return tuple(roles)
 
 def _read_toml(*, path: Path) -> dict[str, Any]:
     """

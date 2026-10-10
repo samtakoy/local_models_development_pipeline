@@ -1,15 +1,11 @@
-"""Ревью работы роли: вердикт ревьюера, круги ревью, возврат работы роли, место ревьюера в графе."""
+"""Ревью работы роли: вердикт ревьюера, круги ревью, возврат работы роли."""
 
 import logging
 import re
 import shutil
-from collections.abc import Callable
 from pathlib import Path
 
-from langgraph.graph import StateGraph
-
-from codeteam.core.pipeline.project import ReviewMode
-from codeteam.core.pipeline.state import PipelineState, Review, Rework
+from codeteam.core.pipeline.state import Review, Rework
 from codeteam.core.roles.common.errors import PipelineError
 from codeteam.core.roles.common.prompts import MISSING_VERDICT_REMARK, WRONG_VERDICT_REMARK
 
@@ -32,12 +28,6 @@ REWORK_VERDICT = "FIX"
 
 # Слово вердикта в первой строке файла вердикта: отдельное слово, а не часть другого.
 VERDICT_WORD_PATTERN = re.compile(rf"\b({re.escape(ACCEPTED_VERDICT)}|{re.escape(REWORK_VERDICT)})\b")
-
-# Выбор следующего узла графа по состоянию пайплайна.
-Route = Callable[[PipelineState], str]
-
-# Узел графа пайплайна.
-PipelineNode = Callable[..., dict]
 
 
 def next_review_round(*, review: Review | None, target: str) -> int:
@@ -189,40 +179,3 @@ def _verdict_line(*, verdict_path: Path) -> str:
 
     return next((line for line in lines if line), "")
 
-
-def add_role_exit(
-    *,
-    workflow: StateGraph,
-    mode: ReviewMode,
-    target: str,
-    review_name: str,
-    review_node: PipelineNode,
-    next_route: Route,
-) -> None:
-    """
-    Соединяет роль со следующим шагом графа: напрямую или через ревьюера.
-
-    Без ревью после роли сразу выбирается следующий шаг. С ревью после роли идёт ревьюер; если он вернул
-    работу роли — снова роль, иначе следующий шаг.
-
-        workflow: граф пайплайна.
-        mode: режим ревью роли.
-        target: имя узла роли.
-        review_name: имя узла ревьюера.
-        review_node: узел ревьюера.
-        next_route: выбор следующего шага после роли.
-    """
-    if mode == ReviewMode.OFF:
-        workflow.add_conditional_edges(target, next_route)
-        return
-
-    def route_after_review(state: PipelineState) -> str:
-        """Возвращает работу роли на доработку или выбирает следующий шаг."""
-        if rework_for(rework = state["rework"], role_name = target) is not None:
-            return target
-
-        return next_route(state)
-
-    workflow.add_node(review_name, review_node)
-    workflow.add_edge(target, review_name)
-    workflow.add_conditional_edges(review_name, route_after_review)

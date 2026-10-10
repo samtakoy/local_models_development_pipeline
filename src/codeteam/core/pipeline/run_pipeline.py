@@ -22,6 +22,7 @@ def run_pipeline(*, project: ProjectSettings, run_dir: Path, model_name: str, se
 
     Возвращает: Итоговое состояние пайплайна: папки результатов агентов.
     """
+    graph = create_pipeline_graph(roles = project.roles)
     prepare_project(project_dir = Path(project.path).resolve(), run_name = run_dir.name)
 
     config = RunnableConfig(
@@ -30,7 +31,7 @@ def run_pipeline(*, project: ProjectSettings, run_dir: Path, model_name: str, se
                 project_path = project.path,
                 run_dir = run_dir,
                 model_name = model_name,
-                review = project.review,
+                roles = project.roles,
                 settings = settings,
             )
         }
@@ -38,12 +39,15 @@ def run_pipeline(*, project: ProjectSettings, run_dir: Path, model_name: str, se
     initial_state = PipelineState(
         task = project.task,
         requirements_dir = None,
+        requirements_file = None,
         research_dir = None,
         plan_dir = None,
+        architecture_file = None,
         stages = None,
         review = None,
         rework = None,
+        next_role = project.roles[0],
         journal_count = 0,
     )
 
-    return create_pipeline_graph(review = project.review).invoke(input = initial_state, config = config)
+    return graph.invoke(input = initial_state, config = config)

@@ -1,20 +1,25 @@
-"""Узел разработчика в графе пайплайна: код текущего этапа."""
+"""Узел разработчика в графе пайплайна: код текущего этапа и его коммит."""
 
+import logging
 from pathlib import Path
 
 from langchain_core.runnables import RunnableConfig
 
+from codeteam.common.git import commit_all
 from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState
-from codeteam.core.roles.common import build_stage_dir_name, make_journal_name, rework_for, role_private_dir_name, \
-    run_role
+from codeteam.core.roles.common import build_stage_dir_name, make_journal_name, parse_stage_number, read_stage_title, \
+    rework_for, role_private_dir_name, run_role
 from codeteam.core.roles.developer.config import DEVELOPER_ROLE
 from codeteam.core.roles.developer.prompts import DEVELOPER_FIX_TASK, DEVELOPER_TASK
+
+logger = logging.getLogger(__name__)
 
 
 def developer_node(state: PipelineState, config: RunnableConfig):
     """
     Запускает разработчика текущего этапа: по плану сеньора он пишет код этапа в папке проекта.
     Если работу вернули на доработку — разработчик исправляет код по замечаниям.
+    После работы коммитит изменения проекта.
     """
     cfg: PipelineConfig = config["configurable"][PIPELINE_CFG_NAME]
     project_dir = Path(cfg.project_path).resolve()
@@ -49,5 +54,14 @@ def developer_node(state: PipelineState, config: RunnableConfig):
         extra_writable_dirs = (project_dir,),
         extra_command_writable_dirs = (),
     )
+
+    message = (
+        f"codeteam: этап {parse_stage_number(stage_file = stages.current_file)} — "
+        f"{read_stage_title(stage_file = stages.current_file)}: {private_dir_name.as_posix()}"
+    )
+    if commit_all(project_dir = project_dir, message = message):
+        logger.info(f"[git] коммит: {message}")
+    else:
+        logger.info(f"[git] {private_dir_name.as_posix()}: разработчик не изменил проект, коммита нет")
 
     return {"rework": None, "journal_count": state["journal_count"] + 1}

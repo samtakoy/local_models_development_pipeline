@@ -30,7 +30,13 @@ def pm_node(state: PipelineState, config: RunnableConfig):
         extra_writable_dirs = (),
         extra_command_writable_dirs = (),
     )
-    if not (requirements_dir / REQUIREMENTS_FILE_NAME).is_file():
+    requirements_file = requirements_dir / REQUIREMENTS_FILE_NAME
+    if not requirements_file.is_file():
         raise PipelineError(f"в черновике менеджера продукта {requirements_dir} нет файла {REQUIREMENTS_FILE_NAME}")
 
-    return {"requirements_dir": requirements_dir, "rework": None, "journal_count": state["journal_count"] + 1}
+    return {
+        "requirements_dir": requirements_dir,
+        "requirements_file": requirements_file,
+        "rework": None,
+        "journal_count": state["journal_count"] + 1,
+    }

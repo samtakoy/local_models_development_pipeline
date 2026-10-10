@@ -6,7 +6,6 @@ import pytest
 from langchain_core.runnables import RunnableConfig
 
 from codeteam.core.agent.workspace import PRIVATE_ROOT, draft_dir
-from codeteam.core.pipeline.project import ReviewMode, ReviewSettings
 from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState
 from codeteam.core.roles.architect import ARCHITECTURE_FILE_NAME, architect_node
 from codeteam.core.roles.architect import node as architect_node_module
@@ -77,17 +76,20 @@ def test_architect_rework_flow(tmp_path: Path, fake_run_role: FakeRunRole) -> No
         project_path = str(tmp_path),
         run_dir = tmp_path / "run",
         model_name = "model",
-        review = ReviewSettings(architect = ReviewMode.ON, developer = ReviewMode.OFF, web_tester = ReviewMode.OFF),
+        roles = ("architect", "architect_review"),
         settings = None,
     )})
     state = PipelineState(
         task = "задача",
         requirements_dir = requirements_dir,
+        requirements_file = requirements_dir / REQUIREMENTS_FILE_NAME,
         research_dir = research_dir,
         plan_dir = None,
+        architecture_file = None,
         stages = None,
         review = None,
         rework = None,
+        next_role = "architect",
         journal_count = 0,
     )
 
@@ -107,5 +109,6 @@ def test_architect_rework_flow(tmp_path: Path, fake_run_role: FakeRunRole) -> No
     assert str(draft_dir(private_dir = PRIVATE_ROOT / "architect_r2")) in rework_call["task"]
 
     assert state["plan_dir"] == draft_dir(private_dir = tmp_path / PRIVATE_ROOT / "architect_r2")
+    assert state["architecture_file"] == state["plan_dir"] / ARCHITECTURE_FILE_NAME
     assert state["review"].accepted
     assert state["rework"] is None

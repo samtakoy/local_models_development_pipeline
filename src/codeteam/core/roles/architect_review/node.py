@@ -11,7 +11,6 @@ from codeteam.core.roles.architect_review.config import ARCHITECT_REVIEW_ROLE
 from codeteam.core.roles.architect_review.prompts import ARCHITECT_REVIEW_TASK
 from codeteam.core.roles.common import copy_reviewed_draft, make_journal_name, make_rework, next_review_round, \
     read_verdict, role_private_dir_name, run_role
-from codeteam.core.roles.pm import REQUIREMENTS_FILE_NAME
 
 
 def architect_review_node(state: PipelineState, config: RunnableConfig):
@@ -40,7 +39,7 @@ def architect_review_node(state: PipelineState, config: RunnableConfig):
         journal_name = make_journal_name(journal_count = state["journal_count"], private_dir_name = private_dir_name),
         task = ARCHITECT_REVIEW_TASK.format(
             task = state["task"],
-            requirements_file = (requirements_dir / REQUIREMENTS_FILE_NAME).relative_to(project_dir),
+            requirements_file = state["requirements_file"].relative_to(project_dir),
             plan_dir = reviewed_dir.relative_to(project_dir),
         ),
         input_dirs = (requirements_dir, reviewed_dir),

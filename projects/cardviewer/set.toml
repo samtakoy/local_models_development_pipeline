@@ -51,7 +51,5 @@ question = """Нужно сделать локальное веб-приложе
 - все сценарии выше работают из приложения;
 - разбор формата колоды и работа библиотеки покрыты тестами, тесты проходят."""
 
-[review]
-architect = "on"
-developer = "on"
-web_tester = "on"
+[pipeline]
+roles = ["pm", "researcher", "architect", "architect_review", "senior", "developer", "developer_review", "web_tester"]

@@ -1,20 +1,16 @@
-"""Граф пайплайна: кто из агентов за кем идёт и что кому передаётся."""
+"""Граф пайплайна: один узел запускает роли по списку, следующая роль выбирается по состоянию после роли."""
 
-import logging
-from dataclasses import replace
-from pathlib import Path
+from collections.abc import Callable
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
-from codeteam.common.git import commit_all
-from codeteam.core.pipeline.project import ReviewMode, ReviewSettings
 from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState
 from codeteam.core.roles.architect import ARCHITECT_ROLE, architect_node
 from codeteam.core.roles.architect_review import ARCHITECT_REVIEW_ROLE, architect_review_node
-from codeteam.core.roles.common import Route, add_role_exit, parse_stage_number, read_stage_title
+from codeteam.core.roles.common import PipelineError
 from codeteam.core.roles.developer import DEVELOPER_ROLE, developer_node
 from codeteam.core.roles.developer_review import DEVELOPER_REVIEW_ROLE, developer_review_node
 from codeteam.core.roles.pm import PM_ROLE, pm_node
@@ -22,105 +18,178 @@ from codeteam.core.roles.researcher import RESEARCHER_ROLE, researcher_node
 from codeteam.core.roles.senior import SENIOR_ROLE, senior_node
 from codeteam.core.roles.web_tester import WEB_TESTER_ROLE, web_tester_node
 
-logger = logging.getLogger(__name__)
+# Узел графа, который запускает роль из next_role.
+ROLE_NODE_ID = "role"
 
-FINISH_STAGE_NODE_ID = "finish_stage"
+# Узлы ролей по именам ролей: узел запускает агента роли и возвращает обновление состояния.
+ROLE_NODES: dict[str, Callable[[PipelineState, RunnableConfig], dict]] = {
+    PM_ROLE.name: pm_node,
+    RESEARCHER_ROLE.name: researcher_node,
+    ARCHITECT_ROLE.name: architect_node,
+    ARCHITECT_REVIEW_ROLE.name: architect_review_node,
+    SENIOR_ROLE.name: senior_node,
+    DEVELOPER_ROLE.name: developer_node,
+    DEVELOPER_REVIEW_ROLE.name: developer_review_node,
+    WEB_TESTER_ROLE.name: web_tester_node,
+}
+
+# Роли этапа: в списке ролей идут подряд и повторяются для каждого этапа плана архитектора.
+STAGE_ROLE_NAMES = (SENIOR_ROLE.name, DEVELOPER_ROLE.name, DEVELOPER_REVIEW_ROLE.name)
+
+# Последовательность ролей, если файл состава её не задаёт: полный пайплайн.
+DEFAULT_ROLES = (
+    PM_ROLE.name,
+    RESEARCHER_ROLE.name,
+    ARCHITECT_ROLE.name,
+    ARCHITECT_REVIEW_ROLE.name,
+    SENIOR_ROLE.name,
+    DEVELOPER_ROLE.name,
+    DEVELOPER_REVIEW_ROLE.name,
+    WEB_TESTER_ROLE.name,
+)
 
 
-def finish_stage_node(state: PipelineState, config: RunnableConfig):
-    """Коммитит изменения проекта за текущий этап, сбрасывает ревью этапа и переходит к следующему этапу."""
-    cfg: PipelineConfig = config["configurable"][PIPELINE_CFG_NAME]
-    stages = state["stages"]
-    stage_file = stages.current_file
-    message = f"codeteam: этап {parse_stage_number(stage_file = stage_file)} — {read_stage_title(stage_file = stage_file)}"
-    if commit_all(project_dir = Path(cfg.project_path).resolve(), message = message):
-        logger.info(f"[git] коммит: {message}")
-    elif cfg.review.developer != ReviewMode.OFF:
-        logger.info(f"[git] этап {stage_file.name}: после приёмки изменений нет, код уже в коммитах приёмки")
-    else:
-        logger.warning(f"[git] этап {stage_file.name} не изменил проект, коммита нет")
-
-    return {"stages": replace(stages, index = stages.index + 1, plan_dir = None), "review": None}
-
-
-def route_finish_stage(state: PipelineState) -> str:
+def create_pipeline_graph(*, roles: tuple[str, ...]) -> CompiledStateGraph:
     """
-    Ведёт к коммиту этапа после разработчика или приёмщика.
+    Проверяет последовательность ролей и собирает граф пайплайна: один узел запускает роль из next_role
+    и вызывается снова, пока следующая роль есть.
 
-        state: состояние пайплайна.
-
-    Возвращает: Узел коммита этапа.
-    """
-    return FINISH_STAGE_NODE_ID
-
-
-def make_stage_route(*, after_stages: str) -> Route:
-    """
-    Собирает выбор пути после архитектора или после этапа.
-
-        after_stages: узел после последнего этапа: веб-тестировщик или END.
-
-    Возвращает: Выбор пути: узел сеньора, если остались этапы; иначе after_stages.
-    """
-
-    def route_next_stage(state: PipelineState) -> str:
-        """Ведёт к сеньору следующего этапа или, если этапы кончились, к узлу после этапов."""
-        stages = state["stages"]
-        if stages.index < len(stages.files):
-            return SENIOR_ROLE.name
-
-        return after_stages
-
-    return route_next_stage
-
-
-def create_pipeline_graph(*, review: ReviewSettings) -> CompiledStateGraph:
-    """
-    Собирает граф пайплайна: менеджер продукта, исследователь, архитектор, затем по каждому этапу
-    сеньор, разработчик и коммит этапа. Ревьюеры и приёмщик этапа встают после ролей, у которых ревью включено;
-    веб-тестировщик, если включён, — после последнего этапа; если он не принял приложение, команда делает
-    этап исправлений и проверка повторяется.
-
-        review: режимы ревью ролей.
+        roles: последовательность ролей пайплайна.
 
     Возвращает: Граф пайплайна.
     """
+    check_roles(roles = roles)
     workflow: StateGraph = StateGraph(PipelineState) # noqa
-    if review.web_tester == ReviewMode.OFF:
-        route_next_stage = make_stage_route(after_stages = END)
-    else:
-        workflow.add_node(WEB_TESTER_ROLE.name, web_tester_node)
-        # после проверки: этап исправлений, если веб-тестировщик его добавил, иначе конец
-        workflow.add_conditional_edges(WEB_TESTER_ROLE.name, make_stage_route(after_stages = END))
-        route_next_stage = make_stage_route(after_stages = WEB_TESTER_ROLE.name)
-
-    workflow.add_node(PM_ROLE.name, pm_node)
-    workflow.add_node(RESEARCHER_ROLE.name, researcher_node)
-    workflow.add_node(ARCHITECT_ROLE.name, architect_node)
-    workflow.add_node(SENIOR_ROLE.name, senior_node)
-    workflow.add_node(DEVELOPER_ROLE.name, developer_node)
-    workflow.add_node(FINISH_STAGE_NODE_ID, finish_stage_node)
-
-    workflow.add_edge(START, PM_ROLE.name)
-    workflow.add_edge(PM_ROLE.name, RESEARCHER_ROLE.name)
-    workflow.add_edge(RESEARCHER_ROLE.name, ARCHITECT_ROLE.name)
-    add_role_exit(
-        workflow = workflow,
-        mode = review.architect,
-        target = ARCHITECT_ROLE.name,
-        review_name = ARCHITECT_REVIEW_ROLE.name,
-        review_node = architect_review_node,
-        next_route = route_next_stage,
-    )
-    workflow.add_edge(SENIOR_ROLE.name, DEVELOPER_ROLE.name)
-    add_role_exit(
-        workflow = workflow,
-        mode = review.developer,
-        target = DEVELOPER_ROLE.name,
-        review_name = DEVELOPER_REVIEW_ROLE.name,
-        review_node = developer_review_node,
-        next_route = route_finish_stage,
-    )
-    workflow.add_conditional_edges(FINISH_STAGE_NODE_ID, route_next_stage)
+    workflow.add_node(ROLE_NODE_ID, role_node)
+    workflow.add_edge(START, ROLE_NODE_ID)
+    workflow.add_conditional_edges(ROLE_NODE_ID, route_after_role)
 
     return workflow.compile()
+
+
+def check_roles(*, roles: tuple[str, ...]) -> None:
+    """
+    Проверяет последовательность ролей: список не пуст, имена известны и не повторяются, роли этапа идут подряд.
+    Ошибку поднимает PipelineError.
+
+        roles: последовательность ролей пайплайна.
+    """
+    if not roles:
+        raise PipelineError("список ролей пайплайна пуст")
+
+    unknown = [role for role in roles if role not in ROLE_NODES]
+    if unknown:
+        raise PipelineError(f"неизвестные роли: {', '.join(unknown)}; есть роли: {', '.join(ROLE_NODES)}")
+
+    repeated = sorted({role for role in roles if roles.count(role) > 1})
+    if repeated:
+        raise PipelineError(f"роли повторяются в списке: {', '.join(repeated)}")
+
+    stage_positions = _stage_positions(roles = roles)
+    if stage_positions and stage_positions != list(range(stage_positions[0], stage_positions[-1] + 1)):
+        raise PipelineError(f"роли этапа {', '.join(STAGE_ROLE_NAMES)} должны идти в списке подряд")
+
+
+def role_node(state: PipelineState, config: RunnableConfig) -> dict:
+    """
+    Запускает роль из next_role и выбирает следующую роль по состоянию после неё.
+
+        state: состояние пайплайна.
+        config: настройки запуска графа с настройками пайплайна.
+
+    Возвращает: Обновление состояния от роли и следующая роль.
+    """
+    cfg: PipelineConfig = config["configurable"][PIPELINE_CFG_NAME]
+    current = state["next_role"]
+    update = ROLE_NODES[current](state, config)
+    next_role = choose_next_role(roles = cfg.roles, current = current, state = {**state, **update})
+
+    return {**update, "next_role": next_role}
+
+
+def route_after_role(state: PipelineState) -> str:
+    """
+    Ведёт к следующей роли или к концу пайплайна.
+
+        state: состояние пайплайна.
+
+    Возвращает: Узел ролей, если следующая роль есть; иначе END.
+    """
+    if state["next_role"] is None:
+        return END
+
+    return ROLE_NODE_ID
+
+
+def choose_next_role(*, roles: tuple[str, ...], current: str, state: PipelineState) -> str | None:
+    """
+    Выбирает роль после текущей.
+
+    Возврат работы ведёт к ближайшей роли-цели перед текущей. Если следующая по списку роль стоит после ролей
+    этапа или список кончился, а неначатые этапы есть, - к первой роли этапа. Иначе - следующая по списку.
+
+        roles: последовательность ролей пайплайна.
+        current: роль, которая только что отработала.
+        state: состояние пайплайна после неё.
+
+    Возвращает: Имя следующей роли; None, если пайплайн закончен.
+    """
+    position = roles.index(current)
+    rework = state["rework"]
+    if rework is not None:
+        return _nearest_before(roles = roles, position = position, role_name = rework.target)
+
+    following = roles[position + 1] if position + 1 < len(roles) else None
+    stages = state["stages"]
+    if stages is not None and stages.has_unstarted and _is_after_stage_roles(roles = roles, role_name = following):
+        return roles[_stage_positions(roles = roles)[0]]
+
+    return following
+
+
+def _nearest_before(*, roles: tuple[str, ...], position: int, role_name: str) -> str:
+    """
+    Находит роль с именем role_name перед позицией в списке, ближайшую к ней.
+    Ошибку поднимает PipelineError, если такой роли перед позицией нет.
+
+        roles: последовательность ролей пайплайна.
+        position: позиция текущей роли.
+        role_name: имя искомой роли.
+
+    Возвращает: Имя найденной роли.
+    """
+    for candidate in reversed(roles[:position]):
+        if candidate == role_name:
+            return candidate
+
+    raise PipelineError(f"работа возвращена роли {role_name}, но её нет в списке перед ролью {roles[position]}")
+
+
+def _stage_positions(*, roles: tuple[str, ...]) -> list[int]:
+    """
+    Находит позиции ролей этапа в списке.
+
+        roles: последовательность ролей пайплайна.
+
+    Возвращает: Позиции ролей этапа по возрастанию; пустой список, если ролей этапа нет.
+    """
+    return [position for position, role in enumerate(roles) if role in STAGE_ROLE_NAMES]
+
+
+def _is_after_stage_roles(*, roles: tuple[str, ...], role_name: str | None) -> bool:
+    """
+    Проверяет, что роль стоит в списке после ролей этапа.
+
+        roles: последовательность ролей пайплайна.
+        role_name: имя роли; None - конец списка.
+
+    Возвращает: True для конца списка и для роли после ролей этапа; False, если ролей этапа в списке нет.
+    """
+    stage_positions = _stage_positions(roles = roles)
+    if not stage_positions:
+        return False
+
+    if role_name is None:
+        return True
+
+    return roles.index(role_name) > stage_positions[-1]

@@ -10,7 +10,6 @@ from codeteam.core.roles.architect.config import ARCHITECT_ROLE, ARCHITECTURE_FI
 from codeteam.core.roles.architect.prompts import ARCHITECT_FIX_TASK, ARCHITECT_TASK
 from codeteam.core.roles.common import STAGE_FILE_PATTERN, PipelineError, make_journal_name, rework_for, \
     role_private_dir_name, run_role
-from codeteam.core.roles.pm import REQUIREMENTS_FILE_NAME
 
 
 def architect_node(state: PipelineState, config: RunnableConfig):
@@ -22,7 +21,7 @@ def architect_node(state: PipelineState, config: RunnableConfig):
     project_dir = Path(cfg.project_path).resolve()
     requirements_dir = state["requirements_dir"]
     research_dir = state["research_dir"]
-    requirements_file = (requirements_dir / REQUIREMENTS_FILE_NAME).relative_to(project_dir)
+    requirements_file = state["requirements_file"].relative_to(project_dir)
     private_dir_name = role_private_dir_name(
         project_dir = project_dir,
         parent = Path("."),
@@ -61,7 +60,8 @@ def architect_node(state: PipelineState, config: RunnableConfig):
 
     return {
         "plan_dir": plan_dir,
-        "stages": Stages(files = find_stage_files(plan_dir = plan_dir), index = 0, plan_dir = None, fix_rounds = 0),
+        "architecture_file": plan_dir / ARCHITECTURE_FILE_NAME,
+        "stages": Stages(files = find_stage_files(plan_dir = plan_dir), started = 0, plan_dir = None, fix_rounds = 0),
         "rework": None,
         "journal_count": state["journal_count"] + 1,
     }
