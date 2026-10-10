@@ -8,7 +8,7 @@ from pathspec import GitIgnoreSpec
 
 from codeteam.common.files import IgnoreRules
 from codeteam.core.agent.workspace import PathOutsideWorkspace, Workspace
-from codeteam.core.tools.files._hints import PATH_HINT
+from codeteam.core.tools.files.common_prompts import FILE_NOT_FOUND_ERROR, HIDDEN_PATH_ERROR, PATH_ACCESS_ERROR
 
 # Группа в фигурных скобках без вложенных скобок внутри.
 _BRACE_GROUP_PATTERN = re.compile(r"\{([^{}]*)\}")
@@ -28,12 +28,12 @@ def resolve_visible_path(*, workspace: Workspace, ignore_rules: IgnoreRules, pat
     try:
         resolved = workspace.resolve_readable(path = path)
     except PathOutsideWorkspace as error:
-        raise ToolException(f"Ошибка: {error}") from error
+        raise ToolException(PATH_ACCESS_ERROR.format(error = error)) from error
 
     refuse_hidden_path(workspace = workspace, ignore_rules = ignore_rules, path = resolved)
     if not resolved.exists():
         shown_path = workspace.display_path(path = resolved)
-        raise ToolException(f"Ошибка: файл не найден: {shown_path}. {PATH_HINT}")
+        raise ToolException(FILE_NOT_FOUND_ERROR.format(shown_path = shown_path))
 
     return resolved
 
@@ -50,9 +50,7 @@ def refuse_hidden_path(*, workspace: Workspace, ignore_rules: IgnoreRules, path:
     """
     if ignore_rules.is_closed(path = path):
         shown_path = workspace.display_path(path = path)
-        raise ToolException(
-            f"Ошибка: {shown_path} закрыт для агента правилами проекта"
-        )
+        raise ToolException(HIDDEN_PATH_ERROR.format(shown_path = shown_path))
 
 
 def compile_path_mask(*, mask: str) -> GitIgnoreSpec:

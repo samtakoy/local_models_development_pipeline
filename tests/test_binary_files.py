@@ -8,7 +8,7 @@ from langchain_core.tools import BaseTool
 from codeteam.common.files import decode_text
 from codeteam.core.agent.workspace import Workspace
 from codeteam.core.tools.files import SeenFiles, build_file_tools
-from codeteam.core.tools.files._hints import NOT_TEXT_REFUSAL
+from codeteam.core.tools.files.common_prompts import NOT_TEXT_REFUSAL
 
 # Файл с нулевым байтом: в кодировке utf-8 он допустим, но по правилу он двоичный.
 NULL_BYTE_CONTENT = b"name\0value\n"

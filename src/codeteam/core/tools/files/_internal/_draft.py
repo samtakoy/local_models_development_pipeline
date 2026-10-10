@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from codeteam.core.agent.workspace import DRAFT_SECTION_PATTERN, Workspace
-from codeteam.core.tools.files._hints import CONTEXT_IN_DRAFT_REFUSAL, NOT_DRAFT_SECTION_REFUSAL
+from codeteam.core.tools.files.common_prompts import CONTEXT_IN_DRAFT_REFUSAL, NOT_DRAFT_SECTION_REFUSAL
 
 
 def draft_file_refusal(*, workspace: Workspace, path: Path) -> str | None:

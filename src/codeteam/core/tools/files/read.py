@@ -18,7 +18,7 @@ from codeteam.common.files import (
     split_lines,
 )
 from codeteam.core.agent.workspace import Workspace
-from codeteam.core.tools.files._hints import NOT_TEXT_REFUSAL
+from codeteam.core.tools.files.common_prompts import NOT_TEXT_REFUSAL
 from codeteam.core.tools.files._internal._paths import resolve_visible_path
 from codeteam.core.tools.files._internal._seen_files import SeenFiles
 from codeteam.core.tools.files._internal.format import format_header, parse_header

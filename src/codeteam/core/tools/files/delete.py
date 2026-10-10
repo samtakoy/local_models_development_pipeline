@@ -7,15 +7,16 @@ from pydantic import BaseModel, Field
 
 from codeteam.common.files import IgnoreRules
 from codeteam.core.agent.workspace import PathOutsideWorkspace, Workspace
-from codeteam.core.tools.files._hints import PATH_HINT
+from codeteam.core.tools.files.common_prompts import FILE_NOT_FOUND_ERROR, PATH_ACCESS_ERROR
+from codeteam.core.tools.files.delete_prompts import (
+    DELETE_DESCRIPTION,
+    DELETE_DIRECTORY_ERROR,
+    DELETE_FILE_PATH_DESCRIPTION,
+)
 from codeteam.core.tools.files._internal._paths import refuse_hidden_path
 
 # Имя инструмента удаления файла.
 DELETE_TOOL_NAME = "delete"
-
-DELETE_DESCRIPTION = """Удаляет файл. Папки не удаляет.
-Удаляет только там, где разрешена запись.
-Закрытые файлы проекта (.env, личные папки других агентов) не удаляет."""
 
 
 class DeleteArguments(BaseModel):
@@ -23,7 +24,7 @@ class DeleteArguments(BaseModel):
     Аргументы delete.
     """
 
-    file_path: str = Field(description = "путь файла, абсолютный или относительно папки проекта")
+    file_path: str = Field(description = DELETE_FILE_PATH_DESCRIPTION)
 
 
 def build_delete_tool(*, workspace: Workspace, ignore_rules: IgnoreRules) -> BaseTool:
@@ -47,7 +48,7 @@ def build_delete_tool(*, workspace: Workspace, ignore_rules: IgnoreRules) -> Bas
         try:
             path = workspace.resolve_writable(path = file_path)
         except PathOutsideWorkspace as error:
-            raise ToolException(f"Ошибка: {error}") from error
+            raise ToolException(PATH_ACCESS_ERROR.format(error = error)) from error
 
         refuse_hidden_path(workspace = workspace, ignore_rules = ignore_rules, path = path)
 
@@ -73,10 +74,10 @@ def _delete(*, workspace: Workspace, path: Path) -> str:
     """
     shown_path = workspace.display_path(path = path)
     if path.is_dir():
-        raise ToolException(f"Ошибка: {shown_path} — папка, delete удаляет только файлы")
+        raise ToolException(DELETE_DIRECTORY_ERROR.format(shown_path = shown_path))
 
     if not path.is_file():
-        raise ToolException(f"Ошибка: файл не найден: {shown_path}. {PATH_HINT}")
+        raise ToolException(FILE_NOT_FOUND_ERROR.format(shown_path = shown_path))
 
     path.unlink()
 

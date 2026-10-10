@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 from codeteam.common.files import decode_text, number_lines
 from codeteam.core.agent.workspace import PathOutsideWorkspace, Workspace
-from codeteam.core.tools.files._hints import NOT_TEXT_REFUSAL, PATH_HINT
+from codeteam.core.tools.files.common_prompts import NOT_TEXT_REFUSAL, PATH_HINT
 from codeteam.core.tools.files._internal._seen_files import SeenFiles
 from codeteam.core.tools.files.read import (
     READ_CHARACTER_LIMIT,
