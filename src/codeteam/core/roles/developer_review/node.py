@@ -14,7 +14,7 @@ from codeteam.core.roles.common import STAGE_TASK_DIR_NAME, build_stage_dir_name
     run_role, tracked_changes_check
 from codeteam.core.roles.developer import DEVELOPER_ROLE
 from codeteam.core.roles.developer_review.config import DEVELOPER_REVIEW_ROLE
-from codeteam.core.roles.developer_review.prompts import DEVELOPER_REVIEW_TASK
+from codeteam.core.roles.developer_review.prompts import DEVELOPER_REVIEW_TASK, TRACKED_CHANGES_REMARK
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,10 @@ def developer_review_node(state: PipelineState, config: RunnableConfig):
     # проверки правок проекта знают папку проекта только при запуске, поэтому добавляются к описанию роли здесь
     guarded_role = replace(
         DEVELOPER_REVIEW_ROLE,
-        step_checks = (*DEVELOPER_REVIEW_ROLE.step_checks, tracked_changes_check(project_dir = project_dir)),
+        step_checks = (*DEVELOPER_REVIEW_ROLE.step_checks, tracked_changes_check(
+            project_dir = project_dir,
+            remark = TRACKED_CHANGES_REMARK,
+        )),
         answer_checks = (*DEVELOPER_REVIEW_ROLE.answer_checks, clean_project_check(project_dir = project_dir)),
     )
     remarks_dir = run_role(

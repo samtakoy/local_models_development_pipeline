@@ -1,38 +1,37 @@
-"""Охрана проекта от правок роли, которая только проверяет: замечания, если она изменила файлы проекта."""
+"""Охрана проекта от правок роли, которая только проверяет: откат изменённых файлов проекта и замечания."""
 
 from pathlib import Path
 
-from codeteam.common.git import UNTRACKED_STATUS, list_uncommitted_changes
+from codeteam.common.git import UNTRACKED_STATUS, list_uncommitted_changes, restore_paths
 from codeteam.core.agent.answer_checks import AnswerCheck
 from codeteam.core.agent.step_hooks import StepCheck
-from codeteam.core.roles.common.prompts import PROJECT_CHANGES_REMARK, TRACKED_CHANGES_REMARK
+from codeteam.core.roles.common.prompts import PROJECT_CHANGES_REMARK
 
 
-def tracked_changes_check(*, project_dir: Path) -> StepCheck:
+def tracked_changes_check(*, project_dir: Path, remark: str) -> StepCheck:
     """
-    Собирает проверку после шага: роль изменила отслеживаемые файлы проекта.
+    Собирает проверку после шага: роль изменила отслеживаемые файлы проекта. Изменённые файлы
+    возвращаются к последнему коммиту, замечание называет их.
 
-    Проект на начало работы роли должен быть закоммичен. О каждом изменённом файле замечание пишется
-    один раз, пока файл не вернётся к закоммиченному состоянию.
+    Проект на начало работы роли должен быть закоммичен.
 
         project_dir: папка проекта.
+        remark: текст замечания роли с заготовкой {paths} - изменённые файлы через запятую.
 
     Возвращает: Проверку после шага.
     """
-    reported_paths: set[str] = set()
 
     def check() -> str | None:
-        """Находит отслеживаемые файлы, изменённые после последнего замечания."""
-        changed_paths = {
+        """Возвращает к коммиту изменённые отслеживаемые файлы проекта."""
+        changed_paths = tuple(sorted(
             path for status, path in list_uncommitted_changes(project_dir = project_dir) if status != UNTRACKED_STATUS
-        }
-        new_paths = sorted(changed_paths - reported_paths)
-        reported_paths.clear()
-        reported_paths.update(changed_paths)
-        if not new_paths:
+        ))
+        if not changed_paths:
             return None
 
-        return TRACKED_CHANGES_REMARK.format(paths = ", ".join(new_paths))
+        restore_paths(project_dir = project_dir, paths = changed_paths)
+
+        return remark.format(paths = ", ".join(changed_paths))
 
     return check
 

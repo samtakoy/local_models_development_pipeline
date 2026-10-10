@@ -9,6 +9,7 @@ from codeteam.common.git.repo import (
     init_repository,
     is_repository,
     list_uncommitted_changes,
+    restore_paths,
 )
 
 __all__ = [
@@ -20,4 +21,5 @@ __all__ = [
     "init_repository",
     "is_repository",
     "list_uncommitted_changes",
+    "restore_paths",
 ]

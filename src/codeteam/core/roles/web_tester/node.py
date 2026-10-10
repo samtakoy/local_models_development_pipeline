@@ -13,7 +13,7 @@ from codeteam.core.roles.common import clean_project_check, make_journal_name, r
     tracked_changes_check
 from codeteam.core.roles.pm import REQUIREMENTS_FILE_NAME
 from codeteam.core.roles.web_tester.config import WEB_TESTER_ROLE
-from codeteam.core.roles.web_tester.prompts import FIX_STAGE_TEXT, WEB_TESTER_TASK
+from codeteam.core.roles.web_tester.prompts import FIX_STAGE_TEXT, TRACKED_CHANGES_REMARK, WEB_TESTER_TASK
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,10 @@ def web_tester_node(state: PipelineState, config: RunnableConfig):
     # проверки правок проекта знают папку проекта только при запуске, поэтому добавляются к описанию роли здесь
     guarded_role = replace(
         WEB_TESTER_ROLE,
-        step_checks = (*WEB_TESTER_ROLE.step_checks, tracked_changes_check(project_dir = project_dir)),
+        step_checks = (*WEB_TESTER_ROLE.step_checks, tracked_changes_check(
+            project_dir = project_dir,
+            remark = TRACKED_CHANGES_REMARK,
+        )),
         answer_checks = (*WEB_TESTER_ROLE.answer_checks, clean_project_check(project_dir = project_dir)),
     )
     private_dir_name = Path(WEB_TESTER_ROLE.name) / f"round_{test_round}"

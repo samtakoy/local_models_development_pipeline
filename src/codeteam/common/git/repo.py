@@ -87,6 +87,16 @@ def commit_paths(*, project_dir: Path, paths: tuple[str, ...], message: str) -> 
     _run_git(project_dir = project_dir, arguments = ["commit", "-m", message, "--", *paths])
 
 
+def restore_paths(*, project_dir: Path, paths: tuple[str, ...]) -> None:
+    """
+    Возвращает файлы к последнему коммиту: содержимое и индекс.
+
+        project_dir: папка проекта.
+        paths: пути отслеживаемых файлов относительно папки проекта.
+    """
+    _run_git(project_dir = project_dir, arguments = ["checkout", "HEAD", "--", *paths])
+
+
 def _has_staged_changes(*, project_dir: Path) -> bool:
     """
     Проверяет, есть ли в индексе изменения для коммита.
