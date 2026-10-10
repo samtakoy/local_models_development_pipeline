@@ -20,7 +20,30 @@ from pydantic import BaseModel, Field
 from codeteam.common.shell import CommandHost, CommandHostRestarted, ShellProcesses
 from codeteam.common.shell.processes import is_process_group_alive
 from codeteam.core.agent.workspace import Workspace
-from codeteam.core.tools.shell.bash import BASH_HOST_RESTARTED_REFUSAL
+from codeteam.core.tools.shell.common_prompts import HOST_RESTARTED_REFUSAL, TIMEOUT_RANGE_ERROR
+from codeteam.core.tools.shell.start_service_prompts import (
+    START_SERVICE_COMMAND_DESCRIPTION,
+    START_SERVICE_DESCRIPTION,
+    START_SERVICE_EMPTY_LOG_NOTE,
+    START_SERVICE_EMPTY_LOG_TAIL,
+    START_SERVICE_EXITED_ERROR,
+    START_SERVICE_LAUNCH_ERROR,
+    START_SERVICE_LOG_PATH,
+    START_SERVICE_LOG_PATTERN_DESCRIPTION,
+    START_SERVICE_LOG_PATTERN_ERROR,
+    START_SERVICE_LOG_TAIL,
+    START_SERVICE_NO_READY_CONDITION_ERROR,
+    START_SERVICE_NOT_READY,
+    START_SERVICE_PATTERN_NOT_FOUND,
+    START_SERVICE_PORT_BUSY_ERROR,
+    START_SERVICE_PORT_CLOSED,
+    START_SERVICE_PORT_DESCRIPTION,
+    START_SERVICE_PORT_OPEN,
+    START_SERVICE_READY,
+    START_SERVICE_STOP_HINT,
+    START_SERVICE_STOPPED_OWN_NOTE,
+    START_SERVICE_TIMEOUT_DESCRIPTION,
+)
 from codeteam.core.tools.shell._internal.output_file import new_output_file
 
 # Имя инструмента запуска служб.
@@ -53,38 +76,20 @@ SERVICE_LOG_DIR_NAME = "services"
 # Сколько последних строк лога показывать агенту.
 LOG_TAIL_LINES = 20
 
-START_SERVICE_DESCRIPTION = """Запускает долго работающую программу (сервер, службу) в фоне и ждёт, пока она будет готова.
-
-Пример: start_service(command = "uv run python app.py", port = 8050)
-
-Команда запускается так же, как в bash: в папке проекта, с теми же правами. Вывод пишется в файл лога.
-Готовность проверяется по port (порт открыт на 127.0.0.1) или по log_pattern (в выводе появилась
-строка под это регулярное выражение). Укажи хотя бы одно; если указаны оба — ждём оба.
-Если служба слушает порт — всегда указывай port: инструмент проверит, что порт свободен.
-Если port занят твоим процессом (запущенным через bash или start_service), инструмент остановит его и запустит службу:
-так перезапускай службу после правки кода.
-Служба работает между вызовами и останавливается, когда ты закончишь работу.
-
-Обращайся к службе по 127.0.0.1. Остановить — инструментом stop_process с номером процесса.
-Лог читай инструментом read: путь к нему — в ответе."""
-
-
 class StartServiceArguments(BaseModel):
     """
     Аргументы start_service.
     """
 
-    command: str = Field(
-        description = "команда запуска службы, без перенаправления вывода (> файл): вывод в лог пишет сам инструмент"
-    )
-    port: int | None = Field(default = None, description = "порт, который служба откроет на 127.0.0.1")
-    log_pattern: str | None = Field(
-        default = None,
-        description = "регулярное выражение строки вывода, после которой служба готова",
-    )
+    command: str = Field(description = START_SERVICE_COMMAND_DESCRIPTION)
+    port: int | None = Field(default = None, description = START_SERVICE_PORT_DESCRIPTION)
+    log_pattern: str | None = Field(default = None, description = START_SERVICE_LOG_PATTERN_DESCRIPTION)
     timeout_seconds: int | None = Field(
         default = None,
-        description = f"сколько ждать готовности в секундах, по умолчанию {READY_TIMEOUT_SECONDS}, не больше {READY_TIMEOUT_LIMIT_SECONDS}",
+        description = START_SERVICE_TIMEOUT_DESCRIPTION.format(
+            default_seconds = READY_TIMEOUT_SECONDS,
+            limit_seconds = READY_TIMEOUT_LIMIT_SECONDS,
+        ),
     )
 
 
@@ -122,25 +127,18 @@ def build_start_service_tool(*, workspace: Workspace, processes: ShellProcesses,
         """
         timeout = READY_TIMEOUT_SECONDS if timeout_seconds is None else timeout_seconds
         if not 1 <= timeout <= READY_TIMEOUT_LIMIT_SECONDS:
-            raise ToolException(f"Ошибка: timeout_seconds должен быть от 1 до {READY_TIMEOUT_LIMIT_SECONDS}")
+            raise ToolException(TIMEOUT_RANGE_ERROR.format(limit = READY_TIMEOUT_LIMIT_SECONDS))
         if port is None and not log_pattern:
-            raise ToolException(
-                "Ошибка: укажи, по чему понять, что служба готова: port — порт, который она откроет "
-                "(например port = 8050; обычно этого достаточно), или log_pattern — регулярное выражение "
-                "строки, которую служба выводит, когда готова."
-            )
+            raise ToolException(START_SERVICE_NO_READY_CONDITION_ERROR)
         try:
             pattern = re.compile(log_pattern) if log_pattern else None
         except re.error as error:
-            raise ToolException(f"Ошибка: log_pattern — неверное регулярное выражение: {error}") from error
+            raise ToolException(START_SERVICE_LOG_PATTERN_ERROR.format(error = error)) from error
         stopped_notice = ""
         if port is not None and _is_port_open(port = port):
             stopped_notice = _stop_own_listeners(port = port, processes = processes)
         if port is not None and _is_port_open(port = port):
-            raise ToolException(
-                f"Ошибка: порт {port} уже занят другой программой, служба не запущена. "
-                f"Запусти службу на другом порту."
-            )
+            raise ToolException(START_SERVICE_PORT_BUSY_ERROR.format(port = port))
 
         log_path = new_output_file(workspace = workspace, dir_name = SERVICE_LOG_DIR_NAME, prefix = "service_")
         shown_log = workspace.display_path(path = log_path)
@@ -151,14 +149,14 @@ def build_start_service_tool(*, workspace: Workspace, processes: ShellProcesses,
                 timeout_seconds = LAUNCH_TIMEOUT_SECONDS,
             )
         except CommandHostRestarted as error:
-            raise ToolException(BASH_HOST_RESTARTED_REFUSAL) from error
+            raise ToolException(HOST_RESTARTED_REFUSAL) from error
         processes.remember(
             process_group_id = result.process_group_id,
             background_process_id = result.background_process_id,
             command = command,
         )
         if result.exit_code != 0 or result.background_process_id is None:
-            raise ToolException(f"{stopped_notice}Ошибка: служба не запущена.\n{result.output}")
+            raise ToolException(stopped_notice + START_SERVICE_LAUNCH_ERROR.format(output = result.output))
 
         # номер, который видит агент: процесс службы, запущенный в фоне ($!)
         process_id = result.background_process_id
@@ -167,18 +165,16 @@ def build_start_service_tool(*, workspace: Workspace, processes: ShellProcesses,
         deadline = time.monotonic() + timeout
         while True:
             if _is_ready(port = port, pattern = pattern, log_path = log_path):
-                return (
-                    f"{stopped_notice}"
-                    f"Служба готова: процесс {process_id}, лог {shown_log}.\n"
-                    f"Остановить: stop_process(pid = {process_id}).\n"
-                    f"Последние строки лога:\n{_log_tail(log_path = log_path)}"
-                )
+                return stopped_notice + "\n".join([
+                    START_SERVICE_READY.format(process_id = process_id, shown_log = shown_log),
+                    START_SERVICE_STOP_HINT.format(process_id = process_id),
+                    START_SERVICE_LOG_TAIL.format(log_tail = _log_tail(log_path = log_path)),
+                ])
             if not is_process_group_alive(process_group_id = process_group_id):
-                raise ToolException(
-                    f"{stopped_notice}"
-                    f"Служба не запустилась — процесс {process_id} завершился. Лог {shown_log}.\n"
-                    f"Последние строки лога:\n{_log_tail(log_path = log_path)}"
-                )
+                raise ToolException(stopped_notice + "\n".join([
+                    START_SERVICE_EXITED_ERROR.format(process_id = process_id, shown_log = shown_log),
+                    START_SERVICE_LOG_TAIL.format(log_tail = _log_tail(log_path = log_path)),
+                ]))
             if time.monotonic() >= deadline:
                 return stopped_notice + _not_ready_answer(
                     timeout = timeout,
@@ -276,23 +272,23 @@ def _not_ready_answer(
     Возвращает: Состояние условий готовности, где искать вывод службы и как её остановить.
     """
     log_text = log_path.read_text(encoding = "utf-8", errors = "replace")
-    lines = [f"Процесс {process_id} работает, но за {timeout} с условия готовности не выполнены."]
+    lines = [START_SERVICE_NOT_READY.format(process_id = process_id, timeout = timeout)]
 
     if port is not None:
         if _is_port_open(port = port):
-            lines.append(f"Порт {port} открыт.")
+            lines.append(START_SERVICE_PORT_OPEN.format(port = port))
         else:
-            lines.append(f"Порт {port} закрыт.")
+            lines.append(START_SERVICE_PORT_CLOSED.format(port = port))
 
     if not log_text:
-        lines.append("Лог пуст: если в command есть перенаправление вывода (> файл), вывод ушёл в этот файл — читай его.")
+        lines.append(START_SERVICE_EMPTY_LOG_NOTE)
     else:
         if pattern is not None and pattern.search(log_text) is None:
-            lines.append("Строка log_pattern в логе не найдена.")
-        lines.append(f"Лог {shown_log}.")
-        lines.append(f"Последние строки лога:\n{_log_tail(log_path = log_path)}")
+            lines.append(START_SERVICE_PATTERN_NOT_FOUND)
+        lines.append(START_SERVICE_LOG_PATH.format(shown_log = shown_log))
+        lines.append(START_SERVICE_LOG_TAIL.format(log_tail = _log_tail(log_path = log_path)))
 
-    lines.append(f"Остановить: stop_process(pid = {process_id}).")
+    lines.append(START_SERVICE_STOP_HINT.format(process_id = process_id))
 
     return "\n".join(lines)
 
@@ -313,8 +309,10 @@ def _stop_own_listeners(*, port: int, processes: ShellProcesses) -> str:
             continue
 
         processes.kill_group_of(process_id = listener_id)
-        stopped_notice += (
-            f"На порту {port} работал твой процесс {own_process.process_id} ({own_process.command}), он остановлен.\n"
+        stopped_notice += START_SERVICE_STOPPED_OWN_NOTE.format(
+            port = port,
+            process_id = own_process.process_id,
+            command = own_process.command,
         )
 
     if stopped_notice:
@@ -380,6 +378,6 @@ def _log_tail(*, log_path: Path) -> str:
     """
     lines = log_path.read_text(encoding = "utf-8", errors = "replace").splitlines()
     if not lines:
-        return "(лог пуст)"
+        return START_SERVICE_EMPTY_LOG_TAIL
 
     return "\n".join(lines[-LOG_TAIL_LINES:])

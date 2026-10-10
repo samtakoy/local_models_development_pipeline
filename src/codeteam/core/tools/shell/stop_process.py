@@ -4,16 +4,19 @@ from langchain_core.tools import BaseTool, StructuredTool, ToolException
 from pydantic import BaseModel, Field
 
 from codeteam.common.shell import ShellProcess, ShellProcesses
+from codeteam.core.tools.shell.stop_process_prompts import (
+    STOP_PROCESS_DESCRIPTION,
+    STOP_PROCESS_LINE,
+    STOP_PROCESS_NONE_RUNNING,
+    STOP_PROCESS_PID_DESCRIPTION,
+    STOP_PROCESS_STOPPED_ALL,
+    STOP_PROCESS_STOPPED_ONE,
+    STOP_PROCESS_UNKNOWN_ERROR,
+    STOP_PROCESS_UNKNOWN_WITH_LIST_ERROR,
+)
 
 # Имя инструмента остановки фоновых процессов.
 STOP_PROCESS_TOOL_NAME = "stop_process"
-
-STOP_PROCESS_DESCRIPTION = """Останавливает фоновый процесс, который ты запустил через bash или start_service.
-
-Свой процесс можно остановить.
-Чужие процессы остановить нельзя: ни через bash, ни этим инструментом.
-
-Останавливается процесс и всё, что запущено вместе с ним одной командой."""
 
 
 class StopProcessArguments(BaseModel):
@@ -21,13 +24,7 @@ class StopProcessArguments(BaseModel):
     Аргументы stop_process.
     """
 
-    pid: int | None = Field(
-        default = None,
-        description = (
-            "номер процесса; не указан - остановить все твои фоновые процессы. "
-            "Номер выводи при запуске: команда > файл 2>&1 & echo $!"
-        ),
-    )
+    pid: int | None = Field(default = None, description = STOP_PROCESS_PID_DESCRIPTION)
 
 
 def build_stop_process_tool(*, processes: ShellProcesses) -> BaseTool:
@@ -51,14 +48,14 @@ def build_stop_process_tool(*, processes: ShellProcesses) -> BaseTool:
             alive = processes.alive_processes()
             processes.kill_all()
             if not alive:
-                return "Работающих фоновых процессов не было."
+                return STOP_PROCESS_NONE_RUNNING
 
-            return "Остановлены процессы:\n" + _show_processes(processes = alive)
+            return STOP_PROCESS_STOPPED_ALL.format(processes = _show_processes(processes = alive))
 
         if not processes.kill_group_of(process_id = pid):
             raise ToolException(_refusal(pid = pid, alive = processes.alive_processes()))
 
-        return f"Остановлен процесс {pid} и всё, что запущено с ним в том же вызове bash."
+        return STOP_PROCESS_STOPPED_ONE.format(pid = pid)
 
     return StructuredTool.from_function(
         func = stop_process,
@@ -78,16 +75,10 @@ def _refusal(*, pid: int, alive: list[ShellProcess]) -> str:
 
     Возвращает: Текст отказа со списком работающих фоновых процессов агента.
     """
-    refusal = f"Ошибка: процесса {pid} нет среди твоих работающих фоновых процессов."
     if not alive:
-        return refusal + " Работающих фоновых процессов у тебя нет."
+        return STOP_PROCESS_UNKNOWN_ERROR.format(pid = pid)
 
-    return (
-        refusal
-        + " Твои фоновые процессы:\n"
-        + _show_processes(processes = alive)
-        + "\nВызови stop_process с номером из списка или без pid, чтобы остановить все."
-    )
+    return STOP_PROCESS_UNKNOWN_WITH_LIST_ERROR.format(pid = pid, processes = _show_processes(processes = alive))
 
 
 def _show_processes(*, processes: list[ShellProcess]) -> str:
@@ -98,4 +89,7 @@ def _show_processes(*, processes: list[ShellProcess]) -> str:
 
     Возвращает: Строки процессов через перевод строки.
     """
-    return "\n".join(f"- {process.process_id}: {process.command}" for process in processes)
+    return "\n".join(
+        STOP_PROCESS_LINE.format(process_id = process.process_id, command = process.command)
+        for process in processes
+    )
