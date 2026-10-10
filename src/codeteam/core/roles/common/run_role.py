@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from codeteam.common.shell import ShellProcesses
 from codeteam.core.agent.role import AgentRole
 from codeteam.core.agent.run_agent import run_agent
 from codeteam.core.pipeline.state import PipelineConfig
@@ -53,11 +54,14 @@ def run_role(
         answer_checks = role.answer_checks,
     )
 
+    # Фоновые процессы команд агента: общий учёт для его инструментов и помощников
+    shell_processes = ShellProcesses()
     caller_context = CallerContext(
         cfg = cfg,
         caller_name = role.name,
         caller_private_dir_name = private_dir_name,
         caller_journal_name = journal_name,
+        shell_processes = shell_processes,
     )
     helper_tools = [
         tool for build_tool in role.helper_tools if (tool := build_tool(caller_context)) is not None
@@ -74,6 +78,7 @@ def run_role(
             extra_writable_dirs = extra_writable_dirs,
             extra_command_writable_dirs = extra_command_writable_dirs,
             extra_tools = (*helper_tools, *mcp_tools),
+            shell_processes = shell_processes,
             journal_path = cfg.run_dir / f"{journal_name}.md",
             settings = cfg.settings,
         )

@@ -46,6 +46,7 @@ def run_agent(
     extra_writable_dirs: tuple[Path, ...],
     extra_command_writable_dirs: tuple[Path, ...],
     extra_tools: tuple[BaseTool, ...],
+    shell_processes: ShellProcesses,
     journal_path: Path,
     settings: Settings,
 ) -> Path:
@@ -67,6 +68,8 @@ def run_agent(
         extra_tools: инструменты, собранные вне ядра агента: помощники-агенты, инструменты серверов MCP;
             в фазе черновика вместо них заглушки с отказом. Почему отдельно: в этих инструментах сидят другие агенты-помощники
             и передать их стандартно не получится: будет циклическая зависимость
+        shell_processes: учёт фоновых процессов команд bash и start_service агента; процессы снимаются,
+            когда агент закончит работу.
         journal_path: файл журнала агента.
         settings: настройки приложения.
 
@@ -105,8 +108,6 @@ def run_agent(
     )
     # Рабочее место команд bash и start_service: папки записи фазы работы и папки, открытые только командам
     command_workspace = replace(workspace, writable_dirs = (*workspace.writable_dirs, *extra_command_writable_dirs))
-    # Фоновые процессы команд bash агента: снимаются, когда агент закончит работу
-    shell_processes = ShellProcesses()
     # Хозяин команд агента: одна песочница на все команды bash и службы агента
     command_host = CommandHost(write_roots = command_workspace.writable_dirs, processes = shell_processes)
     # Остановка фоновых процессов агента: одна и та же в фазе работы и в фазе черновика

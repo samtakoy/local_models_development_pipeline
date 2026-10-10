@@ -1,6 +1,8 @@
 """Тесты инструмента check_in_browser: проверка адреса до запуска помощника, папки и журналы помощника, ответ, предел."""
 
 import socket
+import subprocess
+import sys
 import threading
 import time
 from collections.abc import Iterator
@@ -10,12 +12,14 @@ from pathlib import Path
 import pytest
 from langchain_core.tools import BaseTool
 
+from codeteam.common.shell import ShellProcesses
 from codeteam.core.agent.workspace import PRIVATE_ROOT, draft_dir
 from codeteam.core.pipeline.state import PipelineConfig
 from codeteam.core.roles.browser_checker import OBSERVATIONS_FILE_NAME, build_check_in_browser_tool
 from codeteam.core.roles.browser_checker import tool as tool_module
 from codeteam.core.roles.browser_checker.tool import BROWSER_CHECK_CALL_LIMIT
 from codeteam.core.roles.common import CallerContext
+from tests.shell_helpers import wait_port_open
 
 # Личная папка и журнал спрашивающего агента.
 CALLER_DIR_NAME = Path("stage_10/developer_review_r1")
@@ -23,6 +27,24 @@ CALLER_JOURNAL_NAME = "12_stage_10_developer_review_r1"
 
 # Наблюдения, которые пишет заглушка помощника.
 OBSERVATIONS = "Открыл главную: видна таблица.\n"
+
+# Программа приложения теста: на любой запрос отвечает ошибкой 500; порт - первый аргумент.
+ERROR_PAGE_APP = """
+import http.server
+import sys
+
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(500)
+        self.end_headers()
+
+    def log_message(self, format, *args):
+        pass
+
+
+http.server.HTTPServer(("127.0.0.1", int(sys.argv[1])), Handler).serve_forever()
+"""
 
 
 class ErrorPageHandler(BaseHTTPRequestHandler):
@@ -77,12 +99,13 @@ def fake_run_role(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FakeRunRol
     return fake
 
 
-def _caller_context(*, project_dir: Path, browser_check: bool) -> CallerContext:
+def _caller_context(*, project_dir: Path, browser_check: bool, processes: ShellProcesses) -> CallerContext:
     """
     Собирает приёмщика этапа, который просит проверку в браузере.
 
         project_dir: папка проекта.
         browser_check: проверка в браузере из файла состава.
+        processes: учёт фоновых процессов приёмщика.
 
     Возвращает: Агента, для которого собирается инструмент.
     """
@@ -98,30 +121,62 @@ def _caller_context(*, project_dir: Path, browser_check: bool) -> CallerContext:
         caller_name = "developer_review",
         caller_private_dir_name = CALLER_DIR_NAME,
         caller_journal_name = CALLER_JOURNAL_NAME,
+        shell_processes = processes,
     )
 
 
 @pytest.fixture
-def check_tool(tmp_path: Path) -> BaseTool:
+def processes() -> Iterator[ShellProcesses]:
+    """
+    Учёт фоновых процессов приёмщика; после теста все процессы снимаются.
+
+    Возвращает: Учёт фоновых процессов.
+    """
+    shell_processes = ShellProcesses()
+    yield shell_processes
+    shell_processes.kill_all()
+
+
+@pytest.fixture
+def check_tool(tmp_path: Path, processes: ShellProcesses) -> BaseTool:
     """
     Инструмент check_in_browser приёмщика этапа в папке проекта теста.
 
     Возвращает: Инструмент.
     """
-    return build_check_in_browser_tool(_caller_context(project_dir = tmp_path, browser_check = True))
+    return build_check_in_browser_tool(_caller_context(project_dir = tmp_path, browser_check = True, processes = processes))
 
 
-def test_browser_check_off_no_tool(tmp_path: Path) -> None:
+def test_browser_check_off_no_tool(tmp_path: Path, processes: ShellProcesses) -> None:
     """
     Проверка в браузере выключена - инструмента нет.
     """
-    assert build_check_in_browser_tool(_caller_context(project_dir = tmp_path, browser_check = False)) is None
+    caller_context = _caller_context(project_dir = tmp_path, browser_check = False, processes = processes)
+
+    assert build_check_in_browser_tool(caller_context) is None
 
 
 @pytest.fixture
-def app_url() -> Iterator[str]:
+def app_url(processes: ShellProcesses) -> Iterator[str]:
     """
-    Запускает тестовый сервер, который отвечает ошибкой 500.
+    Запускает приложение приёмщика: отдельный процесс в своей группе, записанный в учёт приёмщика,
+    отвечает ошибкой 500.
+
+    Возвращает: Адрес приложения.
+    """
+    port = _free_port()
+    app = subprocess.Popen([sys.executable, "-c", ERROR_PAGE_APP, str(port)], start_new_session = True)
+    processes.remember(process_group_id = app.pid, background_process_id = None, command = "error page app")
+    assert wait_port_open(port = port)
+    yield f"http://127.0.0.1:{port}/"
+    processes.kill_all()
+    app.wait()
+
+
+@pytest.fixture
+def foreign_url() -> Iterator[str]:
+    """
+    Запускает сервер чужой программы: работает в процессе теста, в учёт приёмщика не входит.
 
     Возвращает: Адрес сервера.
     """
@@ -171,6 +226,20 @@ def test_silent_port_does_not_start_helper(check_tool: BaseTool, fake_run_role: 
     На порту никто не слушает - помощник не запускается.
     """
     answer = _check(tool = check_tool, url = f"http://127.0.0.1:{_free_port()}/")
+
+    assert fake_run_role.calls == []
+    assert answer != OBSERVATIONS
+
+
+def test_foreign_app_does_not_start_helper(
+    check_tool: BaseTool,
+    fake_run_role: FakeRunRole,
+    foreign_url: str,
+) -> None:
+    """
+    По адресу отвечает программа, которую приёмщик не запускал, - помощник не запускается.
+    """
+    answer = _check(tool = check_tool, url = foreign_url)
 
     assert fake_run_role.calls == []
     assert answer != OBSERVATIONS

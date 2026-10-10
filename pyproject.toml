@@ -14,6 +14,7 @@ dependencies = [
     "pydantic==2.13.5",
     "pathspec==1.1.1",
     "python-dotenv==1.2.4",
+    "psutil==7.2.2",
 ]
 
 

@@ -8,6 +8,7 @@ from langchain_core.messages import AIMessage
 from langchain_core.tools import BaseTool
 
 from codeteam.app.settings import Settings
+from codeteam.common.shell import ShellProcesses
 from codeteam.core.pipeline.state import PipelineConfig
 from codeteam.core.roles.common import CallerContext
 from codeteam.core.roles.picture_viewer import build_describe_picture_tool
@@ -72,6 +73,7 @@ def _caller_context(*, project_dir: Path, vision_model: str | None) -> CallerCon
         caller_name = "pm",
         caller_private_dir_name = Path("pm_r1"),
         caller_journal_name = "01_pm_r1",
+        shell_processes = ShellProcesses(),
     )
 
 

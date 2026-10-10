@@ -11,7 +11,9 @@ from langchain_core.tools import BaseTool, StructuredTool, ToolException
 from pydantic import BaseModel, Field
 
 from codeteam.core.roles.browser_checker.config import BROWSER_CHECKER_ROLE, OBSERVATIONS_FILE_NAME
+from codeteam.common.shell import ShellProcesses
 from codeteam.core.roles.browser_checker.prompts import (
+    APP_NOT_OWN_ERROR,
     APP_NOT_RESPONDING_ERROR,
     BROWSER_CHECK_LIMIT_ERROR,
     BROWSER_CHECK_TASK,
@@ -38,6 +40,9 @@ LOCAL_HOSTS = ("127.0.0.1", "localhost")
 
 # Сколько ждать ответа приложения при проверке адреса перед запуском помощника, секунды.
 URL_CHECK_TIMEOUT_SECONDS = 3
+
+# Порт адреса без явного порта по протоколу.
+DEFAULT_PORTS = {"http": 80, "https": 443}
 
 
 class CheckInBrowserArguments(BaseModel):
@@ -81,7 +86,7 @@ def build_check_in_browser_tool(caller_context: CallerContext) -> BaseTool | Non
         Возвращает: Наблюдения помощника; длиннее OBSERVATIONS_LENGTH_LIMIT — начало ответа и путь к файлу.
             Ошибку для агента поднимает ToolException.
         """
-        check_app_url(url = url)
+        check_app_url(url = url, processes = caller_context.shell_processes)
         call_number = next(call_numbers)
         if call_number > BROWSER_CHECK_CALL_LIMIT:
             raise ToolException(BROWSER_CHECK_LIMIT_ERROR.format(limit = BROWSER_CHECK_CALL_LIMIT))
@@ -146,12 +151,14 @@ def _run_helper(*, caller_context: CallerContext, project_dir: Path, url: str, s
     )
 
 
-def check_app_url(*, url: str) -> None:
+def check_app_url(*, url: str, processes: ShellProcesses) -> None:
     """
-    Проверяет адрес приложения: он на этом компьютере и приложение по нему отвечает.
-    Любой ответ, в том числе с кодом ошибки, значит, что приложение работает. Ошибку для агента поднимает ToolException.
+    Проверяет адрес приложения: он на этом компьютере, приложение по нему отвечает и порт адреса слушает
+    процесс агента. Любой ответ, в том числе с кодом ошибки, значит, что приложение работает.
+    Ошибку для агента поднимает ToolException.
 
         url: адрес приложения от агента.
+        processes: учёт фоновых процессов агента.
     """
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https") or parsed.hostname not in LOCAL_HOSTS:
@@ -161,8 +168,12 @@ def check_app_url(*, url: str) -> None:
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     try:
         with opener.open(url, timeout = URL_CHECK_TIMEOUT_SECONDS):
-            return
+            pass
     except urllib.error.HTTPError:
-        return
+        pass
     except (urllib.error.URLError, OSError, ValueError) as error:
         raise ToolException(APP_NOT_RESPONDING_ERROR.format(url = url)) from error
+
+    port = parsed.port or DEFAULT_PORTS[parsed.scheme]
+    if not processes.port_listeners(port = port):
+        raise ToolException(APP_NOT_OWN_ERROR.format(url = url, port = port))

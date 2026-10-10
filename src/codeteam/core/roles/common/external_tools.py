@@ -6,6 +6,7 @@ from pathlib import Path
 
 from langchain_core.tools import BaseTool
 
+from codeteam.common.shell import ShellProcesses
 from codeteam.core.pipeline.state import PipelineConfig
 from codeteam.core.tools.mcp import McpServer
 
@@ -21,12 +22,14 @@ class CallerContext:
             личные папки помощников лежат внутри неё.
         caller_journal_name: имя журнала агента без расширения; журналы помощников и вывод серверов MCP
             называются от него.
+        shell_processes: учёт фоновых процессов команд bash и start_service агента.
     """
 
     cfg: PipelineConfig
     caller_name: str
     caller_private_dir_name: Path
     caller_journal_name: str
+    shell_processes: ShellProcesses
 
 
 # Сборщик инструмента-помощника: агент → инструмент; None - инструмент в этом запуске недоступен,

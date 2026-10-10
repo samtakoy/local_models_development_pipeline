@@ -10,7 +10,6 @@ start_service ждёт готовности по порту или строке 
 import re
 import shlex
 import socket
-import subprocess
 import time
 from pathlib import Path
 
@@ -62,8 +61,6 @@ CHECK_INTERVAL_SECONDS = 0.5
 # Сколько ждать, пока остановленная прежняя служба освободит порт, секунды.
 PORT_RELEASE_TIMEOUT_SECONDS = 5
 
-# Предел времени команды lsof, которая ищет процессы на порту, секунды.
-LSOF_TIMEOUT_SECONDS = 5
 
 # Адрес, на котором проверяется порт службы.
 SERVICE_HOST = "127.0.0.1"
@@ -301,12 +298,8 @@ def _stop_own_listeners(*, port: int, processes: ShellProcesses) -> str:
     Возвращает: Строки об остановленных процессах агента; пустую строку, если таких не было.
     """
     stopped_notice = ""
-    for listener_id in _port_listener_ids(port = port):
-        own_process = processes.process_of(process_id = listener_id)
-        if own_process is None:
-            continue
-
-        processes.kill_group_of(process_id = listener_id)
+    for own_process in processes.port_listeners(port = port):
+        processes.kill_group_of(process_id = own_process.process_id)
         stopped_notice += START_SERVICE_STOPPED_OWN_NOTE.format(
             port = port,
             process_id = own_process.process_id,
@@ -317,27 +310,6 @@ def _stop_own_listeners(*, port: int, processes: ShellProcesses) -> str:
         _wait_port_released(port = port)
 
     return stopped_notice
-
-
-def _port_listener_ids(*, port: int) -> list[int]:
-    """
-    Находит процессы, которые слушают порт, системной командой lsof.
-
-        port: порт.
-
-    Возвращает: Номера процессов; пустой список, если lsof нет или порт никто не слушает.
-    """
-    try:
-        result = subprocess.run(
-            ["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-t"],
-            capture_output = True,
-            text = True,
-            timeout = LSOF_TIMEOUT_SECONDS,
-        )
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return []
-
-    return [int(line) for line in result.stdout.split() if line.isdigit()]
 
 
 def _is_port_open(*, port: int) -> bool:

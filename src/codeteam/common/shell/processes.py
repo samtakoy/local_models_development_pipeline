@@ -1,8 +1,10 @@
-"""Фоновые процессы команд оболочки: учёт групп процессов, их список и снятие."""
+"""Фоновые процессы команд оболочки: учёт групп процессов, их список, порты и снятие."""
 
 import os
 import signal
 from dataclasses import dataclass
+
+import psutil
 
 
 @dataclass(frozen = True)
@@ -69,6 +71,34 @@ class ShellProcesses:
             return None
 
         return self._processes[process_group_id]
+
+    def port_listeners(self, *, port: int) -> list[ShellProcess]:
+        """
+        Находит запуски агента, процессы которых слушают порт TCP.
+
+            port: порт.
+
+        Возвращает: Запуски по возрастанию номера; пустой список, если порт никто не слушает или слушают
+            только чужие процессы.
+        """
+        listener_group_ids: set[int] = set()
+        for process in psutil.process_iter():
+            try:
+                process_group_id = os.getpgid(process.pid)
+                if process_group_id not in self._processes or process_group_id in listener_group_ids:
+                    continue
+                if any(
+                    connection.status == psutil.CONN_LISTEN and connection.laddr.port == port
+                    for connection in process.net_connections(kind = "tcp")
+                ):
+                    listener_group_ids.add(process_group_id)
+            except (ProcessLookupError, PermissionError, psutil.Error):
+                # процесс завершился или чужой: его порты не нужны
+                continue
+
+        listeners = [self._processes[process_group_id] for process_group_id in listener_group_ids]
+
+        return sorted(listeners, key = lambda listener: listener.process_id)
 
     def kill_group_of(self, *, process_id: int) -> bool:
         """
