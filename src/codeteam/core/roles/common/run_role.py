@@ -77,16 +77,16 @@ def run_role(
         )
 
 
-def make_journal_name(*, journal_count: int, label: str) -> str:
+def make_journal_name(*, journal_count: int, private_dir_name: Path) -> str:
     """
-    Строит имя журнала следующего агента прогона.
+    Строит имя журнала следующего агента прогона по его личной папке.
 
         journal_count: число журналов агентов, уже начатых в прогоне.
-        label: метка агента в имени журнала: имя роли или папка этапа с именем роли.
+        private_dir_name: путь личной папки агента внутри папки личных папок.
 
-    Возвращает: Имя журнала без расширения, например 04_stage_100_senior.
+    Возвращает: Имя журнала без расширения, например 04_stage_100_senior_r1.
     """
-    return f"{journal_count + 1:02d}_{label}"
+    return f"{journal_count + 1:02d}_{'_'.join(private_dir_name.parts)}"
 
 
 def _load_system_prompt(*, path: Path, fields: dict[str, str]) -> str:

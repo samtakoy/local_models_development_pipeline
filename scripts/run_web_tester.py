@@ -21,6 +21,7 @@ from codeteam.app.settings import load_settings
 from codeteam.common.git import list_uncommitted_changes
 from codeteam.core.agent.workspace import PRIVATE_ROOT, draft_dir
 from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState
+from codeteam.core.roles.common import last_private_dir_name
 from codeteam.core.roles.pm import PM_ROLE, REQUIREMENTS_FILE_NAME
 from codeteam.core.roles.web_tester import web_tester_node
 
@@ -53,7 +54,11 @@ def main() -> None:
     project = load_project_config(setup_dir = arguments.setup_dir)
     project_dir = Path(project.path).resolve()
 
-    requirements_dir = draft_dir(private_dir = project_dir / PRIVATE_ROOT / PM_ROLE.name)
+    pm_dir_name = last_private_dir_name(project_dir = project_dir, parent = Path("."), role_name = PM_ROLE.name)
+    if pm_dir_name is None:
+        raise SystemExit(f"нет папки менеджера продукта в {project_dir / PRIVATE_ROOT}: нужен прошлый прогон")
+
+    requirements_dir = draft_dir(private_dir = project_dir / PRIVATE_ROOT / pm_dir_name)
     if not (requirements_dir / REQUIREMENTS_FILE_NAME).is_file():
         raise SystemExit(f"нет чеклиста требований {requirements_dir / REQUIREMENTS_FILE_NAME}: нужен прошлый прогон")
 
@@ -86,6 +91,7 @@ def main() -> None:
         plan_dir = None,
         stages = None,
         review = None,
+        rework = None,
         journal_count = 0,
     )
     web_tester_node(state, config)

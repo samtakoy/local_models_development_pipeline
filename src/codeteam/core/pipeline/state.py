@@ -36,18 +36,33 @@ class Stages:
 @dataclass(frozen = True)
 class Review:
     """
-    Последнее ревью работы роли.
+    Последнее ревью работы роли: счёт кругов ревью.
 
-        target: имя роли, чью работу проверил ревьюер; ей возвращаются замечания.
-        remarks_dir: папка черновика ревьюера: вердикт и замечания.
+        target: имя роли, чью работу проверил ревьюер.
         round: номер круга ревью, с 1.
         accepted: вердикт: True — работа принята, False — на доработку.
     """
 
     target: str
-    remarks_dir: Path
     round: int
     accepted: bool
+
+
+@dataclass(frozen = True)
+class Rework:
+    """
+    Возврат работы роли: его создаёт тот, кто возвращает; узел роли после своей работы сбрасывает его.
+
+        target: имя роли, которой возвращена работа.
+        remarks_dir: папка с замечаниями для неё.
+        preserve_draft: перенести в новую папку роли черновик из её прошлой папки.
+        preserve_context: перенести в новую папку роли файл контекста из её прошлой папки.
+    """
+
+    target: str
+    remarks_dir: Path
+    preserve_draft: bool
+    preserve_context: bool
 
 
 class PipelineState(TypedDict):
@@ -60,6 +75,7 @@ class PipelineState(TypedDict):
         plan_dir: папка черновика архитектора: общее решение и файлы этапов; None, пока он не отработал.
         stages: этапы плана архитектора и ход по ним; None, пока архитектор не отработал.
         review: последнее ревью; None, пока ревьюеры не работали.
+        rework: возврат работы роли; None, если возврата нет.
         journal_count: число журналов агентов, уже начатых в прогоне.
     """
 
@@ -69,6 +85,7 @@ class PipelineState(TypedDict):
     plan_dir: Path | None
     stages: Stages | None
     review: Review | None
+    rework: Rework | None
     journal_count: int
 
 

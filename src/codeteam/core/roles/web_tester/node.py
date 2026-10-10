@@ -9,8 +9,8 @@ from langchain_core.runnables import RunnableConfig
 from codeteam.common.git import list_uncommitted_changes
 from codeteam.core.agent.workspace import CHECK_DIR, PRIVATE_ROOT
 from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState
-from codeteam.core.roles.common import clean_project_check, make_journal_name, read_verdict, run_role, \
-    tracked_changes_check
+from codeteam.core.roles.common import clean_project_check, make_journal_name, read_verdict, role_private_dir_name, \
+    run_role, tracked_changes_check
 from codeteam.core.roles.pm import REQUIREMENTS_FILE_NAME
 from codeteam.core.roles.web_tester.config import WEB_TESTER_ROLE
 from codeteam.core.roles.web_tester.prompts import FIX_STAGE_TEXT, TRACKED_CHANGES_REMARK, WEB_TESTER_TASK
@@ -45,14 +45,16 @@ def web_tester_node(state: PipelineState, config: RunnableConfig):
         )),
         answer_checks = (*WEB_TESTER_ROLE.answer_checks, clean_project_check(project_dir = project_dir)),
     )
-    private_dir_name = Path(WEB_TESTER_ROLE.name) / f"round_{test_round}"
+    private_dir_name = role_private_dir_name(
+        project_dir = project_dir,
+        parent = Path("."),
+        role_name = WEB_TESTER_ROLE.name,
+        rework = state["rework"],
+    )
     report_dir = run_role(
         cfg = cfg,
         role = guarded_role,
-        journal_name = make_journal_name(
-            journal_count = state["journal_count"],
-            label = f"{WEB_TESTER_ROLE.name}_{test_round}",
-        ),
+        journal_name = make_journal_name(journal_count = state["journal_count"], private_dir_name = private_dir_name),
         task = WEB_TESTER_TASK.format(
             task = state["task"],
             requirements_file = (requirements_dir / REQUIREMENTS_FILE_NAME).relative_to(project_dir),
@@ -67,7 +69,7 @@ def web_tester_node(state: PipelineState, config: RunnableConfig):
     if left_changes:
         logger.warning(f"[веб-тестировщик] оставил правки в проекте: {', '.join(left_changes)}")
 
-    update = {"journal_count": state["journal_count"] + 1}
+    update = {"rework": None, "journal_count": state["journal_count"] + 1}
     if read_verdict(remarks_dir = report_dir):
         logger.info(f"[веб-тестировщик] приложение принято, отчёт: {report_dir}")
         return update

@@ -9,7 +9,8 @@ from langchain_core.runnables import RunnableConfig
 from codeteam.core.agent.workspace import PRIVATE_ROOT
 from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState
 from codeteam.core.roles.architect import ARCHITECTURE_FILE_NAME
-from codeteam.core.roles.common import STAGE_TASK_DIR_NAME, build_stage_dir_name, make_journal_name, run_role
+from codeteam.core.roles.common import STAGE_TASK_DIR_NAME, build_stage_dir_name, make_journal_name, \
+    role_private_dir_name, run_role
 from codeteam.core.roles.senior.config import SENIOR_ROLE
 from codeteam.core.roles.senior.prompts import SENIOR_TASK
 
@@ -32,22 +33,29 @@ def senior_node(state: PipelineState, config: RunnableConfig):
         architecture_file = ARCHITECTURE_FILE_NAME,
         stage_file = stage_file.name,
     )
+    private_dir_name = role_private_dir_name(
+        project_dir = project_dir,
+        parent = stage_dir_name,
+        role_name = SENIOR_ROLE.name,
+        rework = state["rework"],
+    )
     stage_plan_dir = run_role(
         cfg = cfg,
         role = SENIOR_ROLE,
-        journal_name = make_journal_name(
-            journal_count = state["journal_count"],
-            label = f"{stage_dir_name}_{SENIOR_ROLE.name}",
-        ),
+        journal_name = make_journal_name(journal_count = state["journal_count"], private_dir_name = private_dir_name),
         task = task,
         input_dirs = (stage_task_dir,),
-        private_dir_name = stage_dir_name / SENIOR_ROLE.name,
+        private_dir_name = private_dir_name,
         extra_readable_dirs = (project_dir,),
         extra_writable_dirs = (),
         extra_command_writable_dirs = (),
     )
 
-    return {"stages": replace(stages, plan_dir = stage_plan_dir), "journal_count": state["journal_count"] + 1}
+    return {
+        "stages": replace(stages, plan_dir = stage_plan_dir),
+        "rework": None,
+        "journal_count": state["journal_count"] + 1,
+    }
 
 
 def _prepare_stage_task_dir(*, plan_dir: Path, stage_file: Path, target_dir: Path) -> Path:

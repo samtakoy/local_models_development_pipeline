@@ -9,9 +9,9 @@ from langchain_core.runnables import RunnableConfig
 from codeteam.common.git import commit_all, list_uncommitted_changes
 from codeteam.core.agent.workspace import PRIVATE_ROOT
 from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState, Review
-from codeteam.core.roles.common import STAGE_TASK_DIR_NAME, build_stage_dir_name, check_review_limit, \
-    clean_project_check, make_journal_name, next_review_round, parse_stage_number, read_stage_title, read_verdict, \
-    run_role, tracked_changes_check
+from codeteam.core.roles.common import STAGE_TASK_DIR_NAME, build_stage_dir_name, clean_project_check, \
+    make_journal_name, make_rework, next_review_round, parse_stage_number, read_stage_title, read_verdict, \
+    role_private_dir_name, run_role, tracked_changes_check
 from codeteam.core.roles.developer import DEVELOPER_ROLE
 from codeteam.core.roles.developer_review.config import DEVELOPER_REVIEW_ROLE
 from codeteam.core.roles.developer_review.prompts import DEVELOPER_REVIEW_TASK, TRACKED_CHANGES_REMARK
@@ -50,20 +50,23 @@ def developer_review_node(state: PipelineState, config: RunnableConfig):
         )),
         answer_checks = (*DEVELOPER_REVIEW_ROLE.answer_checks, clean_project_check(project_dir = project_dir)),
     )
+    private_dir_name = role_private_dir_name(
+        project_dir = project_dir,
+        parent = stage_dir_name,
+        role_name = DEVELOPER_REVIEW_ROLE.name,
+        rework = state["rework"],
+    )
     remarks_dir = run_role(
         cfg = cfg,
         role = guarded_role,
-        journal_name = make_journal_name(
-            journal_count = state["journal_count"],
-            label = f"{stage_dir_name}_{DEVELOPER_REVIEW_ROLE.name}_{review_round}",
-        ),
+        journal_name = make_journal_name(journal_count = state["journal_count"], private_dir_name = private_dir_name),
         task = DEVELOPER_REVIEW_TASK.format(
             task = state["task"],
             stage_task_dir = stage_task_dir.relative_to(project_dir),
             stage_plan_dir = stages.plan_dir.relative_to(project_dir),
         ),
         input_dirs = (stage_task_dir, stages.plan_dir),
-        private_dir_name = stage_dir_name / DEVELOPER_REVIEW_ROLE.name / f"round_{review_round}",
+        private_dir_name = private_dir_name,
         extra_readable_dirs = (project_dir,),
         extra_writable_dirs = (project_dir,),
         extra_command_writable_dirs = (),
@@ -74,10 +77,9 @@ def developer_review_node(state: PipelineState, config: RunnableConfig):
 
     review = Review(
         target = DEVELOPER_ROLE.name,
-        remarks_dir = remarks_dir,
         round = review_round,
         accepted = read_verdict(remarks_dir = remarks_dir),
     )
-    check_review_limit(review = review)
+    rework = make_rework(review = review, remarks_dir = remarks_dir, preserve_draft = True, preserve_context = True)
 
-    return {"review": review, "journal_count": state["journal_count"] + 1}
+    return {"review": review, "rework": rework, "journal_count": state["journal_count"] + 1}

@@ -1,4 +1,4 @@
-"""Ревью работы роли: вердикт ревьюера, круги ревью, место ревьюера в графе."""
+"""Ревью работы роли: вердикт ревьюера, круги ревью, возврат работы роли, место ревьюера в графе."""
 
 import logging
 import re
@@ -9,7 +9,7 @@ from pathlib import Path
 from langgraph.graph import StateGraph
 
 from codeteam.core.pipeline.project import ReviewMode
-from codeteam.core.pipeline.state import PipelineState, Review
+from codeteam.core.pipeline.state import PipelineState, Review, Rework
 from codeteam.core.roles.common.errors import PipelineError
 from codeteam.core.roles.common.prompts import MISSING_VERDICT_REMARK, WRONG_VERDICT_REMARK
 
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 # Наибольшее число кругов ревью: ревью, исправление, повторное ревью.
 REVIEW_ROUND_LIMIT = 2
 
-# Папка внутри папки круга ревьюера: копия черновика, который ревьюер проверяет в этом круге.
+# Папка внутри личной папки ревьюера: копия черновика, который ревьюер проверяет в этом запуске.
 REVIEWED_DIR_NAME = "reviewed"
 
 # Файл вердикта в черновике ревьюера: первая непустая строка содержит вердикт.
@@ -55,28 +55,61 @@ def next_review_round(*, review: Review | None, target: str) -> int:
     return 1
 
 
-def needs_fix(*, review: Review | None, target: str) -> bool:
+def rework_for(*, rework: Rework | None, role_name: str) -> Rework | None:
     """
-    Проверяет, вернул ли ревьюер работу роли на доработку.
+    Выбирает возврат работы, адресованный роли.
 
-        review: последнее ревью из состояния.
-        target: имя роли.
+        rework: возврат работы из состояния пайплайна.
+        role_name: имя роли.
 
-    Возвращает: True, если последнее ревью — работы этой роли и с вердиктом «доработать».
+    Возвращает: Возврат работы, если он адресован этой роли; иначе None.
     """
-    return review is not None and review.target == target and not review.accepted
+    if rework is not None and rework.target == role_name:
+        return rework
+
+    return None
 
 
-def copy_reviewed_draft(*, draft_dir: Path, round_dir: Path) -> Path:
+def make_rework(*, review: Review, remarks_dir: Path, preserve_draft: bool, preserve_context: bool) -> Rework | None:
     """
-    Копирует проверяемый черновик в папку круга ревьюера: версия до исправления остаётся для сравнения.
+    Собирает возврат работы роли по ревью: только если работа не принята и круги ревью не кончились.
+    Если круги кончились, а работа не принята, пишет предупреждение в лог.
+
+        review: только что сделанное ревью.
+        remarks_dir: папка черновика ревьюера: вердикт и замечания.
+        preserve_draft: роль продолжит с черновиком из своей прошлой папки.
+        preserve_context: роль продолжит с файлом контекста из своей прошлой папки.
+
+    Возвращает: Возврат работы роли; None, если работа принята или круги кончились.
+    """
+    if review.accepted:
+        return None
+
+    if review.round >= REVIEW_ROUND_LIMIT:
+        logger.warning(
+            f"[ревью] работа роли {review.target} не принята за {REVIEW_ROUND_LIMIT} круга: {remarks_dir}; "
+            f"пайплайн идёт дальше"
+        )
+        return None
+
+    return Rework(
+        target = review.target,
+        remarks_dir = remarks_dir,
+        preserve_draft = preserve_draft,
+        preserve_context = preserve_context,
+    )
+
+
+def copy_reviewed_draft(*, draft_dir: Path, reviewer_dir: Path) -> Path:
+    """
+    Копирует проверяемый черновик в личную папку ревьюера: версия до исправления остаётся для сравнения.
 
         draft_dir: папка черновика роли, чью работу проверяет ревьюер.
-        round_dir: личная папка ревьюера на этот круг.
+        reviewer_dir: личная папка этого запуска ревьюера.
 
     Возвращает: Папку копии черновика.
     """
-    reviewed_dir = round_dir / REVIEWED_DIR_NAME
+    reviewed_dir = reviewer_dir / REVIEWED_DIR_NAME
     if reviewed_dir.exists():
         shutil.rmtree(reviewed_dir)
     shutil.copytree(draft_dir, reviewed_dir)
@@ -157,21 +190,6 @@ def _verdict_line(*, verdict_path: Path) -> str:
     return next((line for line in lines if line), "")
 
 
-def check_review_limit(*, review: Review) -> None:
-    """
-    Проверяет последний круг ревью: если работа не принята и кругов больше нет, пишет предупреждение.
-
-        review: только что сделанное ревью.
-    """
-    if review.accepted or review.round < REVIEW_ROUND_LIMIT:
-        return
-
-    logger.warning(
-        f"[ревью] работа роли {review.target} не принята за {REVIEW_ROUND_LIMIT} круга: {review.remarks_dir}; "
-        f"пайплайн идёт дальше"
-    )
-
-
 def add_role_exit(
     *,
     workflow: StateGraph,
@@ -185,7 +203,7 @@ def add_role_exit(
     Соединяет роль со следующим шагом графа: напрямую или через ревьюера.
 
     Без ревью после роли сразу выбирается следующий шаг. С ревью после роли идёт ревьюер; если он вернул
-    работу на доработку и круги не кончились — снова роль, иначе следующий шаг.
+    работу роли — снова роль, иначе следующий шаг.
 
         workflow: граф пайплайна.
         mode: режим ревью роли.
@@ -200,8 +218,7 @@ def add_role_exit(
 
     def route_after_review(state: PipelineState) -> str:
         """Возвращает работу роли на доработку или выбирает следующий шаг."""
-        review = state["review"]
-        if not review.accepted and review.round < REVIEW_ROUND_LIMIT:
+        if rework_for(rework = state["rework"], role_name = target) is not None:
             return target
 
         return next_route(state)

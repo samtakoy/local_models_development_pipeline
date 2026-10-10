@@ -22,7 +22,7 @@ from codeteam.core.roles.advisor.prompts import (
     RELATED_FILE_LINE,
     RELATED_FILES_NOT_GIVEN,
 )
-from codeteam.core.roles.common import CallerContext, run_role
+from codeteam.core.roles.common import CallerContext, reserve_private_dir_name, run_role
 
 # Имя инструмента вызова советника.
 GET_ADVICE_TOOL_NAME = "get_advice"
@@ -52,7 +52,7 @@ def build_get_advice_tool(caller_context: CallerContext) -> BaseTool:
     Собирает инструмент get_advice для вызывающего агента.
 
     Каждый вызов запускает советника в своей личной папке внутри личной папки вызывающего агента:
-    <папка вызывающего>/advisor_<номер>; журнал советника — <журнал вызывающего>.advisor_<номер>.
+    <папка вызывающего>/advisor_r<номер>; журнал советника — <журнал вызывающего>.advisor_r<номер>.
     Проект советник читает; пишет, кроме черновика, только в папку временных скриптов CHECK_DIR.
     Файлы из личных папок, которые указал спросивший, советнику закрыты: он получает их копии.
 
@@ -61,7 +61,7 @@ def build_get_advice_tool(caller_context: CallerContext) -> BaseTool:
     Возвращает: Инструмент get_advice.
     """
     project_dir = Path(caller_context.cfg.project_path).resolve()
-    # номера вызовов: next() выдаёт номер атомарно, параллельные вызовы из одного ответа модели не совпадут
+    # номера вызовов для предела ADVICE_CALL_LIMIT: next() выдаёт номер атомарно
     call_numbers = itertools.count(1)
 
     def get_advice(*, question: str, context: str | None = None, related_files: list[str] | None = None) -> str:
@@ -79,7 +79,13 @@ def build_get_advice_tool(caller_context: CallerContext) -> BaseTool:
         if call_number > ADVICE_CALL_LIMIT:
             raise ToolException(ADVICE_LIMIT_ERROR.format(limit = ADVICE_CALL_LIMIT))
 
-        private_dir_name = caller_context.caller_private_dir_name / f"{ADVISOR_ROLE.name}_{call_number}"
+        private_dir_name = reserve_private_dir_name(
+            project_dir = project_dir,
+            parent = caller_context.caller_private_dir_name,
+            role_name = ADVISOR_ROLE.name,
+            preserve_draft = False,
+            preserve_context = False,
+        )
         related_paths = _copy_private_files(
             file_paths = related_files or [],
             project_dir = project_dir,
@@ -88,7 +94,7 @@ def build_get_advice_tool(caller_context: CallerContext) -> BaseTool:
         advice_dir = run_role(
             cfg = caller_context.cfg,
             role = ADVISOR_ROLE,
-            journal_name = f"{caller_context.caller_journal_name}.{ADVISOR_ROLE.name}_{call_number}",
+            journal_name = f"{caller_context.caller_journal_name}.{private_dir_name.name}",
             task = ADVISOR_TASK.format(
                 caller_name = caller_context.caller_name,
                 question = question,
