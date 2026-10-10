@@ -1,14 +1,16 @@
 """Граф пайплайна: один узел запускает роли по списку, следующая роль выбирается по состоянию после роли."""
 
 from collections.abc import Callable
+from pathlib import Path
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
+from codeteam.common.git import head_commit
 from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState
-from codeteam.core.pipeline.state_file import STATE_FILE_NAME, save_state
+from codeteam.core.pipeline.state_file import save_state, state_file_path
 from codeteam.core.roles.architect import ARCHITECT_ROLE, architect_node
 from codeteam.core.roles.architect_review import ARCHITECT_REVIEW_ROLE, architect_review_node
 from codeteam.core.roles.common import PipelineError
@@ -93,8 +95,8 @@ def check_roles(*, roles: tuple[str, ...]) -> None:
 
 def role_node(state: PipelineState, config: RunnableConfig) -> dict:
     """
-    Запускает роль из next_role, выбирает следующую роль по состоянию после неё и записывает состояние
-    в файл STATE_FILE_NAME папки прогона: с него можно продолжить прогон.
+    Запускает роль из next_role, выбирает следующую роль по состоянию после неё и записывает снимок:
+    коммит проекта и состояние, рядом с журналом роли. Со снимка можно продолжить прогон.
 
         state: состояние пайплайна.
         config: настройки запуска графа с настройками пайплайна.
@@ -104,8 +106,16 @@ def role_node(state: PipelineState, config: RunnableConfig) -> dict:
     cfg: PipelineConfig = config["configurable"][PIPELINE_CFG_NAME]
     current = state["next_role"]
     update = ROLE_NODES[current](state, config)
-    next_role = choose_next_role(roles = cfg.roles, current = current, state = {**state, **update})
-    save_state(state = {**state, **update, "next_role": next_role}, path = cfg.run_dir / STATE_FILE_NAME)
+    # Слияние как в LangGraph только для полей без правила слияния: значение из update заменяет прежнее.
+    # Поле PipelineState с правилом слияния (Annotated[..., функция слияния]) здесь сольётся не так, как в графе.
+    merged_state = {**state, **update}
+    next_role = choose_next_role(roles = cfg.roles, current = current, state = merged_state)
+    new_state = {**merged_state, "next_role": next_role}
+    save_state(
+        state = new_state,
+        commit = head_commit(project_dir = Path(cfg.project_path).resolve()),
+        path = state_file_path(run_dir = cfg.run_dir, journal_name = new_state["journal_name"]),
+    )
 
     return {**update, "next_role": next_role}
 

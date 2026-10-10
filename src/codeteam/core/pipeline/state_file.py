@@ -1,4 +1,5 @@
-"""Файл состояния пайплайна: запись после каждой роли и чтение для продолжения прогона с прерванной роли."""
+"""Снимки состояния пайплайна: после каждой роли - коммит проекта и состояние рядом с журналом роли.
+Снимок читается для продолжения прогона со следующей роли."""
 
 import json
 from dataclasses import asdict, is_dataclass
@@ -7,34 +8,48 @@ from typing import Any
 
 from codeteam.core.pipeline.state import PipelineState, Review, Rework, Stages
 
-# Файл состояния в папке прогона.
-STATE_FILE_NAME = "state.json"
+# Окончание имени файла снимка: <журнал роли>.state.json рядом с журналом.
+STATE_FILE_SUFFIX = ".state.json"
 
 
-def save_state(*, state: PipelineState, path: Path) -> None:
+def state_file_path(*, run_dir: Path, journal_name: str) -> Path:
     """
-    Записывает состояние пайплайна в файл JSON: пути - строками, этапы, ревью и возврат - словарями.
-    Файл заменяется целиком, прерванная запись не портит прежний файл.
+    Строит путь снимка состояния после роли.
+
+        run_dir: папка прогона.
+        journal_name: имя журнала роли без расширения.
+
+    Возвращает: Файл <журнал роли>.state.json в папке прогона.
+    """
+    return run_dir / f"{journal_name}{STATE_FILE_SUFFIX}"
+
+
+def save_state(*, state: PipelineState, commit: str, path: Path) -> None:
+    """
+    Записывает снимок в файл JSON: {"commit": коммит проекта, "state": состояние}. В состоянии пути - строками,
+    этапы, ревью и возврат - словарями. Файл заменяется целиком, прерванная запись не портит прежний файл.
 
         state: состояние пайплайна.
-        path: файл состояния.
+        commit: коммит проекта на момент снимка.
+        path: файл снимка.
     """
-    plain = {key: asdict(value) if is_dataclass(value) else value for key, value in state.items()}
+    plain_state = {key: asdict(value) if is_dataclass(value) else value for key, value in state.items()}
+    snapshot = {"commit": commit, "state": plain_state}
     path.parent.mkdir(parents = True, exist_ok = True)
     temporary_path = path.with_name(f"{path.name}.tmp")
-    temporary_path.write_text(json.dumps(plain, ensure_ascii = False, indent = 2, default = str), encoding = "utf-8")
+    temporary_path.write_text(json.dumps(snapshot, ensure_ascii = False, indent = 2, default = str), encoding = "utf-8")
     temporary_path.replace(path)
 
 
 def load_state(*, path: Path) -> PipelineState:
     """
-    Читает состояние пайплайна из файла JSON, записанного save_state.
+    Читает состояние пайплайна из снимка, записанного save_state.
 
-        path: файл состояния.
+        path: файл снимка.
 
     Возвращает: Состояние пайплайна.
     """
-    data = json.loads(path.read_text(encoding = "utf-8"))
+    data = json.loads(path.read_text(encoding = "utf-8"))["state"]
 
     return PipelineState(
         task = data["task"],
@@ -47,6 +62,7 @@ def load_state(*, path: Path) -> PipelineState:
         review = None if data["review"] is None else Review(**data["review"]),
         rework = _rework_or_none(value = data["rework"]),
         next_role = data["next_role"],
+        journal_name = data["journal_name"],
         journal_count = data["journal_count"],
     )
 

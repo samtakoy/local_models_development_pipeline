@@ -61,7 +61,7 @@ def _parse_arguments() -> argparse.Namespace:
     parser.add_argument("setup_dir", help = "папка задачи с файлом set.toml, например projects/cardviewer_ai")
     parser.add_argument(
         "--resume",
-        help = "файл state.json прерванного прогона: продолжить с роли, на которой он остановился",
+        help = "снимок <журнал роли>.state.json из папки прогона: продолжить с роли, которая шла после этой",
     )
 
     return parser.parse_args()

@@ -42,10 +42,11 @@ def senior_node(state: PipelineState, config: RunnableConfig):
         role_name = SENIOR_ROLE.name,
         rework = state["rework"],
     )
+    journal_name = make_journal_name(journal_count = state["journal_count"], private_dir_name = private_dir_name)
     stage_plan_dir = run_role(
         cfg = cfg,
         role = SENIOR_ROLE,
-        journal_name = make_journal_name(journal_count = state["journal_count"], private_dir_name = private_dir_name),
+        journal_name = journal_name,
         task = task,
         input_dirs = (stage_task_dir,),
         private_dir_name = private_dir_name,
@@ -58,6 +59,7 @@ def senior_node(state: PipelineState, config: RunnableConfig):
         "stages": replace(stages, plan_dir = stage_plan_dir),
         "review": None,
         "rework": None,
+        "journal_name": journal_name,
         "journal_count": state["journal_count"] + 1,
     }
 

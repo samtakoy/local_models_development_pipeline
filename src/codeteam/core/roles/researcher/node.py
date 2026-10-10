@@ -20,10 +20,11 @@ def researcher_node(state: PipelineState, config: RunnableConfig):
         role_name = RESEARCHER_ROLE.name,
         rework = state["rework"],
     )
+    journal_name = make_journal_name(journal_count = state["journal_count"], private_dir_name = private_dir_name)
     research_dir = run_role(
         cfg = cfg,
         role = RESEARCHER_ROLE,
-        journal_name = make_journal_name(journal_count = state["journal_count"], private_dir_name = private_dir_name),
+        journal_name = journal_name,
         task = RESEARCHER_TASK.format(task = state["task"]),
         input_dirs = (),
         private_dir_name = private_dir_name,
@@ -32,4 +33,4 @@ def researcher_node(state: PipelineState, config: RunnableConfig):
         extra_command_writable_dirs = (),
     )
 
-    return {"research_dir": research_dir, "rework": None, "journal_count": state["journal_count"] + 1}
+    return {"research_dir": research_dir, "rework": None, "journal_name": journal_name, "journal_count": state["journal_count"] + 1}

@@ -1,15 +1,17 @@
 """Тесты выбора следующей роли пайплайна и проверки списка ролей."""
 
+import json
 from pathlib import Path
 
 import pytest
 from langchain_core.runnables import RunnableConfig
 
 from codeteam.app.config import load_project_config
+from codeteam.common.git import commit_all, head_commit, init_repository
 from codeteam.core.pipeline import graph as graph_module
 from codeteam.core.pipeline.graph import DEFAULT_ROLES, check_roles, choose_next_role, create_pipeline_graph
 from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState, Rework, Stages
-from codeteam.core.pipeline.state_file import STATE_FILE_NAME, load_state, save_state
+from codeteam.core.pipeline.state_file import load_state, save_state, state_file_path
 from codeteam.core.roles.common import PipelineError
 
 # Полный список ролей.
@@ -47,6 +49,7 @@ def _state(*, started: int, total: int, rework: Rework | None) -> PipelineState:
         review = None,
         rework = rework,
         next_role = None,
+        journal_name = None,
         journal_count = 0,
     )
 
@@ -201,16 +204,20 @@ class FakeRoles:
         def node(state: PipelineState, config: RunnableConfig) -> dict:
             """Пишет роль в порядок запусков и возвращает обновление состояния этой роли."""
             self.order.append(role_name)
+            journal_count = state["journal_count"] + 1
+            update = {"rework": None, "journal_name": f"{journal_count:02d}_{role_name}", "journal_count": journal_count}
             if role_name == "architect":
-                return {"stages": Stages(files = (Path("10_a.md"), Path("20_b.md")), started = 0, plan_dir = None, fix_rounds = 0)}
+                stages = Stages(files = (Path("10_a.md"), Path("20_b.md")), started = 0, plan_dir = None, fix_rounds = 0)
+                return {**update, "stages": stages}
             if role_name == "senior":
                 stages = state["stages"]
-                return {"stages": Stages(files = stages.files, started = stages.started + 1, plan_dir = None, fix_rounds = 0)}
+                stages = Stages(files = stages.files, started = stages.started + 1, plan_dir = None, fix_rounds = 0)
+                return {**update, "stages": stages}
             if role_name == "developer_review":
                 self.review_count += 1
-                return {"rework": _rework(target = "developer") if self.review_count == 1 else None}
+                return {**update, "rework": _rework(target = "developer") if self.review_count == 1 else None}
 
-            return {"rework": None}
+            return update
 
         return node
 
@@ -229,16 +236,38 @@ def fake_roles(monkeypatch: pytest.MonkeyPatch) -> FakeRoles:
     return fake
 
 
-def _config(*, run_dir: Path) -> RunnableConfig:
+@pytest.fixture
+def project_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """
+    Папка проекта с репозиторием git и одним коммитом.
+
+    Возвращает: Путь папки проекта.
+    """
+    for name in ("GIT_AUTHOR_NAME", "GIT_COMMITTER_NAME"):
+        monkeypatch.setenv(name, "test")
+    for name in ("GIT_AUTHOR_EMAIL", "GIT_COMMITTER_EMAIL"):
+        monkeypatch.setenv(name, "test@example.com")
+
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "README.md").write_text("# app\n", encoding = "utf-8")
+    init_repository(project_dir = project)
+    commit_all(project_dir = project, message = "init")
+
+    return project
+
+
+def _config(*, project_dir: Path, run_dir: Path) -> RunnableConfig:
     """
     Собирает настройки запуска графа с полным списком ролей.
 
+        project_dir: папка проекта с репозиторием git.
         run_dir: папка прогона.
 
     Возвращает: Настройки запуска графа.
     """
     return RunnableConfig(configurable = {PIPELINE_CFG_NAME: PipelineConfig(
-        project_path = "/tmp/project",
+        project_path = str(project_dir),
         run_dir = run_dir,
         model_name = "model",
         roles = DEFAULT_ROLES,
@@ -246,14 +275,18 @@ def _config(*, run_dir: Path) -> RunnableConfig:
     )})
 
 
-def test_graph_runs_roles_in_order(fake_roles: FakeRoles, tmp_path: Path) -> None:
+def test_graph_runs_roles_in_order(fake_roles: FakeRoles, project_dir: Path, tmp_path: Path) -> None:
     """
     Граф запускает роли по списку, повторяет роли этапа для каждого этапа и возвращает работу по возврату.
-    Файл состояния после последней роли говорит, что прогон закончен.
+    После каждой роли рядом с её журналом лежит снимок; последний говорит, что прогон закончен.
     """
+    run_dir = tmp_path / "run"
     initial_state = {**_state(started = 0, total = 0, rework = None), "stages": None, "next_role": DEFAULT_ROLES[0]}
 
-    create_pipeline_graph(roles = DEFAULT_ROLES).invoke(input = initial_state, config = _config(run_dir = tmp_path))
+    create_pipeline_graph(roles = DEFAULT_ROLES).invoke(
+        input = initial_state,
+        config = _config(project_dir = project_dir, run_dir = run_dir),
+    )
 
     assert fake_roles.order == [
         "pm", "researcher", "architect", "architect_review",
@@ -261,25 +294,29 @@ def test_graph_runs_roles_in_order(fake_roles: FakeRoles, tmp_path: Path) -> Non
         "senior", "developer", "developer_review",
         "web_tester",
     ]
-    saved = load_state(path = tmp_path / STATE_FILE_NAME)
+    assert len(list(run_dir.glob("*.state.json"))) == len(fake_roles.order)
+    last_snapshot = state_file_path(run_dir = run_dir, journal_name = "13_web_tester")
+    saved = load_state(path = last_snapshot)
     assert saved["next_role"] is None
     assert saved["stages"].started == 2
+    assert json.loads(last_snapshot.read_text(encoding = "utf-8"))["commit"] == head_commit(project_dir = project_dir)
 
 
-def test_graph_resumes_from_saved_state(fake_roles: FakeRoles, tmp_path: Path) -> None:
+def test_graph_resumes_from_saved_state(fake_roles: FakeRoles, project_dir: Path, tmp_path: Path) -> None:
     """
     Граф, запущенный с сохранённым состоянием, продолжает с его next_role.
     """
-    saved_path = tmp_path / "first" / STATE_FILE_NAME
+    saved_path = state_file_path(run_dir = tmp_path / "first", journal_name = "05_senior")
     save_state(
-        state = {**_state(started = 1, total = 2, rework = None), "next_role": "developer"},
+        state = {**_state(started = 1, total = 2, rework = None), "next_role": "developer", "journal_count": 5},
+        commit = head_commit(project_dir = project_dir),
         path = saved_path,
     )
     fake_roles.review_count = 1
 
     create_pipeline_graph(roles = DEFAULT_ROLES).invoke(
         input = load_state(path = saved_path),
-        config = _config(run_dir = tmp_path / "second"),
+        config = _config(project_dir = project_dir, run_dir = tmp_path / "second"),
     )
 
     assert fake_roles.order == ["developer", "developer_review", "senior", "developer", "developer_review", "web_tester"]

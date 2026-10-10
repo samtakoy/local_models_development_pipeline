@@ -87,6 +87,17 @@ def commit_paths(*, project_dir: Path, paths: tuple[str, ...], message: str) -> 
     _run_git(project_dir = project_dir, arguments = ["commit", "-m", message, "--", *paths])
 
 
+def head_commit(*, project_dir: Path) -> str:
+    """
+    Читает последний коммит репозитория.
+
+        project_dir: папка проекта.
+
+    Возвращает: Полный хэш коммита HEAD.
+    """
+    return _run_git(project_dir = project_dir, arguments = ["rev-parse", "HEAD"]).strip()
+
+
 def restore_paths(*, project_dir: Path, paths: tuple[str, ...]) -> None:
     """
     Возвращает файлы к последнему коммиту: содержимое и индекс.

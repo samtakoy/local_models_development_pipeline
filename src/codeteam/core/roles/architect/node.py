@@ -46,10 +46,11 @@ def architect_node(state: PipelineState, config: RunnableConfig):
         )
         input_dirs = (requirements_dir, research_dir)
 
+    journal_name = make_journal_name(journal_count = state["journal_count"], private_dir_name = private_dir_name)
     plan_dir = run_role(
         cfg = cfg,
         role = ARCHITECT_ROLE,
-        journal_name = make_journal_name(journal_count = state["journal_count"], private_dir_name = private_dir_name),
+        journal_name = journal_name,
         task = task,
         input_dirs = input_dirs,
         private_dir_name = private_dir_name,
@@ -63,6 +64,7 @@ def architect_node(state: PipelineState, config: RunnableConfig):
         "architecture_file": plan_dir / ARCHITECTURE_FILE_NAME,
         "stages": Stages(files = find_stage_files(plan_dir = plan_dir), started = 0, plan_dir = None, fix_rounds = 0),
         "rework": None,
+        "journal_name": journal_name,
         "journal_count": state["journal_count"] + 1,
     }
 

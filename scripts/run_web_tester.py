@@ -97,6 +97,7 @@ def main() -> None:
         review = None,
         rework = None,
         next_role = None,
+        journal_name = None,
         journal_count = 0,
     )
     web_tester_node(state, config)

@@ -43,10 +43,11 @@ def developer_node(state: PipelineState, config: RunnableConfig):
         task = DEVELOPER_TASK.format(stage_plan_dir = stage_plan_dir.relative_to(project_dir))
         input_dirs = (stage_plan_dir,)
 
+    journal_name = make_journal_name(journal_count = state["journal_count"], private_dir_name = private_dir_name)
     run_role(
         cfg = cfg,
         role = DEVELOPER_ROLE,
-        journal_name = make_journal_name(journal_count = state["journal_count"], private_dir_name = private_dir_name),
+        journal_name = journal_name,
         task = task,
         input_dirs = input_dirs,
         private_dir_name = private_dir_name,
@@ -64,4 +65,4 @@ def developer_node(state: PipelineState, config: RunnableConfig):
     else:
         logger.info(f"[git] {private_dir_name.as_posix()}: разработчик не изменил проект, коммита нет")
 
-    return {"rework": None, "journal_count": state["journal_count"] + 1}
+    return {"rework": None, "journal_name": journal_name, "journal_count": state["journal_count"] + 1}

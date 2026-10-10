@@ -50,10 +50,11 @@ def web_tester_node(state: PipelineState, config: RunnableConfig):
         role_name = WEB_TESTER_ROLE.name,
         rework = state["rework"],
     )
+    journal_name = make_journal_name(journal_count = state["journal_count"], private_dir_name = private_dir_name)
     report_dir = run_role(
         cfg = cfg,
         role = guarded_role,
-        journal_name = make_journal_name(journal_count = state["journal_count"], private_dir_name = private_dir_name),
+        journal_name = journal_name,
         task = WEB_TESTER_TASK.format(
             task = state["task"],
             requirements_file = state["requirements_file"].relative_to(project_dir),
@@ -68,7 +69,7 @@ def web_tester_node(state: PipelineState, config: RunnableConfig):
     if left_changes:
         logger.warning(f"[веб-тестировщик] оставил правки в проекте: {', '.join(left_changes)}")
 
-    update = {"rework": None, "journal_count": state["journal_count"] + 1}
+    update = {"rework": None, "journal_name": journal_name, "journal_count": state["journal_count"] + 1}
     if read_verdict(remarks_dir = report_dir):
         logger.info(f"[веб-тестировщик] приложение принято, отчёт: {report_dir}")
         return update

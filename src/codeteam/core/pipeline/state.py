@@ -83,6 +83,7 @@ class PipelineState(TypedDict):
         review: последнее ревью; None, пока ревьюеры не работали.
         rework: возврат работы роли; None, если возврата нет.
         next_role: роль, которую пайплайн запустит следующей; None - пайплайн закончен.
+        journal_name: имя журнала последней отработавшей роли без расширения; None, пока роли не работали.
         journal_count: число журналов агентов, уже начатых в прогоне.
     """
 
@@ -96,6 +97,7 @@ class PipelineState(TypedDict):
     review: Review | None
     rework: Rework | None
     next_role: str | None
+    journal_name: str | None
     journal_count: int
 
 

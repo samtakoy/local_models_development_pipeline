@@ -67,6 +67,7 @@ def run_pipeline(
         review = None,
         rework = None,
         next_role = project.roles[0],
+        journal_name = None,
         journal_count = 0,
     )
 

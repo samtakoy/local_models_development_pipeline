@@ -33,10 +33,11 @@ def architect_review_node(state: PipelineState, config: RunnableConfig):
         draft_dir = state["plan_dir"],
         reviewer_dir = project_dir / PRIVATE_ROOT / private_dir_name,
     )
+    journal_name = make_journal_name(journal_count = state["journal_count"], private_dir_name = private_dir_name)
     remarks_dir = run_role(
         cfg = cfg,
         role = ARCHITECT_REVIEW_ROLE,
-        journal_name = make_journal_name(journal_count = state["journal_count"], private_dir_name = private_dir_name),
+        journal_name = journal_name,
         task = ARCHITECT_REVIEW_TASK.format(
             task = state["task"],
             requirements_file = state["requirements_file"].relative_to(project_dir),
@@ -55,4 +56,4 @@ def architect_review_node(state: PipelineState, config: RunnableConfig):
     )
     rework = make_rework(review = review, remarks_dir = remarks_dir, preserve_draft = True, preserve_context = True)
 
-    return {"review": review, "rework": rework, "journal_count": state["journal_count"] + 1}
+    return {"review": review, "rework": rework, "journal_name": journal_name, "journal_count": state["journal_count"] + 1}

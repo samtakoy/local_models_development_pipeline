@@ -90,6 +90,7 @@ def test_architect_rework_flow(tmp_path: Path, fake_run_role: FakeRunRole) -> No
         review = None,
         rework = None,
         next_role = "architect",
+        journal_name = None,
         journal_count = 0,
     )
 

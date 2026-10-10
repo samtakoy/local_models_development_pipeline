@@ -19,10 +19,11 @@ def pm_node(state: PipelineState, config: RunnableConfig):
         role_name = PM_ROLE.name,
         rework = state["rework"],
     )
+    journal_name = make_journal_name(journal_count = state["journal_count"], private_dir_name = private_dir_name)
     requirements_dir = run_role(
         cfg = cfg,
         role = PM_ROLE,
-        journal_name = make_journal_name(journal_count = state["journal_count"], private_dir_name = private_dir_name),
+        journal_name = journal_name,
         task = PM_TASK.format(task = state["task"]),
         input_dirs = (),
         private_dir_name = private_dir_name,
@@ -38,5 +39,6 @@ def pm_node(state: PipelineState, config: RunnableConfig):
         "requirements_dir": requirements_dir,
         "requirements_file": requirements_file,
         "rework": None,
+        "journal_name": journal_name,
         "journal_count": state["journal_count"] + 1,
     }

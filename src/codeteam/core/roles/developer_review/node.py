@@ -46,10 +46,11 @@ def developer_review_node(state: PipelineState, config: RunnableConfig):
         role_name = DEVELOPER_REVIEW_ROLE.name,
         rework = state["rework"],
     )
+    journal_name = make_journal_name(journal_count = state["journal_count"], private_dir_name = private_dir_name)
     remarks_dir = run_role(
         cfg = cfg,
         role = guarded_role,
-        journal_name = make_journal_name(journal_count = state["journal_count"], private_dir_name = private_dir_name),
+        journal_name = journal_name,
         task = DEVELOPER_REVIEW_TASK.format(
             task = state["task"],
             stage_task_dir = stage_task_dir.relative_to(project_dir),
@@ -72,4 +73,4 @@ def developer_review_node(state: PipelineState, config: RunnableConfig):
     )
     rework = make_rework(review = review, remarks_dir = remarks_dir, preserve_draft = True, preserve_context = True)
 
-    return {"review": review, "rework": rework, "journal_count": state["journal_count"] + 1}
+    return {"review": review, "rework": rework, "journal_name": journal_name, "journal_count": state["journal_count"] + 1}
