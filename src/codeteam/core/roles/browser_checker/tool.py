@@ -1,6 +1,7 @@
 """Инструмент check_in_browser: агент просит помощника с браузером пройти сценарии в запущенном приложении."""
 
 import itertools
+import logging
 import threading
 import time
 import urllib.error
@@ -18,6 +19,7 @@ from codeteam.core.roles.browser_checker.prompts import (
     APP_NOT_RESPONDING_ERROR,
     BROWSER_CHECK_LIMIT_ERROR,
     BROWSER_CHECK_TASK,
+    HELPER_FAILED_ERROR,
     CHECK_IN_BROWSER_DESCRIPTION,
     CHECK_IN_BROWSER_SCENARIOS_DESCRIPTION,
     CHECK_IN_BROWSER_URL_DESCRIPTION,
@@ -26,6 +28,8 @@ from codeteam.core.roles.browser_checker.prompts import (
     OBSERVATIONS_TRUNCATED_NOTE,
 )
 from codeteam.core.roles.common import CallerContext, reserve_private_dir_name, run_role
+
+logger = logging.getLogger(__name__)
 
 # Имя инструмента вызова помощника с браузером.
 CHECK_IN_BROWSER_TOOL_NAME = "check_in_browser"
@@ -129,17 +133,22 @@ def _run_helper(*, caller_context: CallerContext, project_dir: Path, url: str, s
         preserve_draft = False,
         preserve_context = False,
     )
-    observations_dir = run_role(
-        cfg = caller_context.cfg,
-        role = BROWSER_CHECKER_ROLE,
-        journal_name = f"{caller_context.caller_journal_name}.{private_dir_name.name}",
-        task = BROWSER_CHECK_TASK.format(caller_name = caller_context.caller_name, url = url, scenarios = scenarios),
-        input_dirs = (),
-        private_dir_name = private_dir_name,
-        extra_readable_dirs = (),
-        extra_writable_dirs = (),
-        extra_command_writable_dirs = (),
-    )
+    try:
+        observations_dir = run_role(
+            cfg = caller_context.cfg,
+            role = BROWSER_CHECKER_ROLE,
+            journal_name = f"{caller_context.caller_journal_name}.{private_dir_name.name}",
+            task = BROWSER_CHECK_TASK.format(caller_name = caller_context.caller_name, url = url, scenarios = scenarios),
+            input_dirs = (),
+            private_dir_name = private_dir_name,
+            extra_readable_dirs = (),
+            extra_writable_dirs = (),
+            extra_command_writable_dirs = (),
+        )
+    except Exception as error:
+        # падение помощника не прерывает спросившего: он получает ошибку и продолжает работу
+        logger.error(f"[{CHECK_IN_BROWSER_TOOL_NAME}] помощник прервал работу: {type(error).__name__}: {error}")
+        raise ToolException(HELPER_FAILED_ERROR.format(error = type(error).__name__)) from error
     observations_path = observations_dir / OBSERVATIONS_FILE_NAME
     if not observations_path.is_file():
         raise ToolException(NO_OBSERVATIONS_ERROR.format(draft_dir = observations_dir.relative_to(project_dir)))

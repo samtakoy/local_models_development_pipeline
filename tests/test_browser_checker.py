@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 from langchain_core.tools import BaseTool
+from langgraph.errors import GraphRecursionError
 
 from codeteam.common.shell import CommandHost, ShellProcesses
 from codeteam.core.agent.workspace import PRIVATE_ROOT, draft_dir
@@ -299,6 +300,25 @@ def test_app_starting_late_starts_helper(
     answer = _check(tool = check_tool, url = f"http://127.0.0.1:{port}/")
 
     assert answer == OBSERVATIONS
+
+
+def test_helper_failure_returns_error_to_caller(
+    check_tool: BaseTool,
+    app_url: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Помощник упал - спросивший получает ошибку ответом инструмента, а не исключение.
+    """
+    def failing_run_role(**arguments) -> Path:
+        """Падает, как помощник, исчерпавший предел шагов графа."""
+        raise GraphRecursionError("предел шагов")
+
+    monkeypatch.setattr(tool_module, "run_role", failing_run_role)
+
+    answer = _check(tool = check_tool, url = app_url)
+
+    assert "GraphRecursionError" in answer
 
 
 def test_running_app_starts_helper(check_tool: BaseTool, fake_run_role: FakeRunRole, app_url: str) -> None:

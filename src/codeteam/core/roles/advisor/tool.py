@@ -1,6 +1,7 @@
 """Инструмент get_advice: агент спрашивает совета у советника — отдельного агента со свежей памятью."""
 
 import itertools
+import logging
 import shutil
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from codeteam.core.agent.workspace import CHECK_DIR, PRIVATE_ROOT
 from codeteam.core.roles.advisor.config import ADVICE_FILE_NAME, ADVISOR_ROLE
 from codeteam.core.roles.advisor.prompts import (
     ADVICE_LIMIT_ERROR,
+    ADVISOR_FAILED_ERROR,
     ADVICE_TRUNCATED_NOTE,
     ADVISOR_TASK,
     CONTEXT_NOT_GIVEN,
@@ -23,6 +25,8 @@ from codeteam.core.roles.advisor.prompts import (
     RELATED_FILES_NOT_GIVEN,
 )
 from codeteam.core.roles.common import CallerContext, reserve_private_dir_name, run_role
+
+logger = logging.getLogger(__name__)
 
 # Имя инструмента вызова советника.
 GET_ADVICE_TOOL_NAME = "get_advice"
@@ -91,22 +95,27 @@ def build_get_advice_tool(caller_context: CallerContext) -> BaseTool:
             project_dir = project_dir,
             target_dir = project_dir / PRIVATE_ROOT / private_dir_name / RELATED_DIR_NAME,
         )
-        advice_dir = run_role(
-            cfg = caller_context.cfg,
-            role = ADVISOR_ROLE,
-            journal_name = f"{caller_context.caller_journal_name}.{private_dir_name.name}",
-            task = ADVISOR_TASK.format(
-                caller_name = caller_context.caller_name,
-                question = question,
-                context = context or CONTEXT_NOT_GIVEN,
-                related_files = _show_files(file_paths = related_paths),
-            ),
-            input_dirs = (),
-            private_dir_name = private_dir_name,
-            extra_readable_dirs = (project_dir,),
-            extra_writable_dirs = (project_dir / CHECK_DIR,),
-            extra_command_writable_dirs = (),
-        )
+        try:
+            advice_dir = run_role(
+                cfg = caller_context.cfg,
+                role = ADVISOR_ROLE,
+                journal_name = f"{caller_context.caller_journal_name}.{private_dir_name.name}",
+                task = ADVISOR_TASK.format(
+                    caller_name = caller_context.caller_name,
+                    question = question,
+                    context = context or CONTEXT_NOT_GIVEN,
+                    related_files = _show_files(file_paths = related_paths),
+                ),
+                input_dirs = (),
+                private_dir_name = private_dir_name,
+                extra_readable_dirs = (project_dir,),
+                extra_writable_dirs = (project_dir / CHECK_DIR,),
+                extra_command_writable_dirs = (),
+            )
+        except Exception as error:
+            # падение советника не прерывает спросившего: он получает ошибку и продолжает работу
+            logger.error(f"[{GET_ADVICE_TOOL_NAME}] советник прервал работу: {type(error).__name__}: {error}")
+            raise ToolException(ADVISOR_FAILED_ERROR.format(error = type(error).__name__)) from error
         advice_path = advice_dir / ADVICE_FILE_NAME
         if not advice_path.is_file():
             raise ToolException(NO_ADVICE_ERROR.format(draft_dir = advice_dir.relative_to(project_dir)))

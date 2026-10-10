@@ -32,6 +32,10 @@ from codeteam.core.tools.shell import BASH_TOOL_NAME, START_SERVICE_TOOL_NAME, S
 # Запас токенов окна модели на её ответ.
 RESPONSE_TOKEN_RESERVE = 16000
 
+# Предел шагов графа агента, одинаковый для любого места запуска: без явного значения агент, запущенный
+# из инструмента другого агента, получает предел вызова инструмента — 25 шагов.
+AGENT_RECURSION_LIMIT = 10000
+
 # Инструменты, без которых агент не прочитает разогрев и не запишет черновик.
 REQUIRED_TOOL_NAMES = (READ_TOOL_NAME, WRITE_TOOL_NAME, EDIT_TOOL_NAME, DELETE_TOOL_NAME)
 
@@ -202,6 +206,7 @@ def run_agent(
     code_name_instructions = CODE_NAME_INSTRUCTIONS.format(code_name = private_dir_name.as_posix())
 
     config = RunnableConfig(
+        recursion_limit = AGENT_RECURSION_LIMIT,
         configurable = {
             AGENT_CFG_NAME: AgentConfig(
                 system_prompt = (
