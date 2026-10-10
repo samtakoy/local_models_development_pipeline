@@ -10,6 +10,7 @@ start_service ждёт готовности по порту или строке 
 import re
 import shlex
 import socket
+import subprocess
 import time
 from pathlib import Path
 
@@ -40,6 +41,9 @@ CHECK_INTERVAL_SECONDS = 0.5
 # Сколько ждать, пока остановленная прежняя служба освободит порт, секунды.
 PORT_RELEASE_TIMEOUT_SECONDS = 5
 
+# Предел времени команды lsof, которая ищет процессы на порту, секунды.
+LSOF_TIMEOUT_SECONDS = 5
+
 # Адрес, на котором проверяется порт службы.
 SERVICE_HOST = "127.0.0.1"
 
@@ -57,7 +61,8 @@ START_SERVICE_DESCRIPTION = """Запускает долго работающу�
 Готовность проверяется по port (порт открыт на 127.0.0.1) или по log_pattern (в выводе появилась
 строка под это регулярное выражение). Укажи хотя бы одно; если указаны оба — ждём оба.
 Если служба слушает порт — всегда указывай port: инструмент проверит, что порт свободен.
-Повторный запуск с тем же port останавливает прежнюю службу и запускает новую: так перезапускай службу после правки кода.
+Если port занят твоим процессом (запущенным через bash или start_service), инструмент остановит его и запустит службу:
+так перезапускай службу после правки кода.
 Служба работает между вызовами и останавливается, когда ты закончишь работу.
 
 Обращайся к службе по 127.0.0.1. Остановить — инструментом stop_process с номером процесса.
@@ -87,8 +92,8 @@ def build_start_service_tool(*, workspace: Workspace, processes: ShellProcesses,
     """
     Собирает инструмент запуска служб для рабочего места вызова.
 
-    Запуск на порту, где работает служба, запущенная этим инструментом раньше, останавливает
-    прежнюю службу и запускает новую.
+    Запуск на порту, занятом процессом агента (запущенным через bash или start_service), останавливает
+    этот процесс и запускает службу.
 
         workspace: рабочее место вызова: папка запуска и права записи те же, что у bash.
         processes: учёт фоновых процессов; служба попадает в него, её видит и останавливает stop_process.
@@ -96,9 +101,6 @@ def build_start_service_tool(*, workspace: Workspace, processes: ShellProcesses,
 
     Возвращает: Инструмент start_service.
     """
-    # номер группы процессов службы по её порту
-    service_by_port: dict[int, int] = {}
-
     def start_service(
         *,
         command: str,
@@ -131,10 +133,9 @@ def build_start_service_tool(*, workspace: Workspace, processes: ShellProcesses,
             pattern = re.compile(log_pattern) if log_pattern else None
         except re.error as error:
             raise ToolException(f"Ошибка: log_pattern — неверное регулярное выражение: {error}") from error
-        if port is not None and port in service_by_port:
-            # прежняя служба на этом порту заменяется новой
-            processes.kill_group_of(process_id = service_by_port.pop(port))
-            _wait_port_released(port = port)
+        stopped_notice = ""
+        if port is not None and _is_port_open(port = port):
+            stopped_notice = _stop_own_listeners(port = port, processes = processes)
         if port is not None and _is_port_open(port = port):
             raise ToolException(
                 f"Ошибка: порт {port} уже занят другой программой, служба не запущена. "
@@ -157,29 +158,29 @@ def build_start_service_tool(*, workspace: Workspace, processes: ShellProcesses,
             command = command,
         )
         if result.exit_code != 0 or result.background_process_id is None:
-            raise ToolException(f"Ошибка: служба не запущена.\n{result.output}")
+            raise ToolException(f"{stopped_notice}Ошибка: служба не запущена.\n{result.output}")
 
         # номер, который видит агент: процесс службы, запущенный в фоне ($!)
         process_id = result.background_process_id
         # служба работает, пока жив любой процесс её группы, в том числе запущенный в фоне командой службы
         process_group_id = result.process_group_id
-        if port is not None:
-            service_by_port[port] = process_group_id
         deadline = time.monotonic() + timeout
         while True:
             if _is_ready(port = port, pattern = pattern, log_path = log_path):
                 return (
+                    f"{stopped_notice}"
                     f"Служба готова: процесс {process_id}, лог {shown_log}.\n"
                     f"Остановить: stop_process(pid = {process_id}).\n"
                     f"Последние строки лога:\n{_log_tail(log_path = log_path)}"
                 )
             if not is_process_group_alive(process_group_id = process_group_id):
                 raise ToolException(
+                    f"{stopped_notice}"
                     f"Служба не запустилась — процесс {process_id} завершился. Лог {shown_log}.\n"
                     f"Последние строки лога:\n{_log_tail(log_path = log_path)}"
                 )
             if time.monotonic() >= deadline:
-                return _not_ready_answer(
+                return stopped_notice + _not_ready_answer(
                     timeout = timeout,
                     process_id = process_id,
                     port = port,
@@ -294,6 +295,53 @@ def _not_ready_answer(
     lines.append(f"Остановить: stop_process(pid = {process_id}).")
 
     return "\n".join(lines)
+
+
+def _stop_own_listeners(*, port: int, processes: ShellProcesses) -> str:
+    """
+    Останавливает процессы агента, которые слушают порт, и ждёт, пока порт освободится.
+
+        port: порт службы.
+        processes: учёт фоновых процессов агента; чужие процессы не трогаются.
+
+    Возвращает: Строки об остановленных процессах агента; пустую строку, если таких не было.
+    """
+    stopped_notice = ""
+    for listener_id in _port_listener_ids(port = port):
+        own_process = processes.process_of(process_id = listener_id)
+        if own_process is None:
+            continue
+
+        processes.kill_group_of(process_id = listener_id)
+        stopped_notice += (
+            f"На порту {port} работал твой процесс {own_process.process_id} ({own_process.command}), он остановлен.\n"
+        )
+
+    if stopped_notice:
+        _wait_port_released(port = port)
+
+    return stopped_notice
+
+
+def _port_listener_ids(*, port: int) -> list[int]:
+    """
+    Находит процессы, которые слушают порт, системной командой lsof.
+
+        port: порт.
+
+    Возвращает: Номера процессов; пустой список, если lsof нет или порт никто не слушает.
+    """
+    try:
+        result = subprocess.run(
+            ["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-t"],
+            capture_output = True,
+            text = True,
+            timeout = LSOF_TIMEOUT_SECONDS,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return []
+
+    return [int(line) for line in result.stdout.split() if line.isdigit()]
 
 
 def _is_port_open(*, port: int) -> bool:

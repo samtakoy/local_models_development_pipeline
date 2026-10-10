@@ -56,6 +56,20 @@ class ShellProcesses:
 
         return sorted(alive, key = lambda process: process.process_id)
 
+    def process_of(self, *, process_id: int) -> ShellProcess | None:
+        """
+        Находит запуск агента, в группе которого работает процесс.
+
+            process_id: номер запуска из учёта, номер запомненной группы или номер любого процесса в ней.
+
+        Возвращает: Запуск агента; None, если процесс не относится к запомненной группе.
+        """
+        process_group_id = self._group_of(process_id = process_id)
+        if process_group_id is None:
+            return None
+
+        return self._processes[process_group_id]
+
     def kill_group_of(self, *, process_id: int) -> bool:
         """
         Снимает запомненную группу, в которой работает процесс.

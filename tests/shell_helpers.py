@@ -1,6 +1,7 @@
-"""Общие действия тестов команд оболочки: проверка и ожидание процессов."""
+"""Общие действия тестов команд оболочки: проверка и ожидание процессов и портов."""
 
 import os
+import socket
 import time
 
 # Сколько ждать исчезновения снятого процесса, секунды.
@@ -58,5 +59,24 @@ def wait_process_group_gone(*, process_group_id: int) -> bool:
         except ProcessLookupError:
             return True
         time.sleep(PROCESS_POLL_SECONDS)
+
+    return False
+
+
+def wait_port_open(*, port: int) -> bool:
+    """
+    Ждёт, пока порт на 127.0.0.1 начнёт принимать соединения, не дольше PROCESS_GONE_TIMEOUT_SECONDS.
+
+        port: порт.
+
+    Возвращает: True, если порт открылся.
+    """
+    deadline = time.monotonic() + PROCESS_GONE_TIMEOUT_SECONDS
+    while time.monotonic() < deadline:
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout = PROCESS_POLL_SECONDS):
+                return True
+        except OSError:
+            time.sleep(PROCESS_POLL_SECONDS)
 
     return False

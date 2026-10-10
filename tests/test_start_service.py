@@ -11,8 +11,8 @@ from langchain_core.tools import BaseTool
 
 from codeteam.common.shell import CommandHost, ShellProcesses
 from codeteam.core.agent.workspace import Workspace
-from codeteam.core.tools.shell import build_start_service_tool, build_stop_process_tool
-from tests.shell_helpers import is_process_alive, wait_process_gone
+from codeteam.core.tools.shell import build_bash_tool, build_start_service_tool, build_stop_process_tool
+from tests.shell_helpers import is_process_alive, wait_port_open, wait_process_gone
 
 # Номер процесса службы в ответе start_service.
 SERVICE_PROCESS_PATTERN = re.compile(r"Служба готова: процесс (\d+)")
@@ -34,16 +34,15 @@ def processes() -> Iterator[ShellProcesses]:
 
 
 @pytest.fixture
-def start_service(tmp_path: Path, processes: ShellProcesses) -> Iterator[BaseTool]:
+def workspace(tmp_path: Path) -> Workspace:
     """
-    Инструмент start_service на рабочем месте в папке теста.
+    Рабочее место в папке теста.
 
         tmp_path: временная папка теста.
-        processes: учёт фоновых процессов теста.
 
-    Возвращает: Инструмент start_service; хозяин команд останавливается после теста.
+    Возвращает: Рабочее место.
     """
-    workspace = Workspace(
+    return Workspace(
         project_dir = tmp_path,
         private_dir = tmp_path / ".ct-work" / "agent",
         input_dirs = (),
@@ -52,9 +51,48 @@ def start_service(tmp_path: Path, processes: ShellProcesses) -> Iterator[BaseToo
         refusal_hint = None,
     )
 
-    host = CommandHost(write_roots = workspace.writable_dirs, processes = processes)
-    yield build_start_service_tool(workspace = workspace, processes = processes, host = host)
-    host.close()
+
+@pytest.fixture
+def host(workspace: Workspace, processes: ShellProcesses) -> Iterator[CommandHost]:
+    """
+    Хозяин команд агента, общий для bash и start_service.
+
+        workspace: рабочее место теста.
+        processes: учёт фоновых процессов теста.
+
+    Возвращает: Хозяин команд; останавливается после теста.
+    """
+    command_host = CommandHost(write_roots = workspace.writable_dirs, processes = processes)
+    yield command_host
+    command_host.close()
+
+
+@pytest.fixture
+def start_service(workspace: Workspace, processes: ShellProcesses, host: CommandHost) -> BaseTool:
+    """
+    Инструмент start_service на рабочем месте в папке теста.
+
+        workspace: рабочее место теста.
+        processes: учёт фоновых процессов теста.
+        host: хозяин команд агента.
+
+    Возвращает: Инструмент start_service.
+    """
+    return build_start_service_tool(workspace = workspace, processes = processes, host = host)
+
+
+@pytest.fixture
+def bash(workspace: Workspace, processes: ShellProcesses, host: CommandHost) -> BaseTool:
+    """
+    Инструмент bash с тем же учётом процессов и хозяином команд, что у start_service.
+
+        workspace: рабочее место теста.
+        processes: учёт фоновых процессов теста.
+        host: хозяин команд агента.
+
+    Возвращает: Инструмент bash.
+    """
+    return build_bash_tool(workspace = workspace, processes = processes, host = host)
 
 
 def _free_port() -> int:
@@ -134,6 +172,23 @@ def test_restart_on_same_port_replaces_previous_service(start_service: BaseTool)
 
     assert wait_process_gone(process_id = _service_process_id(answer = first))
     assert is_process_alive(process_id = _service_process_id(answer = second))
+
+
+def test_own_bash_process_on_port_is_stopped_and_service_started(bash: BaseTool, start_service: BaseTool) -> None:
+    """
+    Порт занят сервером, который агент запустил через bash: start_service останавливает его, запускает
+    службу и называет в ответе номер остановленного процесса.
+    """
+    port = _free_port()
+    bash_answer = bash.invoke({"command": f"python3 -m http.server {port} --bind 127.0.0.1 > /dev/null 2>&1 & echo $!"})
+    bash_process_id = int(bash_answer.split()[-1])
+    assert wait_port_open(port = port)
+
+    answer = _start(start_service = start_service, port = port)
+
+    assert str(bash_process_id) in answer.split("\n")[0], answer
+    assert wait_process_gone(process_id = bash_process_id)
+    assert is_process_alive(process_id = _service_process_id(answer = answer))
 
 
 def test_port_busy_by_other_program_is_refused(start_service: BaseTool) -> None:
