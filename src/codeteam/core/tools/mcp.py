@@ -8,6 +8,7 @@
 
 import asyncio
 import threading
+from collections.abc import Callable
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,6 +23,10 @@ MCP_START_TIMEOUT_SECONDS = 120
 # Предел ожидания одного вызова инструмента MCP, секунды.
 MCP_CALL_TIMEOUT_SECONDS = 120
 
+# Проверка вызова инструмента MCP до отправки серверу: имя инструмента и аргументы вызова;
+# возвращает текст отказа агенту или None, если вызов можно отправить.
+CallCheck = Callable[[str, dict], str | None]
+
 
 @dataclass(frozen = True)
 class McpServer:
@@ -32,12 +37,14 @@ class McpServer:
         command: программа запуска.
         args: аргументы программы.
         cwd: рабочая папка сервера: от неё сервер считает относительные пути из вызовов инструментов.
+        check_call: проверка вызова до отправки серверу; None — вызовы не проверяются.
     """
 
     name: str
     command: str
     args: tuple[str, ...]
     cwd: Path
+    check_call: CallCheck | None
 
 
 class McpTools:
@@ -50,7 +57,8 @@ class McpTools:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._stop: asyncio.Event | None = None
         self._ready = threading.Event()
-        self._tools: list[BaseTool] = []
+        # инструменты MCP вместе с сервером, которому они принадлежат
+        self._tools: list[tuple[McpServer, BaseTool]] = []
         self._error: BaseException | None = None
         self._thread = threading.Thread(target = self._run, name = "mcp", daemon = True)
 
@@ -69,7 +77,7 @@ class McpTools:
         if self._error is not None:
             raise RuntimeError(f"серверы MCP не запустились: {self._error}") from self._error
 
-        return [self._sync_tool(tool = tool) for tool in self._tools]
+        return [self._sync_tool(server = server, tool = tool) for server, tool in self._tools]
 
     def __exit__(self, *exception_info) -> None:
         """
@@ -105,17 +113,19 @@ class McpTools:
             async with AsyncExitStack() as stack:
                 for server in self._servers:
                     session = await stack.enter_async_context(client.session(server.name))
-                    self._tools.extend(await load_mcp_tools(session))
+                    self._tools.extend((server, tool) for tool in await load_mcp_tools(session))
                 self._ready.set()
                 await self._stop.wait()
         except BaseException as error:
             self._error = error
             self._ready.set()
 
-    def _sync_tool(self, *, tool: BaseTool) -> BaseTool:
+    def _sync_tool(self, *, server: McpServer, tool: BaseTool) -> BaseTool:
         """
-        Оборачивает асинхронный инструмент MCP в синхронный с тем же именем, описанием и аргументами.
+        Оборачивает асинхронный инструмент MCP в синхронный с тем же именем, описанием и аргументами;
+        перед отправкой вызов проходит проверку сервера.
 
+            server: сервер инструмента.
             tool: инструмент MCP.
 
         Возвращает: Синхронный инструмент.
@@ -123,12 +133,17 @@ class McpTools:
 
         def call(**arguments):
             """
-            Передаёт вызов в поток сессий и ждёт ответа.
+            Проверяет вызов, передаёт его в поток сессий и ждёт ответа.
 
                 arguments: аргументы вызова.
 
-            Возвращает: Ответ инструмента MCP.
+            Возвращает: Ответ инструмента MCP или отказ проверки сервера.
             """
+            if server.check_call is not None:
+                refusal = server.check_call(tool.name, arguments)
+                if refusal is not None:
+                    return refusal
+
             future = asyncio.run_coroutine_threadsafe(tool.ainvoke(arguments), self._loop)
 
             return future.result(timeout = MCP_CALL_TIMEOUT_SECONDS)

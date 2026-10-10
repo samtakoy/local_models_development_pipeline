@@ -1,5 +1,6 @@
 """Описание роли веб-тестировщика: промпт, модель, инструменты, сервер браузера, проверки сдачи."""
 
+from functools import partial
 from pathlib import Path
 
 from codeteam.common.llm import ReasoningLevel
@@ -34,10 +35,11 @@ def playwright_server(caller_context: CallerContext) -> McpServer:
 
         caller_context: агент, которому нужен браузер.
 
-    Возвращает: Сервер MCP: работает в папке проекта, и файлы с именем из вызова агента ложатся
-        от неё; снимки страниц и журналы консоли без имени — в папке <журнал агента>.playwright
-        рядом с журналом; без окна, если так задано в настройках.
+    Возвращает: Сервер MCP: работает в папке проекта, файлы с именем из вызова агента пишет только
+        в папку CHECK_DIR проекта; снимки страниц и журналы консоли без имени — в папке
+        <журнал агента>.playwright рядом с журналом; без окна, если так задано в настройках.
     """
+    project_dir = Path(caller_context.cfg.project_path)
     output_dir = caller_context.cfg.run_dir / f"{caller_context.caller_journal_name}.playwright"
     args = (*PLAYWRIGHT_ARGS, "--output-dir", str(output_dir))
     if caller_context.cfg.settings.browser_headless:
@@ -47,7 +49,32 @@ def playwright_server(caller_context: CallerContext) -> McpServer:
         name = "playwright",
         command = PLAYWRIGHT_COMMAND,
         args = args,
-        cwd = Path(caller_context.cfg.project_path),
+        cwd = project_dir,
+        check_call = partial(check_playwright_filename, project_dir = project_dir),
+    )
+
+
+def check_playwright_filename(tool_name: str, arguments: dict, *, project_dir: Path) -> str | None:
+    """
+    Пропускает вызов, только если файл из filename лежит в папке CHECK_DIR проекта.
+
+        tool_name: имя инструмента браузера.
+        arguments: аргументы вызова.
+        project_dir: папка проекта: рабочая папка сервера.
+
+    Возвращает: Текст отказа агенту; None, если filename не задан или лежит в CHECK_DIR.
+    """
+    filename = arguments.get("filename")
+    if filename is None:
+        return None
+
+    files_dir = (project_dir / CHECK_DIR).resolve()
+    if (project_dir / filename).resolve().is_relative_to(files_dir):
+        return None
+
+    return (
+        f"Ошибка: filename {filename} вне папки {CHECK_DIR}/ проекта. "
+        f"Сохраняй файлы в {CHECK_DIR}/, например {CHECK_DIR}/{Path(filename).name}."
     )
 
 
