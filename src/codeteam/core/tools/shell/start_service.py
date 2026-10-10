@@ -7,11 +7,9 @@
 start_service ждёт готовности по порту или строке лога и сразу показывает ошибку старта.
 """
 
-import os
 import re
 import shlex
 import socket
-import tempfile
 import time
 from pathlib import Path
 
@@ -20,8 +18,9 @@ from pydantic import BaseModel, Field
 
 from codeteam.common.shell import CommandHost, CommandHostRestarted, ShellProcesses
 from codeteam.common.shell.processes import is_process_group_alive
-from codeteam.core.agent.workspace import CHECK_DIR, PathOutsideWorkspace, Workspace
+from codeteam.core.agent.workspace import Workspace
 from codeteam.core.tools.shell.bash import BASH_HOST_RESTARTED_REFUSAL
+from codeteam.core.tools.shell._internal.output_file import new_output_file
 
 # Имя инструмента запуска служб.
 START_SERVICE_TOOL_NAME = "start_service"
@@ -80,7 +79,7 @@ class StartServiceArguments(BaseModel):
     )
     timeout_seconds: int | None = Field(
         default = None,
-        description = "сколько ждать готовности в секундах, по умолчанию 30, не больше 120",
+        description = f"сколько ждать готовности в секундах, по умолчанию {READY_TIMEOUT_SECONDS}, не больше {READY_TIMEOUT_LIMIT_SECONDS}",
     )
 
 
@@ -142,7 +141,7 @@ def build_start_service_tool(*, workspace: Workspace, processes: ShellProcesses,
                 f"Запусти службу на другом порту."
             )
 
-        log_path = _new_log_path(workspace = workspace)
+        log_path = new_output_file(workspace = workspace, dir_name = SERVICE_LOG_DIR_NAME, prefix = "service_")
         shown_log = workspace.display_path(path = log_path)
         try:
             result = host.run(
@@ -176,7 +175,7 @@ def build_start_service_tool(*, workspace: Workspace, processes: ShellProcesses,
                 )
             if not is_process_group_alive(process_group_id = process_group_id):
                 raise ToolException(
-                    f"Ошибка: служба не запустилась — процесс {process_id} завершился. Лог {shown_log}.\n"
+                    f"Служба не запустилась — процесс {process_id} завершился. Лог {shown_log}.\n"
                     f"Последние строки лога:\n{_log_tail(log_path = log_path)}"
                 )
             if time.monotonic() >= deadline:
@@ -234,28 +233,6 @@ def build_disabled_start_service_tool(*, refusal: str) -> BaseTool:
         args_schema = StartServiceArguments,
         handle_tool_error = True,
     )
-
-
-def _new_log_path(*, workspace: Workspace) -> Path:
-    """
-    Создаёт пустой файл лога службы: в папке CHECK_DIR/SERVICE_LOG_DIR_NAME проекта, если туда разрешена
-    запись, иначе во временной папке системы.
-
-        workspace: рабочее место вызова.
-
-    Возвращает: Путь файла лога.
-    """
-    log_dir = workspace.project_dir / CHECK_DIR / SERVICE_LOG_DIR_NAME
-    try:
-        workspace.resolve_writable(path = str(log_dir))
-    except PathOutsideWorkspace:
-        log_dir = Path(tempfile.gettempdir())
-
-    log_dir.mkdir(parents = True, exist_ok = True)
-    log_descriptor, log_name = tempfile.mkstemp(prefix = "service_", suffix = ".log", dir = log_dir)
-    os.close(log_descriptor)
-
-    return Path(log_name)
 
 
 def _is_ready(*, port: int | None, pattern: re.Pattern[str] | None, log_path: Path) -> bool:

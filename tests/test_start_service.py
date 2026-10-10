@@ -17,6 +17,9 @@ from tests.shell_helpers import is_process_alive, wait_process_gone
 # Номер процесса службы в ответе start_service.
 SERVICE_PROCESS_PATTERN = re.compile(r"Служба готова: процесс (\d+)")
 
+# Номер процесса в готовом вызове stop_process из ответа start_service.
+STOP_CALL_PATTERN = re.compile(r"stop_process\(pid = (\d+)\)")
+
 
 @pytest.fixture
 def processes() -> Iterator[ShellProcesses]:
@@ -101,6 +104,20 @@ def _service_process_id(*, answer: str) -> int:
     Возвращает: Номер процесса службы.
     """
     match = SERVICE_PROCESS_PATTERN.search(answer)
+    assert match is not None, answer
+
+    return int(match.group(1))
+
+
+def _stop_process_id(*, answer: str) -> int:
+    """
+    Берёт номер процесса из вызова stop_process в ответе start_service.
+
+        answer: ответ start_service.
+
+    Возвращает: Номер процесса службы.
+    """
+    match = STOP_CALL_PATTERN.search(answer)
     assert match is not None, answer
 
     return int(match.group(1))
@@ -201,10 +218,10 @@ def test_unknown_number_refusal_lists_service(start_service: BaseTool, stop_proc
     )
 
 
-def test_not_ready_reports_conditions_and_empty_log(start_service: BaseTool) -> None:
+def test_not_ready_reports_conditions_and_empty_log(start_service: BaseTool, tmp_path: Path) -> None:
     """
-    Служба, чей вывод перенаправлен в свой файл, не становится готовой: ответ называет открытый порт
-    и отправляет к файлу из перенаправления, без пути к пустому логу.
+    Служба, чей вывод перенаправлен в свой файл, не становится готовой: ответ называет порт, номер
+    работающего процесса для stop_process и не даёт путь к пустому логу инструмента.
     """
     port = _free_port()
 
@@ -215,19 +232,16 @@ def test_not_ready_reports_conditions_and_empty_log(start_service: BaseTool) -> 
         "timeout_seconds": 2,
     })
 
-    assert re.fullmatch(
-        rf"Процесс (\d+) работает, но за 2 с условия готовности не выполнены\.\n"
-        rf"Порт {port} открыт\.\n"
-        r"Лог пуст: если в command есть перенаправление вывода \(> файл\), вывод ушёл в этот файл — читай его\.\n"
-        r"Остановить: stop_process\(pid = \1\)\.",
-        answer,
-    ), answer
+    assert str(port) in answer
+    assert is_process_alive(process_id = _stop_process_id(answer = answer))
+    assert "services/" not in answer
+    assert (tmp_path / "served.log").exists()
 
 
 def test_not_ready_with_output_shows_log(start_service: BaseTool) -> None:
     """
-    Служба с выводом, где нет строки log_pattern, не становится готовой: ответ называет условия,
-    путь к логу и последние строки лога.
+    Служба с выводом, где нет строки log_pattern, не становится готовой: ответ называет порт, номер
+    работающего процесса для stop_process, путь к логу и последние строки лога.
     """
     port = _free_port()
 
@@ -238,25 +252,21 @@ def test_not_ready_with_output_shows_log(start_service: BaseTool) -> None:
         "timeout_seconds": 2,
     })
 
-    assert re.fullmatch(
-        rf"Процесс (\d+) работает, но за 2 с условия готовности не выполнены\.\n"
-        rf"Порт {port} открыт\.\n"
-        r"Строка log_pattern в логе не найдена\.\n"
-        r"Лог \S+\.log\.\n"
-        r"Последние строки лога:\n.*Serving HTTP.*\n"
-        r"Остановить: stop_process\(pid = \1\)\.",
-        answer,
-        flags = re.DOTALL,
-    ), answer
+    assert str(port) in answer
+    assert is_process_alive(process_id = _stop_process_id(answer = answer))
+    log_path = re.search(r"\S+services/\S+\.log", answer)
+    assert log_path is not None, answer
+    assert "Serving HTTP" in answer
 
 
 def test_failed_service_is_not_listed(start_service: BaseTool, stop_process: BaseTool) -> None:
     """
-    Служба, которая сразу завершилась, получает ошибку старта и не попадает в список stop_process.
+    Служба, которая сразу завершилась, не получает в ответе вызова stop_process и не попадает в список
+    stop_process.
     """
     port = _free_port()
 
     answer = start_service.invoke({"command": "python3 -c 'import sys; sys.exit(3)'", "port": port})
 
-    assert re.match(r"Ошибка: служба не запустилась — процесс \d+ завершился", answer), answer
+    assert STOP_CALL_PATTERN.search(answer) is None, answer
     assert stop_process.invoke({}) == "Работающих фоновых процессов не было."

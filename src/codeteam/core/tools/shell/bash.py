@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from codeteam.common.shell import CommandHost, CommandHostRestarted, ShellProcesses
 from codeteam.core.agent.workspace import Workspace
+from codeteam.core.tools.shell._internal.output_file import new_output_file
 
 # Предел времени команды, если агент его не задал, секунды.
 BASH_TIMEOUT_SECONDS = 120
@@ -19,7 +20,10 @@ BASH_TIMEOUT_LIMIT_SECONDS = 600
 # Сколько последних символов вывода команды видит агент.
 BASH_OUTPUT_LIMIT = 10_000
 
-BASH_DESCRIPTION = """Выполняет команду bash в папке проекта и возвращает код возврата и вывод
+# Папка полного вывода обрезанных команд внутри папки временных файлов проверки CHECK_DIR.
+BASH_OUTPUT_DIR_NAME = "bash_output"
+
+BASH_DESCRIPTION = f"""Выполняет команду bash в папке проекта и возвращает код возврата и вывод
 (stdout и stderr вместе).
 
 Инструмент для команд терминала: тесты, git, uv, python.
@@ -47,7 +51,7 @@ BASH_DESCRIPTION = """Выполняет команду bash в папке пр�
 - Отказ «Operation not permitted» при kill значит, что процесс не твой: остановить можно только свои процессы.
 - ps недоступен: список процессов — pgrep -fl; свои фоновые процессы останавливай инструментом stop_process.
 - Ввода с клавиатуры нет: команды, которые ждут ввода, не запускай.
-- Длинный вывод обрезается: видны последние 10000 символов.
+- Длинный вывод обрезается: видны последние {BASH_OUTPUT_LIMIT} символов, полный вывод сохраняется в файл, путь — в ответе.
 - Команда прерывается по истечении timeout_seconds."""
 
 # Часть описания bash о рабочем месте вызова: папка запуска, папки записи и закрытое для чтения.
@@ -80,7 +84,7 @@ class BashArguments(BaseModel):
     command: str = Field(description = "команда bash")
     timeout_seconds: int | None = Field(
         default = None,
-        description = "предел времени в секундах, по умолчанию 120, не больше 600",
+        description = f"предел времени в секундах, по умолчанию {BASH_TIMEOUT_SECONDS}, не больше {BASH_TIMEOUT_LIMIT_SECONDS}",
     )
 
 
@@ -123,15 +127,17 @@ def build_bash_tool(*, workspace: Workspace, processes: ShellProcesses, host: Co
         )
         if result.exit_code is None:
             raise ToolException(
-                f"Ошибка: команда прервана, превышен предел времени {timeout} с\n"
-                + _tail(output = result.output)
+                f"Ошибка: команда прервана, превышен предел времени {timeout} с.\n"
+                f"Если команда должна работать дольше и не ждёт ввода с клавиатуры, повтори её с большим "
+                f"timeout_seconds.\n"
+                + _shown_output(output = result.output, workspace = workspace)
             )
 
         lines = [f"Код возврата: {result.exit_code}"]
         pipe_line = _pipe_line(pipe_exit_codes = result.pipe_exit_codes)
         if pipe_line is not None:
             lines.append(pipe_line)
-        lines.append(_tail(output = result.output))
+        lines.append(_shown_output(output = result.output, workspace = workspace))
 
         return "\n".join(lines)
 
@@ -198,18 +204,61 @@ def _pipe_line(*, pipe_exit_codes: tuple[int, ...]) -> str | None:
     return line
 
 
-def _tail(*, output: str) -> str:
+def _shown_output(*, output: str, workspace: Workspace) -> str:
     """
-    Оставляет конец вывода в пределах BASH_OUTPUT_LIMIT.
+    Готовит вывод команды для агента: длинный вывод сохраняет в файл и оставляет последние целые строки
+    в пределах BASH_OUTPUT_LIMIT символов.
 
         output: полный вывод команды.
+        workspace: рабочее место вызова: в его папке CHECK_DIR сохраняется полный вывод.
 
-    Возвращает: Вывод целиком или его конец с пометкой об обрезке.
+    Возвращает: Вывод целиком или пометку об обрезке с путём к полному выводу и конец вывода.
     """
     if len(output) <= BASH_OUTPUT_LIMIT:
         return output
 
-    return (
-        f"(Начало вывода обрезано: всего символов {len(output)}, показаны последние {BASH_OUTPUT_LIMIT})\n"
-        + output[-BASH_OUTPUT_LIMIT:]
+    output_path = new_output_file(workspace = workspace, dir_name = BASH_OUTPUT_DIR_NAME, prefix = "output_")
+    output_path.write_text(output, encoding = "utf-8")
+    full_output = (
+        f"Полный вывод: {workspace.display_path(path = output_path)} — "
+        f"читать инструментом read (offset, limit) или искать инструментом grep."
     )
+
+    lines = output.split("\n")
+    if lines[-1] == "":
+        lines.pop()
+    shown_lines = _last_lines(lines = lines, limit = BASH_OUTPUT_LIMIT)
+
+    if not shown_lines:
+        return (
+            f"Вывод обрезан: показан конец строки {len(lines)} из {len(lines)}. {full_output}\n"
+            + lines[-1][-BASH_OUTPUT_LIMIT:]
+        )
+
+    first_shown = len(lines) - len(shown_lines) + 1
+    return (
+        f"Вывод обрезан: показаны строки {first_shown}–{len(lines)} из {len(lines)}. {full_output}\n"
+        + "\n".join(shown_lines)
+    )
+
+
+def _last_lines(*, lines: list[str], limit: int) -> list[str]:
+    """
+    Берёт последние целые строки, которые вместе с переводами строк укладываются в limit символов.
+
+        lines: строки вывода.
+        limit: предел символов.
+
+    Возвращает: Последние строки по порядку; пустой список, если последняя строка длиннее предела.
+    """
+    shown_lines: list[str] = []
+    size = 0
+    for line in reversed(lines):
+        size += len(line) + 1
+        if size > limit:
+            break
+        shown_lines.append(line)
+
+    shown_lines.reverse()
+
+    return shown_lines
