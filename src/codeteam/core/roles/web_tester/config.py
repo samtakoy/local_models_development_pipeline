@@ -3,13 +3,16 @@
 from pathlib import Path
 
 from codeteam.common.llm import ReasoningLevel
-from codeteam.core.agent.workspace import CHECK_DIR
+from codeteam.core.agent.workspace import CHECK_DIR, CONTEXT_FILE_NAME
 from codeteam.core.roles.common import ACCEPTED_VERDICT, REWORK_VERDICT, VERDICT_FILE_NAME, RoleSettings, \
     check_verdict_file
 from codeteam.core.roles.common.browser import playwright_server
 from codeteam.core.tools.files import DELETE_TOOL_NAME, EDIT_TOOL_NAME, GLOB_TOOL_NAME, GREP_TOOL_NAME, \
     READ_TOOL_NAME, WRITE_TOOL_NAME
 from codeteam.core.tools.shell import START_SERVICE_TOOL_NAME, STOP_PROCESS_TOOL_NAME
+
+# Файл отчёта по требованиям в черновике веб-тестировщика.
+REPORT_FILE_NAME = "100_report.md"
 
 # Инструменты веб-тестировщика: без bash — приложение он запускает только через start_service.
 WEB_TESTER_TOOL_NAMES = (
@@ -31,6 +34,10 @@ WEB_TESTER_ROLE = RoleSettings(
         "accepted_verdict": ACCEPTED_VERDICT,
         "rework_verdict": REWORK_VERDICT,
         "check_dir": CHECK_DIR.as_posix(),
+        "context_file": CONTEXT_FILE_NAME,
+        "report_file": REPORT_FILE_NAME,
+        "start_service_tool": START_SERVICE_TOOL_NAME,
+        "stop_process_tool": STOP_PROCESS_TOOL_NAME,
     },
     model_name = None,
     reasoning_level = ReasoningLevel.LOW,

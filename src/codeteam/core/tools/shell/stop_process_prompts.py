@@ -1,7 +1,9 @@
 """Тексты инструмента stop_process для агента: описание, параметры, ошибки и итог."""
 
+from codeteam.core.tools.shell.tool_names import START_SERVICE_TOOL_NAME, STOP_PROCESS_TOOL_NAME
+
 # Описание инструмента stop_process.
-STOP_PROCESS_DESCRIPTION = """Останавливает фоновый процесс, который ты запустил через bash или start_service.
+STOP_PROCESS_DESCRIPTION = f"""Останавливает фоновый процесс, который ты запустил через bash или {START_SERVICE_TOOL_NAME}.
 
 Свой процесс можно остановить.
 Чужие процессы остановить нельзя: ни через bash, ни этим инструментом.
@@ -33,7 +35,7 @@ STOP_PROCESS_UNKNOWN_ERROR = (
 STOP_PROCESS_UNKNOWN_WITH_LIST_ERROR = (
     "Ошибка: процесса {pid} нет среди твоих работающих фоновых процессов. Твои фоновые процессы:\n"
     "{processes}\n"
-    "Вызови stop_process с номером из списка или без pid, чтобы остановить все."
+    f"Вызови {STOP_PROCESS_TOOL_NAME} с номером из списка или без pid, чтобы остановить все."
 )
 
 # Строка списка процессов.

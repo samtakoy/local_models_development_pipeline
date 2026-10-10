@@ -23,6 +23,7 @@ from codeteam.core.tools.shell.bash_prompts import (
     BASH_WORKSPACE_DESCRIPTION,
 )
 from codeteam.core.tools.shell.common_prompts import HOST_RESTARTED_REFUSAL, TIMEOUT_RANGE_ERROR
+from codeteam.core.tools.shell.tool_names import BASH_TOOL_NAME
 from codeteam.core.tools.shell._internal.output_file import new_output_file
 
 # Предел времени команды, если агент его не задал, секунды.
@@ -39,9 +40,6 @@ BASH_OUTPUT_DIR_NAME = "bash_output"
 
 # Код команды, которую остановил сигнал SIGPIPE: следующая команда цепочки перестала читать вывод.
 SIGPIPE_EXIT_CODE = 141
-
-# Имя инструмента команд оболочки.
-BASH_TOOL_NAME = "bash"
 
 
 class BashArguments(BaseModel):

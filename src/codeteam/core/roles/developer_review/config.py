@@ -3,10 +3,11 @@
 from pathlib import Path
 
 from codeteam.common.llm import ReasoningLevel
-from codeteam.core.agent.workspace import CHECK_DIR
+from codeteam.core.agent.workspace import CHECK_DIR, CONTEXT_FILE_NAME
 from codeteam.core.roles.browser_checker import build_check_in_browser_tool
 from codeteam.core.roles.common import ACCEPTED_VERDICT, PROJECT_TOOL_NAMES, REWORK_VERDICT, VERDICT_FILE_NAME, \
     RoleSettings, check_verdict_file
+from codeteam.core.tools.shell import START_SERVICE_TOOL_NAME, STOP_PROCESS_TOOL_NAME
 
 DEVELOPER_REVIEW_ROLE = RoleSettings(
     name = "developer_review",
@@ -16,6 +17,9 @@ DEVELOPER_REVIEW_ROLE = RoleSettings(
         "accepted_verdict": ACCEPTED_VERDICT,
         "rework_verdict": REWORK_VERDICT,
         "check_dir": CHECK_DIR.as_posix(),
+        "context_file": CONTEXT_FILE_NAME,
+        "start_service_tool": START_SERVICE_TOOL_NAME,
+        "stop_process_tool": STOP_PROCESS_TOOL_NAME,
     },
     model_name = None,
     reasoning_level = ReasoningLevel.LOW,

@@ -44,10 +44,8 @@ from codeteam.core.tools.shell.start_service_prompts import (
     START_SERVICE_STOPPED_OWN_NOTE,
     START_SERVICE_TIMEOUT_DESCRIPTION,
 )
+from codeteam.core.tools.shell.tool_names import START_SERVICE_TOOL_NAME
 from codeteam.core.tools.shell._internal.output_file import new_output_file
-
-# Имя инструмента запуска служб.
-START_SERVICE_TOOL_NAME = "start_service"
 
 # Предел ожидания готовности, если агент его не задал, секунды.
 READY_TIMEOUT_SECONDS = 30

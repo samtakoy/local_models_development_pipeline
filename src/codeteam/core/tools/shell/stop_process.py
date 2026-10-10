@@ -14,9 +14,7 @@ from codeteam.core.tools.shell.stop_process_prompts import (
     STOP_PROCESS_UNKNOWN_ERROR,
     STOP_PROCESS_UNKNOWN_WITH_LIST_ERROR,
 )
-
-# Имя инструмента остановки фоновых процессов.
-STOP_PROCESS_TOOL_NAME = "stop_process"
+from codeteam.core.tools.shell.tool_names import STOP_PROCESS_TOOL_NAME
 
 
 class StopProcessArguments(BaseModel):
