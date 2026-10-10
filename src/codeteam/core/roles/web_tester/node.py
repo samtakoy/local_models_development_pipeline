@@ -17,7 +17,7 @@ from codeteam.core.roles.web_tester.prompts import FIX_STAGE_TEXT, TRACKED_CHANG
 logger = logging.getLogger(__name__)
 
 # Наибольшее число этапов исправлений по отчёту веб-тестировщика за прогон.
-FIX_ROUND_LIMIT = 1
+FIX_ROUND_LIMIT = 2
 
 # Номер этапа исправлений: FIX_STAGE_NUMBER_BASE + номер круга, файл <номер>_fix_<круг>.md.
 FIX_STAGE_NUMBER_BASE = 900
@@ -69,7 +69,12 @@ def web_tester_node(state: PipelineState, config: RunnableConfig):
     if left_changes:
         logger.warning(f"[веб-тестировщик] оставил правки в проекте: {', '.join(left_changes)}")
 
-    update = {"rework": None, "journal_name": journal_name, "journal_count": state["journal_count"] + 1}
+    update = {
+        "rework": None,
+        "web_test_dir": report_dir,
+        "journal_name": journal_name,
+        "journal_count": state["journal_count"] + 1,
+    }
     if read_verdict(remarks_dir = report_dir):
         logger.info(f"[веб-тестировщик] приложение принято, отчёт: {report_dir}")
         return update

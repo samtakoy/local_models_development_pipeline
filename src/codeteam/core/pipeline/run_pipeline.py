@@ -75,6 +75,7 @@ def run_pipeline(
         stages = None,
         review = None,
         rework = None,
+        web_test_dir = None,
         next_role = project.roles[0],
         journal_name = None,
         journal_count = 0,

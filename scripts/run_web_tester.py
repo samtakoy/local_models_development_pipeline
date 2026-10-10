@@ -105,6 +105,7 @@ def main() -> None:
         stages = Stages(files = (), started = 0, plan_dir = None, fix_rounds = 0),
         review = None,
         rework = None,
+        web_test_dir = None,
         next_role = None,
         journal_name = None,
         journal_count = 0,
