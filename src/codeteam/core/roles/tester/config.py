@@ -8,7 +8,7 @@ from codeteam.core.roles.browser_checker import CHECK_IN_BROWSER_TOOL_NAME, buil
 from codeteam.core.roles.common import ACCEPTED_VERDICT, PROJECT_TOOL_NAMES, REWORK_VERDICT, VERDICT_FILE_NAME, \
     RoleSettings, check_verdict_file
 from codeteam.core.roles.common.final_check import REPORT_FILE_NAME
-from codeteam.core.tools.shell import START_SERVICE_TOOL_NAME, STOP_PROCESS_TOOL_NAME
+from codeteam.core.tools.shell import BASH_TOOL_NAME, START_SERVICE_TOOL_NAME, STOP_PROCESS_TOOL_NAME
 
 TESTER_ROLE = RoleSettings(
     name = "tester",
@@ -20,6 +20,7 @@ TESTER_ROLE = RoleSettings(
         "check_dir": CHECK_DIR.as_posix(),
         "context_file": CONTEXT_FILE_NAME,
         "report_file": REPORT_FILE_NAME,
+        "bash_tool": BASH_TOOL_NAME,
         "start_service_tool": START_SERVICE_TOOL_NAME,
         "stop_process_tool": STOP_PROCESS_TOOL_NAME,
         "check_in_browser_tool": CHECK_IN_BROWSER_TOOL_NAME,
