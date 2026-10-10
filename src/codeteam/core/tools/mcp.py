@@ -10,6 +10,7 @@ import asyncio
 import threading
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
+from pathlib import Path
 
 from langchain_core.tools import BaseTool, StructuredTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
@@ -30,11 +31,13 @@ class McpServer:
         name: имя сервера.
         command: программа запуска.
         args: аргументы программы.
+        cwd: рабочая папка сервера: от неё сервер считает относительные пути из вызовов инструментов.
     """
 
     name: str
     command: str
     args: tuple[str, ...]
+    cwd: Path
 
 
 class McpTools:
@@ -90,7 +93,12 @@ class McpTools:
         self._loop = asyncio.get_running_loop()
         self._stop = asyncio.Event()
         client = MultiServerMCPClient({
-            server.name: {"command": server.command, "args": list(server.args), "transport": "stdio"}
+            server.name: {
+                "command": server.command,
+                "args": list(server.args),
+                "cwd": str(server.cwd),
+                "transport": "stdio",
+            }
             for server in self._servers
         })
         try:

@@ -34,7 +34,8 @@ def playwright_server(caller_context: CallerContext) -> McpServer:
 
         caller_context: агент, которому нужен браузер.
 
-    Возвращает: Сервер MCP: снимки страниц и журналы консоли — в папке <журнал агента>.playwright
+    Возвращает: Сервер MCP: работает в папке проекта, и файлы с именем из вызова агента ложатся
+        от неё; снимки страниц и журналы консоли без имени — в папке <журнал агента>.playwright
         рядом с журналом; без окна, если так задано в настройках.
     """
     output_dir = caller_context.cfg.run_dir / f"{caller_context.caller_journal_name}.playwright"
@@ -42,7 +43,12 @@ def playwright_server(caller_context: CallerContext) -> McpServer:
     if caller_context.cfg.settings.browser_headless:
         args = (*args, "--headless")
 
-    return McpServer(name = "playwright", command = PLAYWRIGHT_COMMAND, args = args)
+    return McpServer(
+        name = "playwright",
+        command = PLAYWRIGHT_COMMAND,
+        args = args,
+        cwd = Path(caller_context.cfg.project_path),
+    )
 
 
 WEB_TESTER_ROLE = RoleSettings(
