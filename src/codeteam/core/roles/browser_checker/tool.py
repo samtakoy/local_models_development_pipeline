@@ -2,6 +2,7 @@
 
 import itertools
 import threading
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -40,6 +41,12 @@ LOCAL_HOSTS = ("127.0.0.1", "localhost")
 
 # Сколько ждать ответа приложения при проверке адреса перед запуском помощника, секунды.
 URL_CHECK_TIMEOUT_SECONDS = 3
+
+# Сколько ждать, пока приложение начнёт принимать соединения: оно могло только что запуститься, секунды.
+APP_START_WAIT_SECONDS = 15
+
+# Пауза между попытками соединиться с приложением, секунды.
+APP_START_POLL_SECONDS = 1
 
 # Порт адреса без явного порта по протоколу.
 DEFAULT_PORTS = {"http": 80, "https": 443}
@@ -154,7 +161,8 @@ def _run_helper(*, caller_context: CallerContext, project_dir: Path, url: str, s
 def check_app_url(*, url: str, processes: ShellProcesses) -> None:
     """
     Проверяет адрес приложения: он на этом компьютере, приложение по нему отвечает и порт адреса слушает
-    процесс агента. Любой ответ, в том числе с кодом ошибки, значит, что приложение работает.
+    процесс агента. Любой ответ, в том числе с кодом ошибки, значит, что приложение работает. Пока
+    соединиться нельзя, ждёт до APP_START_WAIT_SECONDS: приложение могло только что запуститься.
     Ошибку для агента поднимает ToolException.
 
         url: адрес приложения от агента.
@@ -166,13 +174,19 @@ def check_app_url(*, url: str, processes: ShellProcesses) -> None:
 
     # без прокси из окружения: адрес локальный
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    try:
-        with opener.open(url, timeout = URL_CHECK_TIMEOUT_SECONDS):
-            pass
-    except urllib.error.HTTPError:
-        pass
-    except (urllib.error.URLError, OSError, ValueError) as error:
-        raise ToolException(APP_NOT_RESPONDING_ERROR.format(url = url)) from error
+    deadline = time.monotonic() + APP_START_WAIT_SECONDS
+    while True:
+        try:
+            with opener.open(url, timeout = URL_CHECK_TIMEOUT_SECONDS):
+                break
+        except urllib.error.HTTPError:
+            break
+        except ValueError as error:
+            raise ToolException(APP_NOT_RESPONDING_ERROR.format(url = url)) from error
+        except (urllib.error.URLError, OSError) as error:
+            if time.monotonic() >= deadline:
+                raise ToolException(APP_NOT_RESPONDING_ERROR.format(url = url)) from error
+            time.sleep(APP_START_POLL_SECONDS)
 
     port = parsed.port or DEFAULT_PORTS[parsed.scheme]
     if not processes.port_listeners(port = port):

@@ -28,6 +28,12 @@ OBSERVATIONS = "Открыл главную: видна таблица.\n"
 # Предел времени команды приёмщика в тестах, секунды.
 COMMAND_TIMEOUT_SECONDS = 20
 
+# Сколько инструмент ждёт запуска приложения в тестах, секунды.
+TEST_APP_START_WAIT_SECONDS = 2
+
+# Через сколько запускается приложение, которое поднимается с задержкой, секунды.
+APP_START_DELAY_SECONDS = 1
+
 
 class ErrorPageHandler(BaseHTTPRequestHandler):
     """
@@ -66,6 +72,14 @@ class FakeRunRole:
         (answer_dir / OBSERVATIONS_FILE_NAME).write_text(OBSERVATIONS, encoding = "utf-8")
 
         return answer_dir
+
+
+@pytest.fixture(autouse = True)
+def short_app_start_wait(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Сокращает ожидание запуска приложения, чтобы тесты молчащего порта шли быстро.
+    """
+    monkeypatch.setattr(tool_module, "APP_START_WAIT_SECONDS", TEST_APP_START_WAIT_SECONDS)
 
 
 @pytest.fixture
@@ -259,6 +273,30 @@ def test_detached_app_starts_helper(
     url = _start_app(host = host, processes = processes, work_dir = tmp_path, detached = True)
 
     answer = _check(tool = check_tool, url = url)
+
+    assert answer == OBSERVATIONS
+
+
+@requires_sandbox
+def test_app_starting_late_starts_helper(
+    check_tool: BaseTool,
+    fake_run_role: FakeRunRole,
+    host: CommandHost,
+    tmp_path: Path,
+) -> None:
+    """
+    Приложение начинает принимать соединения через секунду после вызова - инструмент дожидается его
+    и запускает помощника.
+    """
+    port = free_port()
+    server = error_page_server_command(port = port, detached = True)
+    host.run(
+        command = f"(sleep {APP_START_DELAY_SECONDS}; {server}) > /dev/null 2>&1 &",
+        working_dir = str(tmp_path),
+        timeout_seconds = COMMAND_TIMEOUT_SECONDS,
+    )
+
+    answer = _check(tool = check_tool, url = f"http://127.0.0.1:{port}/")
 
     assert answer == OBSERVATIONS
 
