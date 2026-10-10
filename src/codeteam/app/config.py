@@ -4,6 +4,7 @@ from typing import Any
 
 from codeteam.core.pipeline.graph import DEFAULT_ROLES
 from codeteam.core.pipeline.project import ProjectSettings
+from codeteam.core.roles.web_tester import WEB_TESTER_ROLE
 
 
 class ConfigError(ValueError):
@@ -11,10 +12,20 @@ class ConfigError(ValueError):
 
 def load_project_config(setup_dir: str) -> ProjectSettings:
     config_data = _read_toml(path = Path(setup_dir) / "set.toml")
+    pipeline_data = config_data.get("pipeline", {})
+    roles = _parse_roles(pipeline_data = pipeline_data)
+    browser_check = _parse_browser_check(pipeline_data = pipeline_data)
+    if not browser_check and WEB_TESTER_ROLE.name in roles:
+        raise ConfigError(
+            f"[pipeline] browser_check = false, а роль {WEB_TESTER_ROLE.name} в списке ролей: "
+            f"веб-тестировщику нужен браузер; уберите роль из roles или включите browser_check"
+        )
+
     return ProjectSettings(
         path = config_data["project"],
         task = config_data["task"]["question"],
-        roles = _parse_roles(pipeline_data = config_data.get("pipeline", {})),
+        roles = roles,
+        browser_check = browser_check,
     )
 
 def _parse_roles(*, pipeline_data: dict[str, Any]) -> tuple[str, ...]:
@@ -33,6 +44,20 @@ def _parse_roles(*, pipeline_data: dict[str, Any]) -> tuple[str, ...]:
         raise ConfigError(f"[pipeline] roles = {roles!r}: нужен список имён ролей")
 
     return tuple(roles)
+
+def _parse_browser_check(*, pipeline_data: dict[str, Any]) -> bool:
+    """
+    Читает обязательный признак проверки в браузере из раздела [pipeline] файла состава.
+
+        pipeline_data: содержимое раздела [pipeline].
+
+    Возвращает: Значение browser_check.
+    """
+    browser_check = pipeline_data.get("browser_check")
+    if not isinstance(browser_check, bool):
+        raise ConfigError(f"[pipeline] browser_check = {browser_check!r}: нужно true или false")
+
+    return browser_check
 
 def _read_toml(*, path: Path) -> dict[str, Any]:
     """

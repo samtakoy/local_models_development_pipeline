@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from langchain_core.runnables import RunnableConfig
 
-from codeteam.app.config import load_project_config
+from codeteam.app.config import ConfigError, load_project_config
 from codeteam.common.git import commit_all, head_commit, init_repository
 from codeteam.core.pipeline import graph as graph_module
 from codeteam.core.pipeline.graph import DEFAULT_ROLES, check_roles, choose_next_role, create_pipeline_graph
@@ -164,22 +164,58 @@ def test_graph_builds(roles: tuple[str, ...]) -> None:
     assert create_pipeline_graph(roles = roles) is not None
 
 
-def test_config_roles(tmp_path: Path) -> None:
+def _write_set_file(*, setup_dir: Path, pipeline: str) -> str:
     """
-    Список ролей берётся из [pipeline] roles; без раздела - список по умолчанию.
+    Пишет файл состава с заданным разделом [pipeline].
+
+        setup_dir: папка файла состава.
+        pipeline: строки раздела [pipeline].
+
+    Возвращает: Папку файла состава строкой.
     """
-    with_roles = tmp_path / "with_roles"
-    with_roles.mkdir()
-    (with_roles / "set.toml").write_text(
-        'project = "/tmp/p"\n[task]\nquestion = "q"\n[pipeline]\nroles = ["pm", "researcher"]\n',
+    setup_dir.mkdir()
+    (setup_dir / "set.toml").write_text(
+        f'project = "/tmp/p"\n[task]\nquestion = "q"\n[pipeline]\n{pipeline}',
         encoding = "utf-8",
     )
-    without_roles = tmp_path / "without_roles"
-    without_roles.mkdir()
-    (without_roles / "set.toml").write_text('project = "/tmp/p"\n[task]\nquestion = "q"\n', encoding = "utf-8")
 
-    assert load_project_config(setup_dir = str(with_roles)).roles == ("pm", "researcher")
-    assert load_project_config(setup_dir = str(without_roles)).roles == DEFAULT_ROLES
+    return str(setup_dir)
+
+
+def test_config_roles(tmp_path: Path) -> None:
+    """
+    Список ролей берётся из [pipeline] roles; без списка - список по умолчанию.
+    """
+    with_roles = _write_set_file(
+        setup_dir = tmp_path / "with_roles",
+        pipeline = 'browser_check = true\nroles = ["pm", "researcher"]\n',
+    )
+    without_roles = _write_set_file(setup_dir = tmp_path / "without_roles", pipeline = "browser_check = true\n")
+
+    assert load_project_config(setup_dir = with_roles).roles == ("pm", "researcher")
+    assert load_project_config(setup_dir = without_roles).roles == DEFAULT_ROLES
+
+
+@pytest.mark.parametrize("pipeline", ["", 'browser_check = "yes"\n', "browser_check = false\n"])
+def test_config_browser_check_error(tmp_path: Path, pipeline: str) -> None:
+    """
+    Без browser_check, с не логическим значением или с false при веб-тестировщике в списке ролей файл состава
+    не читается.
+    """
+    with pytest.raises(ConfigError):
+        load_project_config(setup_dir = _write_set_file(setup_dir = tmp_path / "setup", pipeline = pipeline))
+
+
+def test_config_browser_check_off(tmp_path: Path) -> None:
+    """
+    browser_check = false читается, если веб-тестировщика нет в списке ролей.
+    """
+    setup_dir = _write_set_file(
+        setup_dir = tmp_path / "setup",
+        pipeline = 'browser_check = false\nroles = ["pm", "researcher"]\n',
+    )
+
+    assert load_project_config(setup_dir = setup_dir).browser_check is False
 
 
 class FakeRoles:
@@ -271,6 +307,7 @@ def _config(*, project_dir: Path, run_dir: Path) -> RunnableConfig:
         run_dir = run_dir,
         model_name = "model",
         roles = DEFAULT_ROLES,
+        browser_check = True,
         settings = None,
     )})
 

@@ -10,6 +10,10 @@ from codeteam.core.pipeline.project import ProjectSettings
 from codeteam.core.pipeline.project_setup import prepare_project
 from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState
 from codeteam.core.roles.common import PipelineError
+from codeteam.core.roles.common.browser import warm_up_browser
+
+# Папка прогрева браузера в папке прогона.
+BROWSER_WARM_UP_DIR_NAME = "browser_warm_up"
 
 
 def run_pipeline(
@@ -21,7 +25,8 @@ def run_pipeline(
     resume_state: PipelineState | None,
 ) -> PipelineState:
     """
-    Готовит папку проекта, запускает пайплайн агентов на задаче проекта и ждёт окончания.
+    Проверяет браузер, если проверка в браузере включена, готовит папку проекта, запускает пайплайн агентов
+    на задаче проекта и ждёт окончания.
 
         project: проект и задача пользователя.
         run_dir: папка прогона: журналы агентов и файл состояния.
@@ -36,6 +41,9 @@ def run_pipeline(
     if resume_state is not None:
         _check_resume_state(resume_state = resume_state, roles = project.roles)
 
+    if project.browser_check:
+        warm_up_browser(work_dir = run_dir / BROWSER_WARM_UP_DIR_NAME)
+
     prepare_project(
         project_dir = Path(project.path).resolve(),
         run_name = run_dir.name,
@@ -49,6 +57,7 @@ def run_pipeline(
                 run_dir = run_dir,
                 model_name = model_name,
                 roles = project.roles,
+                browser_check = project.browser_check,
                 settings = settings,
             )
         }

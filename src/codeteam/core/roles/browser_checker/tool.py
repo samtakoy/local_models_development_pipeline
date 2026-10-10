@@ -28,7 +28,7 @@ from codeteam.core.roles.common import CallerContext, reserve_private_dir_name, 
 CHECK_IN_BROWSER_TOOL_NAME = "check_in_browser"
 
 # Наибольшее число вызовов помощника за одну работу агента: защита от зацикливания.
-BROWSER_CHECK_CALL_LIMIT = 5
+BROWSER_CHECK_CALL_LIMIT = 20
 
 # Наибольшая длина ответа помощника, которая возвращается в историю агента, знаков.
 OBSERVATIONS_LENGTH_LIMIT = 10000
@@ -49,7 +49,7 @@ class CheckInBrowserArguments(BaseModel):
     scenarios: str = Field(description = CHECK_IN_BROWSER_SCENARIOS_DESCRIPTION)
 
 
-def build_check_in_browser_tool(caller_context: CallerContext) -> BaseTool:
+def build_check_in_browser_tool(caller_context: CallerContext) -> BaseTool | None:
     """
     Собирает инструмент check_in_browser для вызывающего агента.
 
@@ -60,8 +60,11 @@ def build_check_in_browser_tool(caller_context: CallerContext) -> BaseTool:
 
         caller_context: агент, который будет просить проверку в браузере.
 
-    Возвращает: Инструмент check_in_browser.
+    Возвращает: Инструмент check_in_browser; None, если проверка в браузере выключена в файле состава.
     """
+    if not caller_context.cfg.browser_check:
+        return None
+
     project_dir = Path(caller_context.cfg.project_path).resolve()
     # номера вызовов для предела BROWSER_CHECK_CALL_LIMIT: next() выдаёт номер атомарно
     call_numbers = itertools.count(1)

@@ -20,8 +20,10 @@ from codeteam.app.sandbox_check import confirm_unprotected_run
 from codeteam.app.settings import load_settings
 from codeteam.common.git import list_uncommitted_changes
 from codeteam.core.agent.workspace import PRIVATE_ROOT, draft_dir
+from codeteam.core.pipeline.run_pipeline import BROWSER_WARM_UP_DIR_NAME
 from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState, Stages
-from codeteam.core.roles.common import last_private_dir_name
+from codeteam.core.roles.common import PipelineError, last_private_dir_name
+from codeteam.core.roles.common.browser import warm_up_browser
 from codeteam.core.roles.pm import PM_ROLE, REQUIREMENTS_FILE_NAME
 from codeteam.core.roles.web_tester import web_tester_node
 
@@ -52,6 +54,8 @@ def main() -> None:
     confirm_unprotected_run()
     settings = load_settings()
     project = load_project_config(setup_dir = arguments.setup_dir)
+    if not project.browser_check:
+        raise SystemExit(f"в {arguments.setup_dir}/set.toml проверка в браузере выключена: browser_check = false")
     project_dir = Path(project.path).resolve()
 
     pm_dir_name = last_private_dir_name(project_dir = project_dir, parent = Path("."), role_name = PM_ROLE.name)
@@ -73,6 +77,10 @@ def main() -> None:
     run_dir.mkdir(parents = True, exist_ok = True)
     logger.info(f"проект: {project_dir}")
     logger.info(f"прогон: {run_dir}")
+    try:
+        warm_up_browser(work_dir = run_dir / BROWSER_WARM_UP_DIR_NAME)
+    except PipelineError as error:
+        raise SystemExit(str(error)) from error
 
     config = RunnableConfig(
         configurable = {
@@ -81,6 +89,7 @@ def main() -> None:
                 run_dir = run_dir,
                 model_name = arguments.model,
                 roles = project.roles,
+                browser_check = project.browser_check,
                 settings = settings,
             )
         }

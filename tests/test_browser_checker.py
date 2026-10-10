@@ -77,19 +77,22 @@ def fake_run_role(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FakeRunRol
     return fake
 
 
-@pytest.fixture
-def check_tool(tmp_path: Path) -> BaseTool:
+def _caller_context(*, project_dir: Path, browser_check: bool) -> CallerContext:
     """
-    Инструмент check_in_browser приёмщика этапа в папке проекта теста.
+    Собирает приёмщика этапа, который просит проверку в браузере.
 
-    Возвращает: Инструмент.
+        project_dir: папка проекта.
+        browser_check: проверка в браузере из файла состава.
+
+    Возвращает: Агента, для которого собирается инструмент.
     """
-    caller_context = CallerContext(
+    return CallerContext(
         cfg = PipelineConfig(
-            project_path = str(tmp_path),
-            run_dir = tmp_path / "run",
+            project_path = str(project_dir),
+            run_dir = project_dir / "run",
             model_name = "model",
             roles = (),
+            browser_check = browser_check,
             settings = None,
         ),
         caller_name = "developer_review",
@@ -97,7 +100,22 @@ def check_tool(tmp_path: Path) -> BaseTool:
         caller_journal_name = CALLER_JOURNAL_NAME,
     )
 
-    return build_check_in_browser_tool(caller_context)
+
+@pytest.fixture
+def check_tool(tmp_path: Path) -> BaseTool:
+    """
+    Инструмент check_in_browser приёмщика этапа в папке проекта теста.
+
+    Возвращает: Инструмент.
+    """
+    return build_check_in_browser_tool(_caller_context(project_dir = tmp_path, browser_check = True))
+
+
+def test_browser_check_off_no_tool(tmp_path: Path) -> None:
+    """
+    Проверка в браузере выключена - инструмента нет.
+    """
+    assert build_check_in_browser_tool(_caller_context(project_dir = tmp_path, browser_check = False)) is None
 
 
 @pytest.fixture

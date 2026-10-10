@@ -16,14 +16,15 @@ from langchain_mcp_adapters.tools import load_mcp_tools
 
 from codeteam.app.settings import load_settings
 from codeteam.common.llm import GenerationMode, OllamaConfig, ReasoningLevel, build_chat_model
+from codeteam.core.roles.common.browser import PLAYWRIGHT_ARGS, PLAYWRIGHT_COMMAND
 
 # Имя сервера Playwright MCP в настройках клиента.
 PLAYWRIGHT_SERVER_NAME = "playwright"
 
 # Команда запуска Playwright MCP: браузер с окном, профиль только в памяти.
 PLAYWRIGHT_SERVER = {
-    "command": "npx",
-    "args": ["@playwright/mcp@latest", "--isolated"],
+    "command": PLAYWRIGHT_COMMAND,
+    "args": list(PLAYWRIGHT_ARGS),
     "transport": "stdio",
 }
 

@@ -110,6 +110,7 @@ class PipelineConfig:
         run_dir: папка прогона: журналы агентов.
         model_name: модель агентов.
         roles: последовательность ролей пайплайна.
+        browser_check: проверка приложения в браузере: веб-тестировщик и инструмент check_in_browser.
         settings: настройки приложения.
     """
 
@@ -117,4 +118,5 @@ class PipelineConfig:
     run_dir: Path
     model_name: str
     roles: tuple[str, ...]
+    browser_check: bool
     settings: Settings

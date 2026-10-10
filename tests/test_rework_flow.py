@@ -77,6 +77,7 @@ def test_architect_rework_flow(tmp_path: Path, fake_run_role: FakeRunRole) -> No
         run_dir = tmp_path / "run",
         model_name = "model",
         roles = ("architect", "architect_review"),
+        browser_check = False,
         settings = None,
     )})
     state = PipelineState(

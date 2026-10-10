@@ -66,6 +66,7 @@ def _caller_context(*, project_dir: Path, vision_model: str | None) -> CallerCon
             run_dir = project_dir / "runs" / "run",
             model_name = "model",
             roles = (),
+            browser_check = False,
             settings = settings,
         ),
         caller_name = "pm",

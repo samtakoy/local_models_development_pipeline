@@ -2,3 +2,6 @@ project = "/Users/samtakot/devs/learnings/llm-eng/homework/test_code/tree-view-p
 
 [task]
 question = "Опиши архитектуру проекта верхнеуровнево."
+
+[pipeline]
+browser_check = true

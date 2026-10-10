@@ -107,7 +107,7 @@ def test_single_long_line_shows_its_end(bash: BaseTool, workspace: Workspace) ->
     """
     long_line = "a" * 15000 + "конец"
 
-    answer = bash.invoke({"command": f"python3 -c \"print('a' * 15000 + 'конец')\""})
+    answer = bash.invoke({"command": "python3 -c \"print('a' * 15000 + 'конец')\""})
 
     notice, full_output_path, shown_lines = _split_answer(answer = answer, workspace = workspace)
     assert full_output_path.read_text(encoding = "utf-8") == long_line + "\n"

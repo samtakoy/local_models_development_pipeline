@@ -52,4 +52,5 @@ question = """Нужно сделать локальное веб-приложе
 - разбор формата колоды и работа библиотеки покрыты тестами, тесты проходят."""
 
 [pipeline]
+browser_check = true
 roles = ["pm", "researcher", "architect", "architect_review", "senior", "developer", "developer_review", "web_tester"]

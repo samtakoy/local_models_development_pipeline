@@ -8,11 +8,14 @@
 
 ```toml
 [pipeline]
+browser_check = true
 roles = ["pm", "researcher", "architect", "architect_review", "senior", "developer", "developer_review"]
 ```
 
+`browser_check` обязателен: `true` — перед первой ролью проверяется, что браузер открывается, и приёмщик этапа может проверять приложение в браузере; `false` — браузер не используется, роли `web_tester` в `roles` быть не должно.
+
 Что нужно на компьютере:
-- Node.js с `npx`: Playwright MCP скачивается и запускается командой `npx @playwright/mcp@latest`;
+- Node.js с `npx`: Playwright MCP скачивается и запускается командой `npx @playwright/mcp@0.0.83`;
 - Google Chrome.
 
 Окно браузера задаётся в `.env`: `BROWSER_HEADLESS=true` — без окна, `false` — с окном (удобно для отладки).
