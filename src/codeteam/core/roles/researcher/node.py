@@ -23,6 +23,7 @@ def researcher_node(state: PipelineState, config: RunnableConfig):
         private_dir_name = Path(RESEARCHER_ROLE.name),
         extra_readable_dirs = (project_dir,),
         extra_writable_dirs = (),
+        extra_command_writable_dirs = (),
     )
 
     return {"research_dir": research_dir, "journal_count": state["journal_count"] + 1}

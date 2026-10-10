@@ -44,6 +44,7 @@ def senior_node(state: PipelineState, config: RunnableConfig):
         private_dir_name = stage_dir_name / SENIOR_ROLE.name,
         extra_readable_dirs = (project_dir,),
         extra_writable_dirs = (),
+        extra_command_writable_dirs = (),
     )
 
     return {"stages": replace(stages, plan_dir = stage_plan_dir), "journal_count": state["journal_count"] + 1}

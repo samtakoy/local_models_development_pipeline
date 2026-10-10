@@ -99,6 +99,7 @@ def build_get_advice_tool(caller_context: CallerContext) -> BaseTool:
             private_dir_name = private_dir_name,
             extra_readable_dirs = (project_dir,),
             extra_writable_dirs = (project_dir / CHECK_DIR,),
+            extra_command_writable_dirs = (),
         )
         advice_path = advice_dir / ADVICE_FILE_NAME
         if not advice_path.is_file():

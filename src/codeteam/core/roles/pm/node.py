@@ -22,6 +22,7 @@ def pm_node(state: PipelineState, config: RunnableConfig):
         private_dir_name = Path(PM_ROLE.name),
         extra_readable_dirs = (),
         extra_writable_dirs = (),
+        extra_command_writable_dirs = (),
     )
     if not (requirements_dir / REQUIREMENTS_FILE_NAME).is_file():
         raise PipelineError(f"в черновике менеджера продукта {requirements_dir} нет файла {REQUIREMENTS_FILE_NAME}")

@@ -20,6 +20,7 @@ def run_role(
     private_dir_name: Path,
     extra_readable_dirs: tuple[Path, ...],
     extra_writable_dirs: tuple[Path, ...],
+    extra_command_writable_dirs: tuple[Path, ...],
 ) -> Path:
     """
     Запускает агента роли и ждёт его результата. Внешние инструменты из описания роли собираются под этот
@@ -35,6 +36,9 @@ def run_role(
         extra_readable_dirs: папки чтения агента в фазе работы, кроме личной папки и папок результатов
             других агентов.
         extra_writable_dirs: папки записи агента в фазе работы, кроме черновика и файла контекста.
+        extra_command_writable_dirs: дополнительный доступ на запись только для команд bash и start_service
+            и запущенных ими программ, к папкам из extra_writable_dirs; файловым инструментам write, edit
+            и delete запись туда не открывается. Пустой кортеж - команды пишут туда же, куда файловые инструменты.
 
     Возвращает: Папку черновика агента.
     """
@@ -66,6 +70,7 @@ def run_role(
             private_dir_name = private_dir_name,
             extra_readable_dirs = extra_readable_dirs,
             extra_writable_dirs = extra_writable_dirs,
+            extra_command_writable_dirs = extra_command_writable_dirs,
             extra_tools = (*helper_tools, *mcp_tools),
             journal_path = cfg.run_dir / f"{journal_name}.md",
             settings = cfg.settings,

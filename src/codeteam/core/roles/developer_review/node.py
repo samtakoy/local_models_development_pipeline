@@ -63,6 +63,7 @@ def developer_review_node(state: PipelineState, config: RunnableConfig):
         private_dir_name = stage_dir_name / DEVELOPER_REVIEW_ROLE.name / f"round_{review_round}",
         extra_readable_dirs = (project_dir,),
         extra_writable_dirs = (project_dir,),
+        extra_command_writable_dirs = (),
     )
     left_changes = [path for _, path in list_uncommitted_changes(project_dir = project_dir)]
     if left_changes:

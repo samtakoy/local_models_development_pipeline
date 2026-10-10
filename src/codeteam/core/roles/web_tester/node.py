@@ -7,7 +7,7 @@ from pathlib import Path
 from langchain_core.runnables import RunnableConfig
 
 from codeteam.common.git import list_uncommitted_changes
-from codeteam.core.agent.workspace import PRIVATE_ROOT
+from codeteam.core.agent.workspace import CHECK_DIR, PRIVATE_ROOT
 from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState
 from codeteam.core.roles.common import clean_project_check, make_journal_name, read_verdict, run_role, \
     tracked_changes_check
@@ -57,7 +57,8 @@ def web_tester_node(state: PipelineState, config: RunnableConfig):
         input_dirs = (requirements_dir,),
         private_dir_name = private_dir_name,
         extra_readable_dirs = (project_dir,),
-        extra_writable_dirs = (project_dir,),
+        extra_writable_dirs = (project_dir / CHECK_DIR,),
+        extra_command_writable_dirs = (project_dir,),
     )
     left_changes = [path for _, path in list_uncommitted_changes(project_dir = project_dir)]
     if left_changes:

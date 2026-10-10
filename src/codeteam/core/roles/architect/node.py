@@ -50,6 +50,7 @@ def architect_node(state: PipelineState, config: RunnableConfig):
         private_dir_name = Path(ARCHITECT_ROLE.name),
         extra_readable_dirs = (project_dir,),
         extra_writable_dirs = (),
+        extra_command_writable_dirs = (),
     )
 
     return {

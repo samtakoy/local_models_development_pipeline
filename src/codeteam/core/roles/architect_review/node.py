@@ -44,6 +44,7 @@ def architect_review_node(state: PipelineState, config: RunnableConfig):
         private_dir_name = private_dir_name,
         extra_readable_dirs = (project_dir,),
         extra_writable_dirs = (),
+        extra_command_writable_dirs = (),
     )
     review = Review(
         target = ARCHITECT_ROLE.name,

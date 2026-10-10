@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 
@@ -43,6 +44,7 @@ def run_agent(
     private_dir_name: Path,
     extra_readable_dirs: tuple[Path, ...],
     extra_writable_dirs: tuple[Path, ...],
+    extra_command_writable_dirs: tuple[Path, ...],
     extra_tools: tuple[BaseTool, ...],
     journal_path: Path,
     settings: Settings,
@@ -59,6 +61,9 @@ def run_agent(
             и папок результатов других агентов; с папкой проекта агент видит её в разогреве.
         extra_writable_dirs: папки, где агенту разрешена запись в фазе работы, кроме черновика
             и файла контекста.
+        extra_command_writable_dirs: дополнительный доступ на запись только для команд bash и start_service
+            и запущенных ими программ, к папкам из extra_writable_dirs; файловым инструментам write, edit
+            и delete запись туда не открывается. Пустой кортеж - команды пишут туда же, куда файловые инструменты.
         extra_tools: инструменты, собранные вне ядра агента: помощники-агенты, инструменты серверов MCP;
             в фазе черновика вместо них заглушки с отказом. Почему отдельно: в этих инструментах сидят другие агенты-помощники
             и передать их стандартно не получится: будет циклическая зависимость
@@ -98,18 +103,22 @@ def run_agent(
         writable_dirs = (private_dir, *extra_writable_dirs),
         refusal_hint = None
     )
+    # Рабочее место команд bash и start_service: папки записи фазы работы и папки, открытые только командам
+    command_workspace = replace(workspace, writable_dirs = (*workspace.writable_dirs, *extra_command_writable_dirs))
     # Фоновые процессы команд bash агента: снимаются, когда агент закончит работу
     shell_processes = ShellProcesses()
     # Хозяин команд агента: одна песочница на все команды bash и службы агента
-    command_host = CommandHost(write_roots = workspace.writable_dirs, processes = shell_processes)
+    command_host = CommandHost(write_roots = command_workspace.writable_dirs, processes = shell_processes)
     # Остановка фоновых процессов агента: одна и та же в фазе работы и в фазе черновика
     stop_process_tool = build_stop_process_tool(processes = shell_processes)
     tools = _build_tools(
         builders = {
             **file_tool_builders(workspace = workspace, seen_files = seen_files),
-            BASH_TOOL_NAME: lambda: build_bash_tool(workspace = workspace, processes = shell_processes, host = command_host),
+            BASH_TOOL_NAME: lambda: build_bash_tool(
+                workspace = command_workspace, processes = shell_processes, host = command_host
+            ),
             START_SERVICE_TOOL_NAME: lambda: build_start_service_tool(
-                workspace = workspace, processes = shell_processes, host = command_host
+                workspace = command_workspace, processes = shell_processes, host = command_host
             ),
             STOP_PROCESS_TOOL_NAME: lambda: stop_process_tool,
         },
