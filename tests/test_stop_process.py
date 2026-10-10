@@ -11,7 +11,8 @@ from langchain_core.tools import BaseTool
 from codeteam.common.shell import CommandHost, ShellProcesses
 from codeteam.core.agent.workspace import Workspace
 from codeteam.core.tools.shell import build_bash_tool, build_stop_process_tool
-from tests.shell_helpers import is_process_alive, wait_process_gone
+from tests.shell_helpers import error_page_server_command, free_port, is_process_alive, requires_sandbox, \
+    wait_port_open, wait_process_gone
 
 # Окончание фоновой команды агента: вывод в никуда, номер фонового процесса в ответе bash.
 BACKGROUND_SUFFIX = " > /dev/null 2>&1 & echo $!"
@@ -139,3 +140,20 @@ def test_stop_without_processes(agent_shell: AgentShell) -> None:
         "Ошибка: процесса 1 нет среди твоих работающих фоновых процессов. "
         "Работающих фоновых процессов у тебя нет."
     )
+
+
+@requires_sandbox
+def test_detached_process_is_listed_and_stopped(agent_shell: AgentShell) -> None:
+    """
+    Процесс, ушедший в фон в новой сессии, есть в списке своих процессов и останавливается по номеру.
+    """
+    port = free_port()
+    output = agent_shell.bash.invoke({"command": error_page_server_command(port = port, detached = True)})
+    process_id = int(output.splitlines()[-1])
+    assert wait_port_open(port = port)
+
+    refusal = agent_shell.stop_process.invoke({"pid": 1})
+    agent_shell.stop_process.invoke({"pid": process_id})
+
+    assert f"- {process_id}: " in refusal
+    assert wait_process_gone(process_id = process_id)

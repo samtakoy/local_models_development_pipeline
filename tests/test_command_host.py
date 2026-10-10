@@ -1,5 +1,7 @@
 """Тесты хозяина команд: одна песочница на агента — свои процессы останавливаются из любого вызова,
-чужие нет; запись только в разрешённые папки; предел времени, одновременные команды, перезапуск хозяина."""
+чужие нет; запись только в разрешённые папки; предел времени, одновременные команды, перезапуск хозяина;
+процесс, ушедший в фон в новой сессии, остаётся своим; сторож песочницы переживает падение хозяина,
+а в Linux — и сигнал всем процессам из команды."""
 
 import subprocess
 import sys
@@ -12,7 +14,8 @@ import pytest
 
 from codeteam.common.shell import CommandHost, CommandHostRestarted, CommandResult, ShellProcesses
 from codeteam.common.shell.sandbox import landlock_exec
-from tests.shell_helpers import is_process_alive, wait_process_gone
+from tests.shell_helpers import error_page_server_command, free_port, is_process_alive, keeper_process_ids, \
+    wait_port_open, wait_process_gone
 
 pytestmark = pytest.mark.skipif(
     not (
@@ -287,3 +290,75 @@ def test_pkill_python_does_not_stop_host(agent: AgentCommands) -> None:
     agent.run(command = "kill $PPID")
 
     assert agent.run(command = "echo работает").output.strip() == "работает"
+
+
+def _start_detached_server(*, agent: AgentCommands) -> int:
+    """
+    Запускает сервер, который уходит в фон в новой сессии.
+
+        agent: хозяин команд агента.
+
+    Возвращает: Номер процесса сервера.
+    """
+    port = free_port()
+    process_id = int(agent.run(command = error_page_server_command(port = port, detached = True)).output.split()[-1])
+    assert wait_port_open(port = port)
+
+    return process_id
+
+
+def test_detached_process_is_own(agent: AgentCommands, other_agent: AgentCommands) -> None:
+    """
+    Процесс, ушедший в фон в новой сессии, есть в списке своего агента; другой агент его не видит и не снимает.
+    """
+    process_id = _start_detached_server(agent = agent)
+    other_agent.run(command = "echo старт")
+
+    other_agent.processes.kill_all()
+
+    assert process_id in [process.process_id for process in agent.processes.alive_processes()]
+    assert process_id not in [process.process_id for process in other_agent.processes.alive_processes()]
+    assert is_process_alive(process_id = process_id)
+
+
+def test_close_stops_detached_process(agent: AgentCommands) -> None:
+    """
+    Остановка хозяина снимает и процесс, ушедший в фон в новой сессии.
+    """
+    process_id = _start_detached_server(agent = agent)
+
+    agent.host.close()
+
+    assert wait_process_gone(process_id = process_id)
+
+
+def test_host_restart_stops_detached_process_and_keeps_keeper(agent: AgentCommands) -> None:
+    """
+    Агент снял хозяина: процесс, ушедший в фон, остановлен, сторож тот же, следующая команда выполняется.
+    """
+    process_id = _start_detached_server(agent = agent)
+    keepers = keeper_process_ids()
+
+    with pytest.raises(CommandHostRestarted):
+        agent.run(command = "kill -9 $PPID")
+
+    assert keepers
+    assert wait_process_gone(process_id = process_id)
+    assert keeper_process_ids() == keepers
+    assert agent.run(command = "echo снова").output.strip() == "снова"
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason = "вложить песочницу можно только в Linux")
+def test_signal_to_all_does_not_stop_keeper(agent: AgentCommands) -> None:
+    """
+    kill -9 -1 из команды снимает хозяина, но не сторожа: он во внешней песочнице.
+    """
+    agent.run(command = "echo старт")
+    keepers = keeper_process_ids()
+
+    with pytest.raises(CommandHostRestarted):
+        agent.run(command = "kill -9 -1")
+
+    assert keepers
+    assert keeper_process_ids() == keepers
+    assert agent.run(command = "echo снова").output.strip() == "снова"

@@ -12,7 +12,8 @@ from langchain_core.tools import BaseTool
 from codeteam.common.shell import CommandHost, ShellProcesses
 from codeteam.core.agent.workspace import Workspace
 from codeteam.core.tools.shell import build_bash_tool, build_start_service_tool, build_stop_process_tool
-from tests.shell_helpers import is_process_alive, wait_port_open, wait_process_gone
+from tests.shell_helpers import error_page_server_command, free_port, is_process_alive, requires_sandbox, \
+    wait_port_open, wait_process_gone
 
 # Номер процесса службы в ответе start_service.
 SERVICE_PROCESS_PATTERN = re.compile(r"Служба готова: процесс (\d+)")
@@ -95,17 +96,6 @@ def bash(workspace: Workspace, processes: ShellProcesses, host: CommandHost) -> 
     return build_bash_tool(workspace = workspace, processes = processes, host = host)
 
 
-def _free_port() -> int:
-    """
-    Находит свободный порт на 127.0.0.1.
-
-    Возвращает: Номер порта.
-    """
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        return probe.getsockname()[1]
-
-
 def _start(*, start_service: BaseTool, port: int) -> str:
     """
     Запускает простой веб-сервер на порту.
@@ -165,7 +155,7 @@ def test_restart_on_same_port_replaces_previous_service(start_service: BaseTool)
     """
     Второй запуск на том же порту останавливает прежнюю службу и запускает новую.
     """
-    port = _free_port()
+    port = free_port()
 
     first = _start(start_service = start_service, port = port)
     second = _start(start_service = start_service, port = port)
@@ -179,7 +169,7 @@ def test_own_bash_process_on_port_is_stopped_and_service_started(bash: BaseTool,
     Порт занят сервером, который агент запустил через bash: start_service останавливает его, запускает
     службу и называет в ответе номер остановленного процесса.
     """
-    port = _free_port()
+    port = free_port()
     bash_answer = bash.invoke({"command": f"python3 -m http.server {port} --bind 127.0.0.1 > /dev/null 2>&1 & echo $!"})
     bash_process_id = int(bash_answer.split()[-1])
     assert wait_port_open(port = port)
@@ -188,6 +178,22 @@ def test_own_bash_process_on_port_is_stopped_and_service_started(bash: BaseTool,
 
     assert str(bash_process_id) in answer.split("\n")[0], answer
     assert wait_process_gone(process_id = bash_process_id)
+    assert is_process_alive(process_id = _service_process_id(answer = answer))
+
+
+@requires_sandbox
+def test_own_detached_server_on_port_is_stopped_and_service_started(bash: BaseTool, start_service: BaseTool) -> None:
+    """
+    Порт занят сервером агента, который ушёл в фон в новой сессии: start_service останавливает его
+    и запускает службу.
+    """
+    port = free_port()
+    server_id = int(bash.invoke({"command": error_page_server_command(port = port, detached = True)}).split()[-1])
+    assert wait_port_open(port = port)
+
+    answer = _start(start_service = start_service, port = port)
+
+    assert wait_process_gone(process_id = server_id)
     assert is_process_alive(process_id = _service_process_id(answer = answer))
 
 
@@ -209,7 +215,7 @@ def test_command_with_ampersand_starts_service(start_service: BaseTool, processe
     """
     Команда с & в фоне и внутри кавычек запускает службу; её останавливают по номеру из ответа.
     """
-    port = _free_port()
+    port = free_port()
 
     result = start_service.invoke({
         "command": f'python3 -m http.server {port} --bind 127.0.0.1 & echo "a&b"',
@@ -230,7 +236,7 @@ def test_stop_all_lists_service_by_agent_command(
     Список stop_process показывает службу одной строкой: номер из ответа start_service и команду агента
     без служебной обёртки; номер — работающий процесс службы.
     """
-    port = _free_port()
+    port = free_port()
     command = f"cd {tmp_path} && python3 -m http.server {port} --bind 127.0.0.1"
 
     process_id = _service_process_id(answer = start_service.invoke({"command": command, "port": port}))
@@ -247,7 +253,7 @@ def test_stop_by_service_number(start_service: BaseTool, stop_process: BaseTool)
     """
     Номер из ответа start_service останавливает службу.
     """
-    port = _free_port()
+    port = free_port()
     process_id = _service_process_id(answer = _start(start_service = start_service, port = port))
 
     answer = stop_process.invoke({"pid": process_id})
@@ -260,7 +266,7 @@ def test_unknown_number_refusal_lists_service(start_service: BaseTool, stop_proc
     """
     Отказ на чужой номер перечисляет службу номером из ответа start_service и командой агента.
     """
-    port = _free_port()
+    port = free_port()
     command = f"python3 -m http.server {port} --bind 127.0.0.1"
     process_id = _service_process_id(answer = start_service.invoke({"command": command, "port": port}))
 
@@ -278,7 +284,7 @@ def test_not_ready_reports_conditions_and_empty_log(start_service: BaseTool, tmp
     Служба, чей вывод перенаправлен в свой файл, не становится готовой: ответ называет порт, номер
     работающего процесса для stop_process и не даёт путь к пустому логу инструмента.
     """
-    port = _free_port()
+    port = free_port()
 
     answer = start_service.invoke({
         "command": f"python3 -m http.server {port} --bind 127.0.0.1 > served.log 2>&1",
@@ -298,7 +304,7 @@ def test_not_ready_with_output_shows_log(start_service: BaseTool) -> None:
     Служба с выводом, где нет строки log_pattern, не становится готовой: ответ называет порт, номер
     работающего процесса для stop_process, путь к логу и последние строки лога.
     """
-    port = _free_port()
+    port = free_port()
 
     answer = start_service.invoke({
         "command": f"python3 -u -m http.server {port} --bind 127.0.0.1",
@@ -319,7 +325,7 @@ def test_failed_service_is_not_listed(start_service: BaseTool, stop_process: Bas
     Служба, которая сразу завершилась, не получает в ответе вызова stop_process и не попадает в список
     stop_process.
     """
-    port = _free_port()
+    port = free_port()
 
     answer = start_service.invoke({"command": "python3 -c 'import sys; sys.exit(3)'", "port": port})
 

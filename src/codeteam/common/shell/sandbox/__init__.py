@@ -1,7 +1,8 @@
 """Песочница команд агента: запись только в разрешённые папки, сигналы только внутри песочницы.
 
 macOS — sandbox-exec, Linux — Landlock. На других системах и без Landlock нужной версии программа
-запускается без песочницы, в журнал пишется предупреждение.
+запускается без песочницы, в журнал пишется предупреждение. В Linux песочницу можно вложить в песочницу:
+из вложенной нельзя посылать сигналы процессам внешней; на macOS песочницы не вкладываются.
 """
 
 import functools
@@ -45,11 +46,24 @@ def sandboxed_argv(*, argv: list[str], write_roots: tuple[Path, ...]) -> list[st
     if sys.platform == "darwin":
         return macos_sandbox_argv(argv = argv, write_roots = roots)
 
-    write_options = []
-    for root in (*roots, *LINUX_TEMP_DIRS, *LINUX_WRITABLE_DEVICES):
-        write_options += [landlock_exec.WRITE_OPTION, str(root.resolve())]
+    return _landlock_argv(argv = argv, write_roots = roots)
 
-    return [sys.executable, "-I", landlock_exec.__file__, *write_options, landlock_exec.PROGRAM_SEPARATOR, *argv]
+
+def nested_sandbox_argv(*, argv: list[str], write_roots: tuple[Path, ...]) -> list[str]:
+    """
+    Оборачивает запуск программы из процесса песочницы sandboxed_argv во вложенную песочницу с теми же
+    правами: процессы вложенной песочницы не могут посылать сигналы процессам внешней.
+
+        argv: программа с аргументами.
+        write_roots: папки, куда разрешена запись.
+
+    Возвращает: В Linux — запуск программы во вложенной песочнице; на macOS и без песочницы — исходный argv:
+        программа работает в песочнице запускающего процесса.
+    """
+    if sys.platform != "linux" or not is_sandbox_available():
+        return argv
+
+    return _landlock_argv(argv = argv, write_roots = (*write_roots, *HOME_CACHE_DIRS))
 
 
 def is_sandbox_available() -> bool:
@@ -65,6 +79,22 @@ def is_sandbox_available() -> bool:
         return landlock_exec.landlock_abi_version() >= landlock_exec.MINIMAL_ABI_VERSION
 
     return False
+
+
+def _landlock_argv(*, argv: list[str], write_roots: tuple[Path, ...]) -> list[str]:
+    """
+    Оборачивает запуск программы в песочницу Landlock.
+
+        argv: программа с аргументами.
+        write_roots: папки, куда разрешена запись, кроме временных папок и устройств Linux.
+
+    Возвращает: Запуск программы через landlock_exec.
+    """
+    write_options = []
+    for root in (*write_roots, *LINUX_TEMP_DIRS, *LINUX_WRITABLE_DEVICES):
+        write_options += [landlock_exec.WRITE_OPTION, str(root.resolve())]
+
+    return [sys.executable, "-I", landlock_exec.__file__, *write_options, landlock_exec.PROGRAM_SEPARATOR, *argv]
 
 
 @functools.cache

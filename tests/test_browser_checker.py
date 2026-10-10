@@ -1,8 +1,5 @@
 """Тесты инструмента check_in_browser: проверка адреса до запуска помощника, папки и журналы помощника, ответ, предел."""
 
-import socket
-import subprocess
-import sys
 import threading
 import time
 from collections.abc import Iterator
@@ -12,14 +9,14 @@ from pathlib import Path
 import pytest
 from langchain_core.tools import BaseTool
 
-from codeteam.common.shell import ShellProcesses
+from codeteam.common.shell import CommandHost, ShellProcesses
 from codeteam.core.agent.workspace import PRIVATE_ROOT, draft_dir
 from codeteam.core.pipeline.state import PipelineConfig
 from codeteam.core.roles.browser_checker import OBSERVATIONS_FILE_NAME, build_check_in_browser_tool
 from codeteam.core.roles.browser_checker import tool as tool_module
 from codeteam.core.roles.browser_checker.tool import BROWSER_CHECK_CALL_LIMIT
 from codeteam.core.roles.common import CallerContext
-from tests.shell_helpers import wait_port_open
+from tests.shell_helpers import error_page_server_command, free_port, requires_sandbox, wait_port_open
 
 # Личная папка и журнал спрашивающего агента.
 CALLER_DIR_NAME = Path("stage_10/developer_review_r1")
@@ -28,23 +25,8 @@ CALLER_JOURNAL_NAME = "12_stage_10_developer_review_r1"
 # Наблюдения, которые пишет заглушка помощника.
 OBSERVATIONS = "Открыл главную: видна таблица.\n"
 
-# Программа приложения теста: на любой запрос отвечает ошибкой 500; порт - первый аргумент.
-ERROR_PAGE_APP = """
-import http.server
-import sys
-
-
-class Handler(http.server.BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(500)
-        self.end_headers()
-
-    def log_message(self, format, *args):
-        pass
-
-
-http.server.HTTPServer(("127.0.0.1", int(sys.argv[1])), Handler).serve_forever()
-"""
+# Предел времени команды приёмщика в тестах, секунды.
+COMMAND_TIMEOUT_SECONDS = 20
 
 
 class ErrorPageHandler(BaseHTTPRequestHandler):
@@ -157,20 +139,49 @@ def test_browser_check_off_no_tool(tmp_path: Path, processes: ShellProcesses) ->
 
 
 @pytest.fixture
-def app_url(processes: ShellProcesses) -> Iterator[str]:
+def host(tmp_path: Path, processes: ShellProcesses) -> Iterator[CommandHost]:
     """
-    Запускает приложение приёмщика: отдельный процесс в своей группе, записанный в учёт приёмщика,
-    отвечает ошибкой 500.
+    Хозяин команд приёмщика с тем же учётом процессов, что у инструмента.
+
+    Возвращает: Хозяин команд; останавливается после теста.
+    """
+    command_host = CommandHost(write_roots = (tmp_path,), processes = processes)
+    yield command_host
+    command_host.close()
+
+
+def _start_app(*, host: CommandHost, processes: ShellProcesses, work_dir: Path, detached: bool) -> str:
+    """
+    Запускает приложение приёмщика его командой: отвечает ошибкой 500.
+
+        host: хозяин команд приёмщика.
+        processes: учёт фоновых процессов приёмщика.
+        work_dir: папка запуска.
+        detached: приложение уходит в фон в новой сессии.
 
     Возвращает: Адрес приложения.
     """
-    port = _free_port()
-    app = subprocess.Popen([sys.executable, "-c", ERROR_PAGE_APP, str(port)], start_new_session = True)
-    processes.remember(process_group_id = app.pid, background_process_id = None, command = "error page app")
+    port = free_port()
+    command = error_page_server_command(port = port, detached = detached)
+    result = host.run(command = command, working_dir = str(work_dir), timeout_seconds = COMMAND_TIMEOUT_SECONDS)
+    processes.remember(
+        process_group_id = result.process_group_id,
+        background_process_id = result.background_process_id,
+        command = command,
+    )
     assert wait_port_open(port = port)
-    yield f"http://127.0.0.1:{port}/"
-    processes.kill_all()
-    app.wait()
+
+    return f"http://127.0.0.1:{port}/"
+
+
+@pytest.fixture
+def app_url(host: CommandHost, processes: ShellProcesses, tmp_path: Path) -> str:
+    """
+    Запускает приложение приёмщика в фоне через &.
+
+    Возвращает: Адрес приложения.
+    """
+    return _start_app(host = host, processes = processes, work_dir = tmp_path, detached = False)
 
 
 @pytest.fixture
@@ -186,17 +197,6 @@ def foreign_url() -> Iterator[str]:
     yield f"http://127.0.0.1:{server.server_address[1]}/"
     server.shutdown()
     server.server_close()
-
-
-def _free_port() -> int:
-    """
-    Находит порт, который никто не слушает.
-
-    Возвращает: Номер порта.
-    """
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        return probe.getsockname()[1]
 
 
 def _check(*, tool: BaseTool, url: str) -> str:
@@ -225,7 +225,7 @@ def test_silent_port_does_not_start_helper(check_tool: BaseTool, fake_run_role: 
     """
     На порту никто не слушает - помощник не запускается.
     """
-    answer = _check(tool = check_tool, url = f"http://127.0.0.1:{_free_port()}/")
+    answer = _check(tool = check_tool, url = f"http://127.0.0.1:{free_port()}/")
 
     assert fake_run_role.calls == []
     assert answer != OBSERVATIONS
@@ -243,6 +243,24 @@ def test_foreign_app_does_not_start_helper(
 
     assert fake_run_role.calls == []
     assert answer != OBSERVATIONS
+
+
+@requires_sandbox
+def test_detached_app_starts_helper(
+    check_tool: BaseTool,
+    fake_run_role: FakeRunRole,
+    host: CommandHost,
+    processes: ShellProcesses,
+    tmp_path: Path,
+) -> None:
+    """
+    Приложение приёмщика ушло в фон в новой сессии - оно всё равно его, помощник запускается.
+    """
+    url = _start_app(host = host, processes = processes, work_dir = tmp_path, detached = True)
+
+    answer = _check(tool = check_tool, url = url)
+
+    assert answer == OBSERVATIONS
 
 
 def test_running_app_starts_helper(check_tool: BaseTool, fake_run_role: FakeRunRole, app_url: str) -> None:
