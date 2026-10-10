@@ -66,8 +66,8 @@ class CommandHost:
             working_dir: папка запуска.
             timeout_seconds: предел времени, секунды.
 
-        Возвращает: Код возврата, вывод команды и коды её последней цепочки.
-            Падение хозяина поднимает CommandHostRestarted.
+        Возвращает: Код возврата, вывод команды, коды её последней цепочки и номер последнего
+            фонового процесса. Падение хозяина поднимает CommandHostRestarted.
         """
         connection = self._current_connection()
         request_id, replies = connection.submit(command = command, working_dir = working_dir)
@@ -91,13 +91,20 @@ class CommandHost:
 
         output = "" if finished is None else finished[host_process.OUTPUT_FIELD]
         if timed_out:
-            return CommandResult(exit_code = None, output = output, pipe_exit_codes = (), process_group_id = process_group_id)
+            return CommandResult(
+                exit_code = None,
+                output = output,
+                pipe_exit_codes = (),
+                process_group_id = process_group_id,
+                background_process_id = None,
+            )
 
         return CommandResult(
             exit_code = finished[host_process.EXIT_CODE_FIELD],
             output = output,
             pipe_exit_codes = tuple(finished[host_process.PIPE_EXIT_CODES_FIELD]),
             process_group_id = process_group_id,
+            background_process_id = finished[host_process.BACKGROUND_PROCESS_ID_FIELD],
         )
 
     def close(self) -> None:

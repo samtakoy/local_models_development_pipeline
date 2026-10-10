@@ -13,6 +13,9 @@ from codeteam.core.agent.workspace import Workspace
 from codeteam.core.tools.shell import build_bash_tool, build_stop_process_tool
 from tests.shell_helpers import is_process_alive, wait_process_gone
 
+# Окончание фоновой команды агента: вывод в никуда, номер фонового процесса в ответе bash.
+BACKGROUND_SUFFIX = " > /dev/null 2>&1 & echo $!"
+
 
 @dataclass(frozen = True)
 class AgentShell:
@@ -34,7 +37,7 @@ class AgentShell:
 
         Возвращает: Номер фонового процесса.
         """
-        output = self.bash.invoke({"command": f"{command} > /dev/null 2>&1 & echo $!"})
+        output = self.bash.invoke({"command": command + BACKGROUND_SUFFIX})
 
         return int(output.splitlines()[-1])
 
@@ -101,7 +104,7 @@ def test_stop_outside_pid_is_refused_with_own_processes(agent_shell: AgentShell)
         answer = agent_shell.stop_process.invoke({"pid": outside_process.pid})
 
         assert answer.startswith(f"Ошибка: процесса {outside_process.pid} нет среди твоих")
-        assert f"- {own_process_id}: sleep 103" in answer
+        assert f"- {own_process_id}: sleep 103{BACKGROUND_SUFFIX}" in answer
         assert outside_process.poll() is None
         assert is_process_alive(process_id = own_process_id)
     finally:
@@ -120,8 +123,8 @@ def test_stop_without_pid_stops_all_own_processes(agent_shell: AgentShell) -> No
 
     assert answer == (
         "Остановлены процессы:\n"
-        f"- {first_process_id}: sleep 104\n"
-        f"- {second_process_id}: sleep 105"
+        f"- {first_process_id}: sleep 104{BACKGROUND_SUFFIX}\n"
+        f"- {second_process_id}: sleep 105{BACKGROUND_SUFFIX}"
     )
     assert wait_process_gone(process_id = first_process_id)
     assert wait_process_gone(process_id = second_process_id)

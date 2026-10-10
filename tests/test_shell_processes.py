@@ -33,7 +33,7 @@ def test_remember_zombie_group_does_not_raise(zombie_group_id: int) -> None:
     """
     processes = ShellProcesses()
 
-    processes.remember(process_group_id = zombie_group_id)
+    processes.remember(process_group_id = zombie_group_id, background_process_id = None, command = "sleep 100")
     processes.kill_all()
 
 

@@ -23,12 +23,15 @@ class CommandResult:
         pipe_exit_codes: коды команд последней цепочки через |; пустые, если команда прервана
             по времени или сама вызвала exit.
         process_group_id: номер группы процессов команды: в ней остаются её фоновые процессы.
+        background_process_id: номер последнего процесса, запущенного командой в фоне ($!); None, если
+            команда ничего не запускала в фоне, прервана по времени или сама вызвала exit.
     """
 
     exit_code: int | None
     output: str
     pipe_exit_codes: tuple[int, ...]
     process_group_id: int
+    background_process_id: int | None
 
 
 def command_environment() -> dict[str, str]:

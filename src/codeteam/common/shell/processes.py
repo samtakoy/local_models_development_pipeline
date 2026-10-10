@@ -2,17 +2,17 @@
 
 import os
 import signal
-import subprocess
 from dataclasses import dataclass
 
 
 @dataclass(frozen = True)
 class ShellProcess:
     """
-    Работающий процесс из запомненной группы.
+    Команда агента, после которой в фоне остались работающие процессы.
 
-        process_id: номер процесса.
-        command: команда процесса с аргументами.
+        process_id: номер, по которому агент узнаёт запуск: номер последнего фонового процесса
+            команды ($!), а если его нет — номер группы процессов команды.
+        command: команда агента.
     """
 
     process_id: int
@@ -25,61 +25,51 @@ class ShellProcesses:
     """
 
     def __init__(self) -> None:
-        self._group_ids: set[int] = set()
+        # запуск агента по номеру группы процессов его команды
+        self._processes: dict[int, ShellProcess] = {}
 
-    def remember(self, *, process_group_id: int) -> None:
+    def remember(self, *, process_group_id: int, background_process_id: int | None, command: str) -> None:
         """
         Запоминает группу процессов команды, если в ней остались работающие процессы.
 
             process_group_id: номер группы процессов команды.
+            background_process_id: номер последнего фонового процесса команды ($!); None, если его нет.
+            command: команда агента.
         """
-        if is_process_group_alive(process_group_id = process_group_id):
-            self._group_ids.add(process_group_id)
+        if not is_process_group_alive(process_group_id = process_group_id):
+            return
+
+        process_id = process_group_id if background_process_id is None else background_process_id
+        self._processes[process_group_id] = ShellProcess(process_id = process_id, command = command)
 
     def alive_processes(self) -> list[ShellProcess]:
         """
-        Перечисляет работающие процессы запомненных групп.
+        Перечисляет запуски агента, в группах которых есть работающие процессы.
 
-        Возвращает: Процессы по возрастанию номера.
+        Возвращает: Запуски по возрастанию номера.
         """
-        if not self._group_ids:
-            return []
+        alive = [
+            process
+            for process_group_id, process in self._processes.items()
+            if is_process_group_alive(process_group_id = process_group_id)
+        ]
 
-        listing = subprocess.run(
-            ["ps", "-A", "-o", "pid=,pgid=,command="],
-            capture_output = True,
-            text = True,
-            check = True,
-        )
-        processes = []
-        for line in listing.stdout.splitlines():
-            process_id, process_group_id, command = line.split(maxsplit = 2)
-            if int(process_group_id) in self._group_ids:
-                processes.append(ShellProcess(process_id = int(process_id), command = command))
-
-        return sorted(processes, key = lambda process: process.process_id)
+        return sorted(alive, key = lambda process: process.process_id)
 
     def kill_group_of(self, *, process_id: int) -> bool:
         """
         Снимает запомненную группу, в которой работает процесс.
 
-            process_id: номер процесса или номер запомненной группы.
+            process_id: номер запуска из учёта, номер запомненной группы или номер любого процесса в ней.
 
         Возвращает: True, если группа снята; False, если процесса нет или его группа не запомнена.
         """
-        if process_id in self._group_ids:
-            process_group_id = process_id
-        else:
-            try:
-                process_group_id = os.getpgid(process_id)
-            except ProcessLookupError:
-                return False
-
-            if process_group_id not in self._group_ids:
-                return False
+        process_group_id = self._group_of(process_id = process_id)
+        if process_group_id is None:
+            return False
 
         kill_process_group(process_group_id = process_group_id)
-        self._group_ids.discard(process_group_id)
+        del self._processes[process_group_id]
 
         return True
 
@@ -87,9 +77,28 @@ class ShellProcesses:
         """
         Снимает все запомненные группы процессов.
         """
-        for process_group_id in self._group_ids:
+        for process_group_id in self._processes:
             kill_process_group(process_group_id = process_group_id)
-        self._group_ids.clear()
+        self._processes.clear()
+
+    def _group_of(self, *, process_id: int) -> int | None:
+        """
+        Находит запомненную группу по номеру.
+
+            process_id: номер запуска из учёта, номер запомненной группы или номер любого процесса в ней.
+
+        Возвращает: Номер группы; None, если номер не относится к запомненной группе.
+        """
+        for process_group_id, process in self._processes.items():
+            if process_id in (process_group_id, process.process_id):
+                return process_group_id
+
+        try:
+            process_group_id = os.getpgid(process_id)
+        except ProcessLookupError:
+            return None
+
+        return process_group_id if process_group_id in self._processes else None
 
 
 def kill_process_group(*, process_group_id: int) -> None:

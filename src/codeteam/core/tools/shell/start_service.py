@@ -102,7 +102,7 @@ def build_start_service_tool(*, workspace: Workspace, processes: ShellProcesses,
 
     Возвращает: Инструмент start_service.
     """
-    # номер процесса службы по её порту
+    # номер группы процессов службы по её порту
     service_by_port: dict[int, int] = {}
 
     def start_service(
@@ -155,15 +155,20 @@ def build_start_service_tool(*, workspace: Workspace, processes: ShellProcesses,
             )
         except CommandHostRestarted as error:
             raise ToolException(BASH_HOST_RESTARTED_REFUSAL) from error
-        processes.remember(process_group_id = result.process_group_id)
-        if result.exit_code != 0:
+        processes.remember(
+            process_group_id = result.process_group_id,
+            background_process_id = result.background_process_id,
+            command = command,
+        )
+        if result.exit_code != 0 or result.background_process_id is None:
             raise ToolException(f"Ошибка: служба не запущена.\n{result.output}")
 
-        # номер группы процессов службы: группа жива, пока жив любой её процесс, в том числе
-        # запущенный в фоне командой службы
-        process_id = result.process_group_id
+        # номер, который видит агент: процесс службы, запущенный в фоне ($!)
+        process_id = result.background_process_id
+        # служба работает, пока жив любой процесс её группы, в том числе запущенный в фоне командой службы
+        process_group_id = result.process_group_id
         if port is not None:
-            service_by_port[port] = process_id
+            service_by_port[port] = process_group_id
         deadline = time.monotonic() + timeout
         while True:
             if _is_ready(port = port, pattern = pattern, log_path = log_path):
@@ -172,7 +177,7 @@ def build_start_service_tool(*, workspace: Workspace, processes: ShellProcesses,
                     f"Остановить: stop_process(pid = {process_id}).\n"
                     f"Последние строки лога:\n{_log_tail(log_path = log_path)}"
                 )
-            if not is_process_group_alive(process_group_id = process_id):
+            if not is_process_group_alive(process_group_id = process_group_id):
                 raise ToolException(
                     f"Ошибка: служба не запустилась — процесс {process_id} завершился. Лог {shown_log}.\n"
                     f"Последние строки лога:\n{_log_tail(log_path = log_path)}"

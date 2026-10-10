@@ -1,6 +1,6 @@
-"""Тесты инструмента start_service: повторный запуск на том же порту заменяет прежнюю службу."""
+"""Тесты инструмента start_service: повторный запуск на том же порту заменяет прежнюю службу,
+номер службы из ответа совпадает с номером в списке stop_process и останавливает службу."""
 
-import os
 import re
 import socket
 from collections.abc import Iterator
@@ -11,8 +11,8 @@ from langchain_core.tools import BaseTool
 
 from codeteam.common.shell import CommandHost, ShellProcesses
 from codeteam.core.agent.workspace import Workspace
-from codeteam.core.tools.shell import build_start_service_tool
-from tests.shell_helpers import wait_process_group_gone
+from codeteam.core.tools.shell import build_start_service_tool, build_stop_process_tool
+from tests.shell_helpers import is_process_alive, wait_process_gone
 
 # Номер процесса службы в ответе start_service.
 SERVICE_PROCESS_PATTERN = re.compile(r"Служба готова: процесс (\d+)")
@@ -80,20 +80,30 @@ def _start(*, start_service: BaseTool, port: int) -> str:
     })
 
 
-def _is_alive(*, process_group_id: int) -> bool:
+@pytest.fixture
+def stop_process(processes: ShellProcesses) -> BaseTool:
     """
-    Проверяет, работает ли служба: жив ли хоть один процесс её группы.
+    Инструмент stop_process с тем же учётом процессов, что у start_service.
 
-        process_group_id: номер группы процессов службы из ответа start_service.
+        processes: учёт фоновых процессов теста.
 
-    Возвращает: True, если в группе есть процесс.
+    Возвращает: Инструмент stop_process.
     """
-    try:
-        os.killpg(process_group_id, 0)
-    except ProcessLookupError:
-        return False
+    return build_stop_process_tool(processes = processes)
 
-    return True
+
+def _service_process_id(*, answer: str) -> int:
+    """
+    Берёт номер службы из ответа start_service.
+
+        answer: ответ start_service.
+
+    Возвращает: Номер процесса службы.
+    """
+    match = SERVICE_PROCESS_PATTERN.search(answer)
+    assert match is not None, answer
+
+    return int(match.group(1))
 
 
 def test_restart_on_same_port_replaces_previous_service(start_service: BaseTool) -> None:
@@ -105,11 +115,8 @@ def test_restart_on_same_port_replaces_previous_service(start_service: BaseTool)
     first = _start(start_service = start_service, port = port)
     second = _start(start_service = start_service, port = port)
 
-    first_match = SERVICE_PROCESS_PATTERN.search(first)
-    second_match = SERVICE_PROCESS_PATTERN.search(second)
-    assert first_match is not None and second_match is not None, f"{first}\n{second}"
-    assert not _is_alive(process_group_id = int(first_match.group(1)))
-    assert _is_alive(process_group_id = int(second_match.group(1)))
+    assert wait_process_gone(process_id = _service_process_id(answer = first))
+    assert is_process_alive(process_id = _service_process_id(answer = second))
 
 
 def test_port_busy_by_other_program_is_refused(start_service: BaseTool) -> None:
@@ -137,7 +144,70 @@ def test_command_with_ampersand_starts_service(start_service: BaseTool, processe
         "port": port,
     })
 
-    match = SERVICE_PROCESS_PATTERN.search(result)
-    assert match is not None, result
-    assert processes.kill_group_of(process_id = int(match.group(1)))
-    assert wait_process_group_gone(process_group_id = int(match.group(1)))
+    process_id = _service_process_id(answer = result)
+    assert processes.kill_group_of(process_id = process_id)
+    assert wait_process_gone(process_id = process_id)
+
+
+def test_stop_all_lists_service_by_agent_command(
+    start_service: BaseTool,
+    stop_process: BaseTool,
+    tmp_path: Path,
+) -> None:
+    """
+    Список stop_process показывает службу одной строкой: номер из ответа start_service и команду агента
+    без служебной обёртки; номер — работающий процесс службы.
+    """
+    port = _free_port()
+    command = f"cd {tmp_path} && python3 -m http.server {port} --bind 127.0.0.1"
+
+    process_id = _service_process_id(answer = start_service.invoke({"command": command, "port": port}))
+    assert is_process_alive(process_id = process_id)
+
+    answer = stop_process.invoke({})
+
+    assert answer == f"Остановлены процессы:\n- {process_id}: {command}"
+    assert wait_process_gone(process_id = process_id)
+    assert stop_process.invoke({}) == "Работающих фоновых процессов не было."
+
+
+def test_stop_by_service_number(start_service: BaseTool, stop_process: BaseTool) -> None:
+    """
+    Номер из ответа start_service останавливает службу.
+    """
+    port = _free_port()
+    process_id = _service_process_id(answer = _start(start_service = start_service, port = port))
+
+    answer = stop_process.invoke({"pid": process_id})
+
+    assert answer == f"Остановлен процесс {process_id} и всё, что запущено с ним в том же вызове bash."
+    assert wait_process_gone(process_id = process_id)
+
+
+def test_unknown_number_refusal_lists_service(start_service: BaseTool, stop_process: BaseTool) -> None:
+    """
+    Отказ на чужой номер перечисляет службу номером из ответа start_service и командой агента.
+    """
+    port = _free_port()
+    command = f"python3 -m http.server {port} --bind 127.0.0.1"
+    process_id = _service_process_id(answer = start_service.invoke({"command": command, "port": port}))
+
+    answer = stop_process.invoke({"pid": 1})
+
+    assert answer == (
+        "Ошибка: процесса 1 нет среди твоих работающих фоновых процессов. Твои фоновые процессы:\n"
+        f"- {process_id}: {command}\n"
+        "Вызови stop_process с номером из списка или без pid, чтобы остановить все."
+    )
+
+
+def test_failed_service_is_not_listed(start_service: BaseTool, stop_process: BaseTool) -> None:
+    """
+    Служба, которая сразу завершилась, получает ошибку старта и не попадает в список stop_process.
+    """
+    port = _free_port()
+
+    answer = start_service.invoke({"command": "python3 -c 'import sys; sys.exit(3)'", "port": port})
+
+    assert re.match(r"Ошибка: служба не запустилась — процесс \d+ завершился", answer), answer
+    assert stop_process.invoke({}) == "Работающих фоновых процессов не было."

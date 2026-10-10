@@ -93,7 +93,7 @@ def test_edit_requires_read(workspace: Workspace, tools: dict[str, BaseTool]) ->
 
     result = _edit(tools = tools, old_string = "a = 1", new_string = "a = 2")
 
-    assert "не прочитан" in result
+    assert "нельзя писать в файлы, которые ты не читал" in result
 
 
 def test_edit_rejects_file_changed_after_read(workspace: Workspace, tools: dict[str, BaseTool]) -> None:

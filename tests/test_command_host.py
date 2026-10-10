@@ -49,7 +49,11 @@ class AgentCommands:
         Возвращает: Итог команды.
         """
         result = self.host.run(command = command, working_dir = str(self.work_dir), timeout_seconds = COMMAND_TIMEOUT_SECONDS)
-        self.processes.remember(process_group_id = result.process_group_id)
+        self.processes.remember(
+            process_group_id = result.process_group_id,
+            background_process_id = result.background_process_id,
+            command = command,
+        )
 
         return result
 
@@ -183,6 +187,17 @@ def test_pipe_exit_codes(agent: AgentCommands) -> None:
 
     assert result.exit_code == 0
     assert result.pipe_exit_codes == (1, 0)
+
+
+def test_background_process_id(agent: AgentCommands) -> None:
+    """
+    Номер последнего фонового процесса совпадает с $! команды; без фоновых процессов номера нет.
+    """
+    background = agent.run(command = "sleep 306 > /dev/null 2>&1 & echo $!")
+    foreground = agent.run(command = "echo без фона")
+
+    assert background.background_process_id == int(background.output.split()[-1])
+    assert foreground.background_process_id is None
 
 
 def test_timeout_kills_command(agent: AgentCommands) -> None:

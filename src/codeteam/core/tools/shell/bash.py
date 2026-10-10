@@ -116,7 +116,11 @@ def build_bash_tool(*, workspace: Workspace, processes: ShellProcesses, host: Co
         except CommandHostRestarted as error:
             raise ToolException(BASH_HOST_RESTARTED_REFUSAL) from error
 
-        processes.remember(process_group_id = result.process_group_id)
+        processes.remember(
+            process_group_id = result.process_group_id,
+            background_process_id = result.background_process_id,
+            command = command,
+        )
         if result.exit_code is None:
             raise ToolException(
                 f"Ошибка: команда прервана, превышен предел времени {timeout} с\n"

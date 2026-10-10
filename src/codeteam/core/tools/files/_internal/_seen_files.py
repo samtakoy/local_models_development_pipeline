@@ -39,7 +39,10 @@ class SeenFiles:
         """
         seen_hash = self._hashes.get(path)
         if seen_hash is None:
-            return f"Ошибка: файл {shown_path} не прочитан. Прочитай его инструментом read и повтори."
+            return (
+                f"Ошибка: файл {shown_path} существует, но нельзя писать в файлы, которые ты не читал до этого. "
+                "Сначала прочитай его инструментом read, потом повтори запись."
+            )
 
         if seen_hash != _hash(content = path.read_bytes()):
             return (
