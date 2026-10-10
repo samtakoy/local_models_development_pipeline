@@ -21,6 +21,9 @@ from tests.shell_helpers import error_page_server_command, free_port, requires_s
 
 # Личная папка и журнал спрашивающего агента.
 CALLER_DIR_NAME = Path("stage_10/developer_review_r1")
+
+# Папка помощников спрашивающего агента: рядом с его личной папкой.
+CALLER_HELPERS_DIR_NAME = Path("stage_10/developer_review_r1.helpers")
 CALLER_JOURNAL_NAME = "12_stage_10_developer_review_r1"
 
 # Наблюдения, которые пишет заглушка помощника.
@@ -321,10 +324,15 @@ def test_helper_failure_returns_error_to_caller(
     assert "GraphRecursionError" in answer
 
 
-def test_running_app_starts_helper(check_tool: BaseTool, fake_run_role: FakeRunRole, app_url: str) -> None:
+def test_running_app_starts_helper(
+    check_tool: BaseTool,
+    fake_run_role: FakeRunRole,
+    app_url: str,
+    tmp_path: Path,
+) -> None:
     """
-    Приложение отвечает, пусть и ошибкой 500, - помощник запускается в новой папке внутри папки спросившего,
-    его наблюдения возвращаются.
+    Приложение отвечает, пусть и ошибкой 500, - помощник запускается в новой папке внутри папки помощников
+    спросившего, а не в его личной папке; наблюдения возвращаются.
     """
     first = _check(tool = check_tool, url = app_url)
     second = _check(tool = check_tool, url = app_url)
@@ -332,9 +340,10 @@ def test_running_app_starts_helper(check_tool: BaseTool, fake_run_role: FakeRunR
     assert first == OBSERVATIONS
     assert second == OBSERVATIONS
     assert [call["private_dir_name"] for call in fake_run_role.calls] == [
-        CALLER_DIR_NAME / "browser_checker_r1",
-        CALLER_DIR_NAME / "browser_checker_r2",
+        CALLER_HELPERS_DIR_NAME / "browser_checker_r1",
+        CALLER_HELPERS_DIR_NAME / "browser_checker_r2",
     ]
+    assert not (tmp_path / PRIVATE_ROOT / CALLER_DIR_NAME).exists()
     assert [call["journal_name"] for call in fake_run_role.calls] == [
         f"{CALLER_JOURNAL_NAME}.browser_checker_r1",
         f"{CALLER_JOURNAL_NAME}.browser_checker_r2",

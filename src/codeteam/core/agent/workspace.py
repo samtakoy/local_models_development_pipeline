@@ -14,6 +14,9 @@ CHECK_DIR = Path("tmp_check")
 DRAFT_DIR_NAME = "draft"
 CONTEXT_FILE_NAME = "context.md"
 
+# Окончание имени папки помощников агента: рядом с личной папкой, <личная папка>.helpers.
+HELPERS_DIR_SUFFIX = ".helpers"
+
 # Имя раздела черновика: номер, тема буквами любого алфавита, .md. Группа 1 — номер раздела.
 DRAFT_SECTION_PATTERN = re.compile(r"^(\d+)_[\w-]+\.md$")
 
@@ -54,6 +57,17 @@ def context_path(*, private_dir: Path) -> Path:
     return private_dir / CONTEXT_FILE_NAME
 
 
+def helpers_dir(*, private_dir: Path) -> Path:
+    """
+    Строит путь папки помощников агента: в ней личные папки агентов, которых он вызывает инструментами.
+
+        private_dir: личная папка агента.
+
+    Возвращает: Папку рядом с личной папкой: <личная папка>.helpers.
+    """
+    return private_dir.with_name(f"{private_dir.name}{HELPERS_DIR_SUFFIX}")
+
+
 class PathOutsideWorkspace(ValueError):
     """Путь лежит вне папок, доступных вызову."""
 
@@ -88,6 +102,11 @@ class Workspace:
     def context_file(self) -> Path:
         """Файл контекста вызова для следующего агента той же роли."""
         return context_path(private_dir = self.private_dir)
+
+    @property
+    def helpers_dir(self) -> Path:
+        """Папка помощников вызова: личные папки агентов, которых он вызывает инструментами."""
+        return helpers_dir(private_dir = self.private_dir)
 
     def resolve_readable(self, *, path: str) -> Path:
         """

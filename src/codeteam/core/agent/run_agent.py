@@ -19,7 +19,7 @@ from codeteam.core.agent.prompts import DRAFT_PHASE_HINT, DRAFT_PHASE_BASH_REFUS
     TODAY_INSTRUCTIONS, CODE_NAME_INSTRUCTIONS
 from codeteam.core.agent.step_hooks import FolderHook, draft_section_hook, stray_private_file_hook
 from codeteam.core.agent.workspace import CONTEXT_FILE_NAME, DRAFT_DIR_NAME, PRIVATE_ROOT, Workspace, context_path, \
-    draft_dir
+    draft_dir, helpers_dir
 from codeteam.core.tools.files import DELETE_TOOL_NAME, EDIT_TOOL_NAME, READ_TOOL_NAME, WRITE_TOOL_NAME, \
     file_tool_builders, SeenFiles
 from codeteam.common.shell import CommandHost, ShellProcesses
@@ -107,7 +107,7 @@ def run_agent(
         project_dir = project_dir,
         private_dir = private_dir,
         input_dirs = input_dirs,
-        readable_dirs = (private_dir, *input_dirs, *extra_readable_dirs),
+        readable_dirs = (private_dir, helpers_dir(private_dir = private_dir), *input_dirs, *extra_readable_dirs),
         writable_dirs = (private_dir, *extra_writable_dirs),
         refusal_hint = None
     )
@@ -137,7 +137,7 @@ def run_agent(
         project_dir = project_dir,
         private_dir = private_dir,
         input_dirs = (),
-        readable_dirs = (private_dir,),
+        readable_dirs = (private_dir, helpers_dir(private_dir = private_dir)),
         writable_dirs = (private_dir,),
         refusal_hint = DRAFT_PHASE_HINT.format(
             private_dir = relative_private_dir,

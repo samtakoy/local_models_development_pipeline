@@ -8,7 +8,7 @@ from pathlib import Path
 from langchain_core.tools import BaseTool, StructuredTool, ToolException
 from pydantic import BaseModel, Field
 
-from codeteam.core.agent.workspace import CHECK_DIR, PRIVATE_ROOT
+from codeteam.core.agent.workspace import CHECK_DIR, PRIVATE_ROOT, helpers_dir
 from codeteam.core.roles.advisor.config import ADVICE_FILE_NAME, ADVISOR_ROLE
 from codeteam.core.roles.advisor.prompts import (
     ADVICE_LIMIT_ERROR,
@@ -55,8 +55,8 @@ def build_get_advice_tool(caller_context: CallerContext) -> BaseTool:
     """
     Собирает инструмент get_advice для вызывающего агента.
 
-    Каждый вызов запускает советника в своей личной папке внутри личной папки вызывающего агента:
-    <папка вызывающего>/advisor_r<номер>; журнал советника — <журнал вызывающего>.advisor_r<номер>.
+    Каждый вызов запускает советника в своей личной папке внутри папки помощников вызывающего агента:
+    <папка вызывающего>.helpers/advisor_r<номер>; журнал советника — <журнал вызывающего>.advisor_r<номер>.
     Проект советник читает; пишет, кроме черновика, только в папку временных скриптов CHECK_DIR.
     Файлы из личных папок, которые указал спросивший, советнику закрыты: он получает их копии.
 
@@ -85,7 +85,7 @@ def build_get_advice_tool(caller_context: CallerContext) -> BaseTool:
 
         private_dir_name = reserve_private_dir_name(
             project_dir = project_dir,
-            parent = caller_context.caller_private_dir_name,
+            parent = helpers_dir(private_dir = caller_context.caller_private_dir_name),
             role_name = ADVISOR_ROLE.name,
             preserve_draft = False,
             preserve_context = False,

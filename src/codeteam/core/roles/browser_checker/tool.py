@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 from codeteam.core.roles.browser_checker.config import BROWSER_CHECKER_ROLE, OBSERVATIONS_FILE_NAME
 from codeteam.common.shell import ShellProcesses
+from codeteam.core.agent.workspace import helpers_dir
 from codeteam.core.roles.browser_checker.prompts import (
     APP_NOT_OWN_ERROR,
     APP_NOT_RESPONDING_ERROR,
@@ -69,8 +70,8 @@ def build_check_in_browser_tool(caller_context: CallerContext) -> BaseTool | Non
     """
     Собирает инструмент check_in_browser для вызывающего агента.
 
-    Каждый вызов запускает помощника в своей личной папке внутри личной папки вызывающего агента:
-    <папка вызывающего>/browser_checker_r<номер>; журнал помощника — <журнал вызывающего>.browser_checker_r<номер>.
+    Каждый вызов запускает помощника в своей личной папке внутри папки помощников вызывающего агента:
+    <папка вызывающего>.helpers/browser_checker_r<номер>; журнал помощника — <журнал вызывающего>.browser_checker_r<номер>.
     Помощник не читает проект и не запускает команды: у него только браузер и свой черновик.
     Вызовы выполняются по очереди: следующий помощник запускается, когда закончит предыдущий.
 
@@ -116,7 +117,7 @@ def build_check_in_browser_tool(caller_context: CallerContext) -> BaseTool | Non
 
 def _run_helper(*, caller_context: CallerContext, project_dir: Path, url: str, scenarios: str) -> str:
     """
-    Запускает помощника в новой личной папке и читает его наблюдения.
+    Запускает помощника в новой личной папке внутри папки помощников вызывающего и читает его наблюдения.
 
         caller_context: агент, который просит проверку.
         project_dir: папка проекта.
@@ -128,7 +129,7 @@ def _run_helper(*, caller_context: CallerContext, project_dir: Path, url: str, s
     """
     private_dir_name = reserve_private_dir_name(
         project_dir = project_dir,
-        parent = caller_context.caller_private_dir_name,
+        parent = helpers_dir(private_dir = caller_context.caller_private_dir_name),
         role_name = BROWSER_CHECKER_ROLE.name,
         preserve_draft = False,
         preserve_context = False,
