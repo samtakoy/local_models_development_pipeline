@@ -48,6 +48,15 @@ LIMIT_NOTICE_EVENT = "limit_notices"
 RESET_EVENT = "resets"
 UNFINISHED_ANSWER_HINT_EVENT = "unfinished_answer_hints"
 
+# Явные счётчики событий, которых нет в потоке: повтор запроса после ошибки сервера ollama, тихий повтор
+# запроса после ответа без инструмента и без DONE, замечания хуков к файлам своих папок, замечания проверок
+# после шага (например, откат правок проекта), замечание на попытку сдать работу командой.
+SERVER_ERROR_RETRY_COUNTER = "server_error_retries"
+UNFINISHED_ANSWER_RETRY_COUNTER = "unfinished_answer_retries"
+STEP_HOOK_REMARK_COUNTER = "step_hook_remarks"
+STEP_CHECK_REMARK_COUNTER = "step_check_remarks"
+ANSWER_COMMAND_REMARK_COUNTER = "answer_command_remarks"
+
 # Знаков после запятой у секунд и скоростей в файле.
 ROUND_DIGITS = 3
 

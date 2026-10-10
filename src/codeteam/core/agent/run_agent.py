@@ -239,6 +239,7 @@ def run_agent(
                 project_dir = project_dir,
                 seen_files = seen_files,
                 shell_processes = shell_processes,
+                statistics = statistics,
             )
         }
     )

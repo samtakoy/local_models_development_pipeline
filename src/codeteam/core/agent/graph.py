@@ -17,6 +17,8 @@ from typing import TypedDict, Annotated
 from codeteam.core.agent.config import AgentConfig
 from codeteam.core.agent.node_ids import AGENT_NODE_ID, ANSWER_NOTICE_NODE_ID, DRAFT_AGENT_NODE_ID, \
     DRAFT_TOOL_NODE_ID, INIT_NODE_ID, LIMIT_NOTICE_NODE_ID, REINIT_NODE_ID, TOOL_NODE_ID
+from codeteam.core.agent.statistics import ANSWER_COMMAND_REMARK_COUNTER, SERVER_ERROR_RETRY_COUNTER, \
+    STEP_CHECK_REMARK_COUNTER, STEP_HOOK_REMARK_COUNTER, UNFINISHED_ANSWER_RETRY_COUNTER
 from codeteam.core.agent.prompts import ANSWER_CHECK_NOTICE, ANSWER_COMMAND_REMARK, DONE_ANSWER, TODO_ANSWER, \
     UNFINISHED_ANSWER_NOTICE
 from codeteam.core.agent.workspace import context_path, draft_dir
@@ -98,6 +100,7 @@ def agent_node(
         if not _is_unfinished(response = response):
             break
         logger.info("[agent] ответ без инструмента и без DONE, повторяю запрос")
+        cfg.statistics.count(name = UNFINISHED_ANSWER_RETRY_COUNTER)
         # замечание: повторный запрос действительно помогает в 99% случаев и агент исправляется
         # как усиление на будущее: если посторный запрос не сработал - попробовать еще один
         # с дополнительным хинтом в user message
@@ -128,6 +131,7 @@ def _invoke_model(*, cfg: AgentConfig, messages: Sequence[BaseMessage]) -> BaseM
             return cfg.chat_model.invoke(messages)
         except ResponseError as error:
             logger.warning(f"[agent] ошибка сервера ({error}), повтор {attempt + 1} из {SERVER_ERROR_RETRIES}")
+            cfg.statistics.count(name = SERVER_ERROR_RETRY_COUNTER)
 
     return cfg.chat_model.invoke(messages)
 
@@ -230,11 +234,15 @@ def make_tools_node(*, tools: list[BaseTool]) -> Callable:
 
         before = _private_dir_snapshot(cfg = cfg)
         update = tool_node.invoke(state, config)
-        remarks = [
-            *_step_hook_remarks(cfg = cfg, before = before, after = _private_dir_snapshot(cfg = cfg)),
-            *(remark for check in cfg.step_checks if (remark := check()) is not None),
-        ]
+        hook_remarks = _step_hook_remarks(cfg = cfg, before = before, after = _private_dir_snapshot(cfg = cfg))
+        check_remarks = [remark for check in cfg.step_checks if (remark := check()) is not None]
+        for _ in hook_remarks:
+            cfg.statistics.count(name = STEP_HOOK_REMARK_COUNTER)
+        for _ in check_remarks:
+            cfg.statistics.count(name = STEP_CHECK_REMARK_COUNTER)
+        remarks = [*hook_remarks, *check_remarks]
         if is_answer_command:
+            cfg.statistics.count(name = ANSWER_COMMAND_REMARK_COUNTER)
             remarks.append(ANSWER_COMMAND_REMARK)
         if not remarks:
             return update

@@ -5,6 +5,7 @@ from langchain_core.runnables import Runnable
 
 from codeteam.common.shell import ShellProcesses
 from codeteam.core.agent.answer_checks import AnswerCheck
+from codeteam.core.agent.statistics import AgentStatistics
 from codeteam.core.agent.step_hooks import FolderHook, StepCheck
 from codeteam.core.tools.files import SeenFiles
 
@@ -44,3 +45,5 @@ class AgentConfig:
     # фоновые процессы команд агента; общие с инструментами оболочки, снимаются при уведомлении о лимите
     # и при сбросе истории
     shell_processes: ShellProcesses
+    # статистика запуска: явные счётчики событий, которых нет в потоке событий графа
+    statistics: AgentStatistics

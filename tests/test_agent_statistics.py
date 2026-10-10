@@ -1,10 +1,18 @@
-"""Тесты статистики агента: шаги по узлам, запросы к модели, инструменты по фазам, фаза черновика, файл."""
+"""Тесты статистики агента: шаги по узлам, запросы к модели, инструменты по фазам, фаза черновика, файл,
+явные счётчики в узлах графа."""
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.tools import StructuredTool
+from ollama import ResponseError
 
+from langgraph.constants import END, START
+from langgraph.graph import StateGraph
+
+from codeteam.core.agent.graph import AGENT_CFG_NAME, AgentState, agent_node, make_tools_node
 from codeteam.core.agent.statistics import AgentStatistics
 
 # Длительности ответа модели в наносекундах: весь ответ и вывод токенов.
@@ -112,3 +120,94 @@ def test_counters_error_and_file(tmp_path: Path) -> None:
     assert saved["counters"] == {"server_error_retries": 2}
     assert saved["error"] == "RuntimeError: модель недоступна"
     assert saved["role"] == "developer"
+
+
+class FlakyModel:
+    """
+    Заглушка модели: отвечает по очереди заданными ответами; ответ-исключение поднимается.
+    """
+
+    def __init__(self, *, answers: list[AIMessage | Exception]) -> None:
+        self.answers = list(answers)
+
+    def invoke(self, messages: list) -> AIMessage:
+        """
+        Выдаёт следующий ответ.
+
+            messages: история агента.
+
+        Возвращает: Ответ модели.
+        """
+        answer = self.answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+
+        return answer
+
+
+def _graph_config(*, statistics: AgentStatistics, model: FlakyModel, tmp_path: Path, step_checks: tuple) -> dict:
+    """
+    Собирает конфигурацию узлов графа с настройками, которые нужны узлам ответа и инструментов.
+
+        statistics: статистика агента.
+        model: заглушка модели.
+        tmp_path: папка проекта теста.
+        step_checks: проверки после шага.
+
+    Возвращает: Конфигурацию запуска узла.
+    """
+    settings = SimpleNamespace(
+        chat_model = model,
+        statistics = statistics,
+        step_hooks = (),
+        step_checks = step_checks,
+        project_dir = tmp_path,
+        relative_private_dir = Path(".ct-work") / "developer_r1",
+    )
+
+    return {"configurable": {AGENT_CFG_NAME: settings}}
+
+
+def test_server_error_and_unfinished_answer_retries_are_counted(tmp_path: Path) -> None:
+    """
+    Повтор запроса после ошибки сервера ollama и тихий повтор после ответа без инструмента считаются.
+    """
+    statistics = AgentStatistics(role_name = "developer", journal_name = "05_developer_r1", model_name = "model")
+    model = FlakyModel(answers = [
+        ResponseError("сервер занят"),
+        AIMessage(content = "думаю"),
+        AIMessage(content = "DONE"),
+    ])
+
+    agent_node(
+        {"messages": [], "reset_count": 0, "answer_notices": 0},
+        _graph_config(statistics = statistics, model = model, tmp_path = tmp_path, step_checks = ()),
+    )
+
+    assert statistics.to_dict()["counters"] == {"server_error_retries": 1, "unfinished_answer_retries": 1}
+
+
+def test_step_check_remark_is_counted(tmp_path: Path) -> None:
+    """
+    Замечание проверки после шага инструментов считается.
+    """
+    statistics = AgentStatistics(role_name = "developer", journal_name = "05_developer_r1", model_name = "model")
+    noop = StructuredTool.from_function(func = lambda: "ок", name = "noop", description = "ничего")
+    # узел инструментов langgraph работает только внутри графа
+    workflow = StateGraph(AgentState)
+    workflow.add_node("tools", make_tools_node(tools = [noop]))
+    workflow.add_edge(START, "tools")
+    workflow.add_edge("tools", END)
+    call = AIMessage(content = "", tool_calls = [{"id": "call_1", "name": "noop", "args": {}}])
+
+    workflow.compile().invoke(
+        {"messages": [call], "reset_count": 0, "answer_notices": 0},
+        _graph_config(
+            statistics = statistics,
+            model = FlakyModel(answers = []),
+            tmp_path = tmp_path,
+            step_checks = (lambda: "файлы проекта возвращены к коммиту",),
+        ),
+    )
+
+    assert statistics.to_dict()["counters"] == {"step_check_remarks": 1}
