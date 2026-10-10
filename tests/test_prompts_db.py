@@ -60,7 +60,7 @@ def test_copies_only_prompt_files(prompts_root: Path, tmp_path: Path) -> None:
 
     copies = sorted(path.relative_to(db_dir).as_posix() for path in db_dir.rglob("*") if path.is_file())
     expected = sorted(
-        f"{relative_path}.261010.{_fingerprint(path = prompts_root / relative_path)}"
+        _copy_path(relative_path = relative_path, date = "261010", fingerprint = _fingerprint(path = prompts_root / relative_path))
         for relative_path in PROMPT_FILES
     )
     assert copies == expected
@@ -118,7 +118,7 @@ def test_changed_content_makes_new_copy(prompts_root: Path, tmp_path: Path) -> N
     new_name = build_copy_name(source = source)
 
     assert new_name != old_name
-    assert sorted(path.name for path in (db_dir / "roles/senior").glob("prompts.py.*")) == sorted([old_name, new_name])
+    assert sorted(path.name for path in (db_dir / "roles/senior").glob("prompts.*.py")) == sorted([old_name, new_name])
     assert f"roles/senior/{new_name}" in list_path.read_text(encoding = "utf-8")
     assert f"roles/senior/{old_name}" not in list_path.read_text(encoding = "utf-8")
 
@@ -136,7 +136,7 @@ def test_same_content_on_other_date_makes_new_copy(prompts_root: Path, tmp_path:
 
     fingerprint = _fingerprint(path = source)
     copy_names = sorted(path.name for path in (db_dir / "agent").iterdir())
-    assert copy_names == [f"prompts.py.261010.{fingerprint}", f"prompts.py.261011.{fingerprint}"]
+    assert copy_names == [f"prompts.261010.{fingerprint}.py", f"prompts.261011.{fingerprint}.py"]
 
 
 def test_project_prompt_files_are_found() -> None:
@@ -151,6 +151,21 @@ def test_project_prompt_files_are_found() -> None:
     assert "roles/common/prompts.py" in found
     assert "tools/files/common_prompts.py" in found
     assert "tools/shell/bash_prompts.py" in found
+
+
+def _copy_path(*, relative_path: str, date: str, fingerprint: str) -> str:
+    """
+    Собирает ожидаемый путь копии в базе.
+
+        relative_path: путь файла относительно папки промптов.
+        date: дата изменения ГГММДД.
+        fingerprint: отпечаток содержимого.
+
+    Возвращает: Путь копии относительно папки базы.
+    """
+    path = Path(relative_path)
+
+    return path.with_name(f"{path.stem}.{date}.{fingerprint}{path.suffix}").as_posix()
 
 
 def _fingerprint(*, path: Path) -> str:

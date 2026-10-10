@@ -1,7 +1,8 @@
 """База промптов: копии версий файлов промптов и список версий, с которыми запущен прогон.
 
 Копия лежит в базе по тому же пути, что и файл относительно папки промптов, под именем
-<имя файла>.<дата изменения ГГММДД>.<отпечаток>, например roles/senior/prompts.py.261010.<отпечаток>.
+<имя файла без расширения>.<дата изменения ГГММДД>.<отпечаток>.<расширение>,
+например roles/senior/prompts.261010.<отпечаток>.py.
 Копия с таким именем уже есть - версия сохранена раньше, новая копия не создаётся.
 """
 
@@ -83,16 +84,17 @@ def find_prompt_files(*, prompts_root: Path) -> list[Path]:
 
 def build_copy_name(*, source: Path) -> str:
     """
-    Собирает имя копии файла промптов: имя файла, дата изменения и отпечаток содержимого.
+    Собирает имя копии файла промптов: имя файла без расширения, дата изменения, отпечаток содержимого
+    и расширение файла.
 
         source: файл промптов.
 
-    Возвращает: Имя вида prompts.py.261010.<отпечаток>.
+    Возвращает: Имя вида prompts.261010.<отпечаток>.py.
     """
     modified_date = datetime.fromtimestamp(source.stat().st_mtime).strftime(DATE_FORMAT)
     fingerprint = hashlib.sha256(source.read_bytes()).hexdigest()[:FINGERPRINT_LENGTH]
 
-    return f"{source.name}.{modified_date}.{fingerprint}"
+    return f"{source.stem}.{modified_date}.{fingerprint}{source.suffix}"
 
 
 def _render_copies(*, prompts_root: Path, db_dir: Path, copies: list[tuple[Path, Path]]) -> str:
