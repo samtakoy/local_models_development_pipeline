@@ -33,16 +33,18 @@ class UncommittedChangesError(RuntimeError):
     """В репозитории проекта есть незакоммиченные правки."""
 
 
-def prepare_project(*, project_dir: Path, run_name: str) -> None:
+def prepare_project(*, project_dir: Path, run_name: str, archive_private_dirs: bool) -> None:
     """
     Готовит папку проекта к прогону.
 
     Репозитория нет — создаёт его и коммитит исходное состояние проекта. Репозиторий есть —
     проверяет, что незакоммиченных правок нет. Дописывает в .gitignore строки GITIGNORE_LINES.
-    Переносит прежнее содержимое папки личных папок в архив прогона.
+    Переносит прежнее содержимое папки личных папок в архив прогона, если это задано.
 
         project_dir: папка проекта.
         run_name: имя прогона: имя папки архива.
+        archive_private_dirs: перенести прежние личные папки в архив; False - при продолжении прогона,
+            состояние которого ссылается на них.
     """
     fresh_repository = not is_repository(project_dir = project_dir)
     if fresh_repository:
@@ -61,7 +63,8 @@ def prepare_project(*, project_dir: Path, run_name: str) -> None:
         commit_paths(project_dir = project_dir, paths = (GITIGNORE_NAME,), message = GITIGNORE_COMMIT_MESSAGE)
         logger.info(f"[git] коммит: {GITIGNORE_COMMIT_MESSAGE}")
 
-    _archive_private_root(project_dir = project_dir, run_name = run_name)
+    if archive_private_dirs:
+        _archive_private_root(project_dir = project_dir, run_name = run_name)
 
 
 def _add_gitignore_lines(*, project_dir: Path) -> bool:

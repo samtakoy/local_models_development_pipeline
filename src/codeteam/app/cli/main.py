@@ -2,12 +2,14 @@ import argparse
 import logging
 import sys
 from datetime import datetime
+from pathlib import Path
 
 from codeteam.app.config import load_project_config
 from codeteam.app.prompts_db import PROMPTS_ROOT, save_prompts
 from codeteam.app.sandbox_check import confirm_unprotected_run
 from codeteam.app.settings import load_settings
 from codeteam.core.pipeline.run_pipeline import run_pipeline
+from codeteam.core.pipeline.state_file import load_state
 from codeteam.core.roles.common import PipelineError
 
 logger = logging.getLogger(__name__)
@@ -26,11 +28,20 @@ def main():
     logger.info(f"проект: {project.path}")
     logger.info(f"задача: {project.task}")
     logger.info(f"прогон: {run_dir}")
+    resume_state = None if arguments.resume is None else load_state(path = Path(arguments.resume))
+    if resume_state is not None:
+        logger.info(f"продолжение с роли {resume_state['next_role']}: состояние {arguments.resume}")
     prompts_list = save_prompts(prompts_root = PROMPTS_ROOT, db_dir = settings.prompts_db_dir, run_dir = run_dir)
     logger.info(f"промпты прогона: {prompts_list}")
 
     try:
-        result = run_pipeline(project = project, run_dir = run_dir, model_name = "qwen3.5:9b", settings = settings)
+        result = run_pipeline(
+            project = project,
+            run_dir = run_dir,
+            model_name = "qwen3.5:9b",
+            settings = settings,
+            resume_state = resume_state,
+        )
     except PipelineError as error:
         logger.error(f"прогон остановлен: {error}")
         sys.exit(1)
@@ -43,10 +54,15 @@ def _parse_arguments() -> argparse.Namespace:
     """
     Разбирает аргументы командной строки.
 
-    Возвращает: Аргументы: setup_dir - папка задачи с файлом set.toml.
+    Возвращает: Аргументы: setup_dir - папка задачи с файлом set.toml; resume - файл состояния прерванного
+        прогона или None.
     """
     parser = argparse.ArgumentParser(description = "Запуск команды агентов на задаче проекта.")
     parser.add_argument("setup_dir", help = "папка задачи с файлом set.toml, например projects/cardviewer_ai")
+    parser.add_argument(
+        "--resume",
+        help = "файл state.json прерванного прогона: продолжить с роли, на которой он остановился",
+    )
 
     return parser.parse_args()
 

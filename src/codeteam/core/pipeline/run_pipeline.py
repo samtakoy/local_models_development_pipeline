@@ -9,21 +9,38 @@ from codeteam.core.pipeline.graph import create_pipeline_graph
 from codeteam.core.pipeline.project import ProjectSettings
 from codeteam.core.pipeline.project_setup import prepare_project
 from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState
+from codeteam.core.roles.common import PipelineError
 
 
-def run_pipeline(*, project: ProjectSettings, run_dir: Path, model_name: str, settings: Settings) -> PipelineState:
+def run_pipeline(
+    *,
+    project: ProjectSettings,
+    run_dir: Path,
+    model_name: str,
+    settings: Settings,
+    resume_state: PipelineState | None,
+) -> PipelineState:
     """
     Готовит папку проекта, запускает пайплайн агентов на задаче проекта и ждёт окончания.
 
         project: проект и задача пользователя.
-        run_dir: папка прогона: журналы агентов.
+        run_dir: папка прогона: журналы агентов и файл состояния.
         model_name: модель агентов.
         settings: настройки приложения.
+        resume_state: состояние прерванного прогона: пайплайн продолжается с его next_role, личные папки
+            остаются на месте; None - новый прогон с первой роли.
 
     Возвращает: Итоговое состояние пайплайна: папки результатов агентов.
     """
     graph = create_pipeline_graph(roles = project.roles)
-    prepare_project(project_dir = Path(project.path).resolve(), run_name = run_dir.name)
+    if resume_state is not None:
+        _check_resume_state(resume_state = resume_state, roles = project.roles)
+
+    prepare_project(
+        project_dir = Path(project.path).resolve(),
+        run_name = run_dir.name,
+        archive_private_dirs = resume_state is None,
+    )
 
     config = RunnableConfig(
         configurable = {
@@ -36,6 +53,9 @@ def run_pipeline(*, project: ProjectSettings, run_dir: Path, model_name: str, se
             )
         }
     )
+    if resume_state is not None:
+        return graph.invoke(input = resume_state, config = config)
+
     initial_state = PipelineState(
         task = project.task,
         requirements_dir = None,
@@ -51,3 +71,19 @@ def run_pipeline(*, project: ProjectSettings, run_dir: Path, model_name: str, se
     )
 
     return graph.invoke(input = initial_state, config = config)
+
+
+def _check_resume_state(*, resume_state: PipelineState, roles: tuple[str, ...]) -> None:
+    """
+    Проверяет, что с состояния можно продолжить прогон: прогон не закончен и его следующая роль есть в списке ролей.
+    Ошибку поднимает PipelineError.
+
+        resume_state: состояние прерванного прогона.
+        roles: последовательность ролей пайплайна.
+    """
+    next_role = resume_state["next_role"]
+    if next_role is None:
+        raise PipelineError("продолжить нельзя: прогон из файла состояния уже закончен")
+
+    if next_role not in roles:
+        raise PipelineError(f"продолжить нельзя: роли {next_role} нет в списке ролей {', '.join(roles)}")

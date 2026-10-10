@@ -8,6 +8,7 @@ from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState
+from codeteam.core.pipeline.state_file import STATE_FILE_NAME, save_state
 from codeteam.core.roles.architect import ARCHITECT_ROLE, architect_node
 from codeteam.core.roles.architect_review import ARCHITECT_REVIEW_ROLE, architect_review_node
 from codeteam.core.roles.common import PipelineError
@@ -92,7 +93,8 @@ def check_roles(*, roles: tuple[str, ...]) -> None:
 
 def role_node(state: PipelineState, config: RunnableConfig) -> dict:
     """
-    Запускает роль из next_role и выбирает следующую роль по состоянию после неё.
+    Запускает роль из next_role, выбирает следующую роль по состоянию после неё и записывает состояние
+    в файл STATE_FILE_NAME папки прогона: с него можно продолжить прогон.
 
         state: состояние пайплайна.
         config: настройки запуска графа с настройками пайплайна.
@@ -103,6 +105,7 @@ def role_node(state: PipelineState, config: RunnableConfig) -> dict:
     current = state["next_role"]
     update = ROLE_NODES[current](state, config)
     next_role = choose_next_role(roles = cfg.roles, current = current, state = {**state, **update})
+    save_state(state = {**state, **update, "next_role": next_role}, path = cfg.run_dir / STATE_FILE_NAME)
 
     return {**update, "next_role": next_role}
 

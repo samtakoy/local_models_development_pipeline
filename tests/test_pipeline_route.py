@@ -9,6 +9,7 @@ from codeteam.app.config import load_project_config
 from codeteam.core.pipeline import graph as graph_module
 from codeteam.core.pipeline.graph import DEFAULT_ROLES, check_roles, choose_next_role, create_pipeline_graph
 from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState, Rework, Stages
+from codeteam.core.pipeline.state_file import STATE_FILE_NAME, load_state, save_state
 from codeteam.core.roles.common import PipelineError
 
 # Полный список ролей.
@@ -178,57 +179,107 @@ def test_config_roles(tmp_path: Path) -> None:
     assert load_project_config(setup_dir = str(without_roles)).roles == DEFAULT_ROLES
 
 
-def test_graph_runs_roles_in_order(monkeypatch: pytest.MonkeyPatch) -> None:
+class FakeRoles:
     """
-    Граф запускает роли по списку, повторяет роли этапа для каждого этапа и возвращает работу по возврату.
-    Узлы ролей заменены заглушками: первая приёмка возвращает работу разработчику.
+    Заглушки узлов ролей: пишут порядок запусков и меняют состояние как роли.
+    Первая приёмка этапа возвращает работу разработчику.
     """
-    order: list[str] = []
-    review_count = {"developer_review": 0}
 
-    def fake_node(role_name: str):
+    def __init__(self) -> None:
+        self.order: list[str] = []
+        self.review_count = 0
+
+    def node(self, *, role_name: str):
         """
         Собирает заглушку узла роли.
 
             role_name: имя роли.
 
-        Возвращает: Узел, который пишет имя роли в порядок запусков и меняет состояние как роль.
+        Возвращает: Узел, который пишет имя роли в порядок запусков и возвращает обновление состояния.
         """
 
         def node(state: PipelineState, config: RunnableConfig) -> dict:
             """Пишет роль в порядок запусков и возвращает обновление состояния этой роли."""
-            order.append(role_name)
+            self.order.append(role_name)
             if role_name == "architect":
                 return {"stages": Stages(files = (Path("10_a.md"), Path("20_b.md")), started = 0, plan_dir = None, fix_rounds = 0)}
             if role_name == "senior":
                 stages = state["stages"]
                 return {"stages": Stages(files = stages.files, started = stages.started + 1, plan_dir = None, fix_rounds = 0)}
             if role_name == "developer_review":
-                review_count["developer_review"] += 1
-                rework = _rework(target = "developer") if review_count["developer_review"] == 1 else None
-                return {"rework": rework}
+                self.review_count += 1
+                return {"rework": _rework(target = "developer") if self.review_count == 1 else None}
 
             return {"rework": None}
 
         return node
 
-    for role_name in DEFAULT_ROLES:
-        monkeypatch.setitem(graph_module.ROLE_NODES, role_name, fake_node(role_name))
 
-    initial_state = _state(started = 0, total = 0, rework = None)
-    initial_state = {**initial_state, "stages": None, "next_role": DEFAULT_ROLES[0]}
-    config = RunnableConfig(configurable = {PIPELINE_CFG_NAME: PipelineConfig(
+@pytest.fixture
+def fake_roles(monkeypatch: pytest.MonkeyPatch) -> FakeRoles:
+    """
+    Подменяет узлы всех ролей заглушками.
+
+    Возвращает: Заглушки ролей с порядком запусков.
+    """
+    fake = FakeRoles()
+    for role_name in DEFAULT_ROLES:
+        monkeypatch.setitem(graph_module.ROLE_NODES, role_name, fake.node(role_name = role_name))
+
+    return fake
+
+
+def _config(*, run_dir: Path) -> RunnableConfig:
+    """
+    Собирает настройки запуска графа с полным списком ролей.
+
+        run_dir: папка прогона.
+
+    Возвращает: Настройки запуска графа.
+    """
+    return RunnableConfig(configurable = {PIPELINE_CFG_NAME: PipelineConfig(
         project_path = "/tmp/project",
-        run_dir = Path("/tmp/run"),
+        run_dir = run_dir,
         model_name = "model",
         roles = DEFAULT_ROLES,
         settings = None,
     )})
-    create_pipeline_graph(roles = DEFAULT_ROLES).invoke(input = initial_state, config = config)
 
-    assert order == [
+
+def test_graph_runs_roles_in_order(fake_roles: FakeRoles, tmp_path: Path) -> None:
+    """
+    Граф запускает роли по списку, повторяет роли этапа для каждого этапа и возвращает работу по возврату.
+    Файл состояния после последней роли говорит, что прогон закончен.
+    """
+    initial_state = {**_state(started = 0, total = 0, rework = None), "stages": None, "next_role": DEFAULT_ROLES[0]}
+
+    create_pipeline_graph(roles = DEFAULT_ROLES).invoke(input = initial_state, config = _config(run_dir = tmp_path))
+
+    assert fake_roles.order == [
         "pm", "researcher", "architect", "architect_review",
         "senior", "developer", "developer_review", "developer", "developer_review",
         "senior", "developer", "developer_review",
         "web_tester",
     ]
+    saved = load_state(path = tmp_path / STATE_FILE_NAME)
+    assert saved["next_role"] is None
+    assert saved["stages"].started == 2
+
+
+def test_graph_resumes_from_saved_state(fake_roles: FakeRoles, tmp_path: Path) -> None:
+    """
+    Граф, запущенный с сохранённым состоянием, продолжает с его next_role.
+    """
+    saved_path = tmp_path / "first" / STATE_FILE_NAME
+    save_state(
+        state = {**_state(started = 1, total = 2, rework = None), "next_role": "developer"},
+        path = saved_path,
+    )
+    fake_roles.review_count = 1
+
+    create_pipeline_graph(roles = DEFAULT_ROLES).invoke(
+        input = load_state(path = saved_path),
+        config = _config(run_dir = tmp_path / "second"),
+    )
+
+    assert fake_roles.order == ["developer", "developer_review", "senior", "developer", "developer_review", "web_tester"]
