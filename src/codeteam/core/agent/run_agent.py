@@ -12,6 +12,7 @@ from codeteam.common.llm import build_chat_model, OllamaConfig, GenerationMode
 from codeteam.core.agent.config import AgentConfig
 from codeteam.core.agent.graph import create_agent_graph, AgentState, AGENT_CFG_NAME
 from codeteam.core.agent.journal import AgentJournal
+from codeteam.core.agent.statistics import STATISTICS_FILE_SUFFIX, AgentStatistics
 from codeteam.core.agent.role import AgentRole
 from codeteam.core.agent.prompts import DRAFT_PHASE_HINT, DRAFT_PHASE_BASH_REFUSAL, AGENT_SYSTEM_INSTRUCTIONS, LIMIT_NOTICE, \
     DRAFT_PHASE_HELPER_TOOL_REFUSAL, DRAFT_PHASE_START_SERVICE_REFUSAL, REINIT_NOTICE, EMPTY_DRAFT_NOTICE, PROJECT_RULES_FILE_NAME, PROJECT_RULES_INSTRUCTIONS, PROJECT_DOCS_DIR_NAME, \
@@ -191,6 +192,9 @@ def run_agent(
     has_project_docs = reads_project and (project_dir / PROJECT_DOCS_DIR_NAME).is_dir()
     project_docs_reads = [(READ_TOOL_NAME, {"file_path": PROJECT_DOCS_DIR_NAME})] if has_project_docs else []
 
+    # Статистика запуска: события графа и явные счётчики, файл рядом с журналом
+    statistics = AgentStatistics(role_name = role.name, journal_name = journal_path.stem, model_name = role.model_name)
+
     # Сегодняшняя дата: одна на всю работу агента
     today_instructions = TODAY_INSTRUCTIONS.format(today = date.today().isoformat())
 
@@ -245,12 +249,15 @@ def run_agent(
     try:
         for event in agent.stream(input = initial_state, config = config):
             journal.write(event = event)
+            statistics.record(event = event)
     except Exception as error:
         journal.write_error(error = error)
+        statistics.fail(error = error)
         raise
     finally:
         shell_processes.kill_all()
         command_host.close()
+        statistics.write(path = journal_path.with_suffix(STATISTICS_FILE_SUFFIX))
 
     journal.finish()
 

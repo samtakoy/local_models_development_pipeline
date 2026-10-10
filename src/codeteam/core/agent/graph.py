@@ -15,6 +15,8 @@ from ollama import ResponseError
 from typing import TypedDict, Annotated
 
 from codeteam.core.agent.config import AgentConfig
+from codeteam.core.agent.node_ids import AGENT_NODE_ID, ANSWER_NOTICE_NODE_ID, DRAFT_AGENT_NODE_ID, \
+    DRAFT_TOOL_NODE_ID, INIT_NODE_ID, LIMIT_NOTICE_NODE_ID, REINIT_NODE_ID, TOOL_NODE_ID
 from codeteam.core.agent.prompts import ANSWER_CHECK_NOTICE, ANSWER_COMMAND_REMARK, DONE_ANSWER, TODO_ANSWER, \
     UNFINISHED_ANSWER_NOTICE
 from codeteam.core.agent.workspace import context_path, draft_dir
@@ -31,15 +33,6 @@ class AgentState(TypedDict):
     answer_notices: int
 
 AGENT_CFG_NAME = "agent"
-
-INIT_NODE_ID = "init"
-AGENT_NODE_ID = "agent"
-TOOL_NODE_ID = "tools"
-LIMIT_NOTICE_NODE_ID = "limit_notice"
-ANSWER_NOTICE_NODE_ID = "answer_notice"
-DRAFT_AGENT_NODE_ID = "draft_agent"
-DRAFT_TOOL_NODE_ID = "draft_tools"
-REINIT_NODE_ID = "reinit"
 
 # Сколько раз отказывать агенту, чья работа не прошла проверку сдачи; дальше работа переходит к новому агенту.
 ANSWER_NOTICE_LIMIT = 3

@@ -1,0 +1,10 @@
+"""Имена узлов графа агента."""
+
+INIT_NODE_ID = "init"
+AGENT_NODE_ID = "agent"
+TOOL_NODE_ID = "tools"
+LIMIT_NOTICE_NODE_ID = "limit_notice"
+ANSWER_NOTICE_NODE_ID = "answer_notice"
+DRAFT_AGENT_NODE_ID = "draft_agent"
+DRAFT_TOOL_NODE_ID = "draft_tools"
+REINIT_NODE_ID = "reinit"
