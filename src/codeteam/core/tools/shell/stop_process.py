@@ -8,12 +8,12 @@ from codeteam.common.shell import ShellProcess, ShellProcesses
 # Имя инструмента остановки фоновых процессов.
 STOP_PROCESS_TOOL_NAME = "stop_process"
 
-STOP_PROCESS_DESCRIPTION = """Останавливает фоновый процесс, который ты запустил через bash.
+STOP_PROCESS_DESCRIPTION = """Останавливает фоновый процесс, который ты запустил через bash или start_service.
 
-Свой процесс можно остановить и через bash (kill, pkill, killall) из любого вызова.
+Свой процесс можно остановить.
 Чужие процессы остановить нельзя: ни через bash, ни этим инструментом.
 
-Останавливается процесс и всё, что запущено с ним в том же вызове bash."""
+Останавливается процесс и всё, что запущено вместе с ним одной командой."""
 
 
 class StopProcessArguments(BaseModel):
