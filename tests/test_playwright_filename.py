@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from codeteam.core.roles.web_tester.config import check_playwright_filename
+from codeteam.core.roles.common.browser import check_playwright_filename
 
 
 @pytest.mark.parametrize("filename", ["tmp_check/home_page.png", "tmp_check/screenshots/home_page.png"])

@@ -15,7 +15,7 @@ from codeteam.core.agent.journal import AgentJournal
 from codeteam.core.agent.role import AgentRole
 from codeteam.core.agent.prompts import DRAFT_PHASE_HINT, DRAFT_PHASE_BASH_REFUSAL, AGENT_SYSTEM_INSTRUCTIONS, LIMIT_NOTICE, \
     DRAFT_PHASE_HELPER_TOOL_REFUSAL, DRAFT_PHASE_START_SERVICE_REFUSAL, REINIT_NOTICE, EMPTY_DRAFT_NOTICE, PROJECT_RULES_FILE_NAME, PROJECT_RULES_INSTRUCTIONS, PROJECT_DOCS_DIR_NAME, \
-    TODAY_INSTRUCTIONS
+    TODAY_INSTRUCTIONS, CODE_NAME_INSTRUCTIONS
 from codeteam.core.agent.step_hooks import FolderHook, draft_section_hook, stray_private_file_hook
 from codeteam.core.agent.workspace import CONTEXT_FILE_NAME, DRAFT_DIR_NAME, PRIVATE_ROOT, Workspace, context_path, \
     draft_dir
@@ -193,10 +193,19 @@ def run_agent(
     # Сегодняшняя дата: одна на всю работу агента
     today_instructions = TODAY_INSTRUCTIONS.format(today = date.today().isoformat())
 
+    # Кодовое имя агента: путь его личной папки
+    code_name_instructions = CODE_NAME_INSTRUCTIONS.format(code_name = private_dir_name.as_posix())
+
     config = RunnableConfig(
         configurable = {
             AGENT_CFG_NAME: AgentConfig(
-                system_prompt = role.system_prompt + system_instructions + project_rules_instructions + today_instructions,
+                system_prompt = (
+                    role.system_prompt
+                    + system_instructions
+                    + project_rules_instructions
+                    + today_instructions
+                    + code_name_instructions
+                ),
                 task = task,
                 chat_model = bound_chat_model,
                 warmup_calls = [

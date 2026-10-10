@@ -1,9 +1,10 @@
-"""Описание роли приёмщика этапа: промпт, модель, инструменты, хуки, проверки сдачи."""
+"""Описание роли приёмщика этапа: промпт, модель, инструменты, помощник с браузером, хуки, проверки сдачи."""
 
 from pathlib import Path
 
 from codeteam.common.llm import ReasoningLevel
 from codeteam.core.agent.workspace import CHECK_DIR
+from codeteam.core.roles.browser_checker import build_check_in_browser_tool
 from codeteam.core.roles.common import ACCEPTED_VERDICT, PROJECT_TOOL_NAMES, REWORK_VERDICT, VERDICT_FILE_NAME, \
     RoleSettings, check_verdict_file
 
@@ -22,6 +23,6 @@ DEVELOPER_REVIEW_ROLE = RoleSettings(
     step_hooks = (),
     step_checks = (),
     answer_checks = (check_verdict_file,),
-    helper_tools = (),
+    helper_tools = (build_check_in_browser_tool,),
     mcp_servers = (),
 )
