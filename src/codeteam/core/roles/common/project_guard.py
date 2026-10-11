@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from codeteam.common.git import UNTRACKED_STATUS, list_uncommitted_changes, restore_paths
-from codeteam.core.agent.answer_checks import AnswerCheck
+from codeteam.core.agent.answer_checks import AnswerContext
 from codeteam.core.agent.step_hooks import StepCheck
 from codeteam.core.roles.common.prompts import PROJECT_CHANGES_REMARK
 
@@ -36,22 +36,18 @@ def tracked_changes_check(*, project_dir: Path, remark: str) -> StepCheck:
     return check
 
 
-def clean_project_check(*, project_dir: Path) -> AnswerCheck:
+def clean_project_check(context: AnswerContext) -> str | None:
     """
-    Собирает проверку сдачи: в проекте нет незакоммиченных правок и новых файлов.
+    Проверка сдачи: в проекте нет незакоммиченных правок и новых файлов; папку черновика не смотрит.
 
     Проект на начало работы роли должен быть закоммичен.
 
-        project_dir: папка проекта.
+        context: сдача работы агентом.
 
-    Возвращает: Проверку сдачи.
+    Возвращает: Замечание со списком правок или None, если проект чистый.
     """
-    def check(answer_dir: Path) -> str | None:
-        """Находит правки и новые файлы проекта; папку черновика не смотрит."""
-        changed_paths = [path for _, path in list_uncommitted_changes(project_dir = project_dir)]
-        if not changed_paths:
-            return None
+    changed_paths = [path for _, path in list_uncommitted_changes(project_dir = context.project_dir)]
+    if not changed_paths:
+        return None
 
-        return PROJECT_CHANGES_REMARK.format(paths = ", ".join(changed_paths))
-
-    return check
+    return PROJECT_CHANGES_REMARK.format(paths = ", ".join(changed_paths))

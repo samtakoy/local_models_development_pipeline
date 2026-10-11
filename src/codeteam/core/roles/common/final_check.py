@@ -11,7 +11,7 @@ from codeteam.common.git import list_uncommitted_changes
 from codeteam.core.agent.workspace import CHECK_DIR, PRIVATE_ROOT
 from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState
 from codeteam.core.roles.common.private_dirs import role_private_dir_name
-from codeteam.core.roles.common.project_guard import clean_project_check, tracked_changes_check
+from codeteam.core.roles.common.project_guard import tracked_changes_check
 from codeteam.core.roles.common.prompts import FIX_STAGE_TEXT
 from codeteam.core.roles.common.review import read_verdict
 from codeteam.core.roles.common.role_settings import RoleSettings
@@ -66,7 +66,6 @@ def run_final_check(
             project_dir = project_dir,
             remark = tracked_changes_remark,
         )),
-        answer_checks = (*role.answer_checks, clean_project_check(project_dir = project_dir)),
     )
     private_dir_name = role_private_dir_name(
         project_dir = project_dir,

@@ -16,6 +16,7 @@ from langgraph.graph.state import CompiledStateGraph
 from ollama import ResponseError
 from typing import TypedDict, Annotated
 
+from codeteam.core.agent.answer_checks import AnswerContext
 from codeteam.core.agent.config import AgentConfig
 from codeteam.core.agent.node_ids import AGENT_NODE_ID, ANSWER_NOTICE_NODE_ID, DRAFT_AGENT_NODE_ID, \
     DRAFT_TOOL_NODE_ID, INIT_NODE_ID, LIMIT_NOTICE_NODE_ID, REINIT_NODE_ID, TOOL_NODE_ID
@@ -530,7 +531,8 @@ def _answer_notice(*, cfg: AgentConfig) -> str | None:
     if not any(agent_draft_dir.glob("*.md")):
         return cfg.empty_draft_notice
 
-    remarks = [remark for check in cfg.answer_checks if (remark := check(agent_draft_dir)) is not None]
+    context = AnswerContext(project_dir = cfg.project_dir, draft_dir = agent_draft_dir)
+    remarks = [remark for check in cfg.answer_checks if (remark := check(context)) is not None]
     if not remarks:
         return None
 

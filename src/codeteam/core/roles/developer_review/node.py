@@ -9,7 +9,7 @@ from langchain_core.runnables import RunnableConfig
 from codeteam.common.git import list_uncommitted_changes
 from codeteam.core.agent.workspace import PRIVATE_ROOT
 from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState, Review
-from codeteam.core.roles.common import STAGE_TASK_DIR_NAME, build_stage_dir_name, clean_project_check, \
+from codeteam.core.roles.common import STAGE_TASK_DIR_NAME, build_stage_dir_name, \
     make_journal_name, make_rework, next_review_round, read_verdict, role_private_dir_name, run_role, \
     tracked_changes_check
 from codeteam.core.roles.developer import DEVELOPER_ROLE
@@ -38,7 +38,6 @@ def developer_review_node(state: PipelineState, config: RunnableConfig):
             project_dir = project_dir,
             remark = TRACKED_CHANGES_REMARK,
         )),
-        answer_checks = (*DEVELOPER_REVIEW_ROLE.answer_checks, clean_project_check(project_dir = project_dir)),
     )
     private_dir_name = role_private_dir_name(
         project_dir = project_dir,

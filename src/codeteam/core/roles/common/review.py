@@ -4,6 +4,7 @@ import re
 import shutil
 from pathlib import Path
 
+from codeteam.core.agent.answer_checks import AnswerContext
 from codeteam.core.agent.step_hooks import FolderHook
 from codeteam.core.agent.workspace import DRAFT_DIR_NAME
 from codeteam.core.pipeline.state import Review, Rework
@@ -99,15 +100,26 @@ def copy_reviewed_draft(*, draft_dir: Path, reviewer_dir: Path) -> Path:
     return reviewed_dir
 
 
-def check_verdict_file(answer_dir: Path) -> str | None:
+def check_verdict_file(context: AnswerContext) -> str | None:
     """
     Проверка сдачи ревьюера: файл вердикта есть и его первая строка содержит ровно один вердикт.
 
-        answer_dir: папка черновика ревьюера.
+        context: сдача работы ревьюером.
 
     Возвращает: Замечание ревьюеру или None, если вердикт читается.
     """
-    verdict_path = answer_dir / VERDICT_FILE_NAME
+    return _verdict_file_remark(draft_dir = context.draft_dir)
+
+
+def _verdict_file_remark(*, draft_dir: Path) -> str | None:
+    """
+    Проверяет файл вердикта в черновике ревьюера: он есть и его первая строка содержит ровно один вердикт.
+
+        draft_dir: папка черновика ревьюера.
+
+    Возвращает: Замечание ревьюеру или None, если вердикт читается.
+    """
+    verdict_path = draft_dir / VERDICT_FILE_NAME
     if not verdict_path.is_file():
         return MISSING_VERDICT_REMARK.format(
             verdict_file = VERDICT_FILE_NAME,
@@ -158,7 +170,7 @@ def read_verdict(*, remarks_dir: Path) -> bool:
 
     Возвращает: True — работа принята, False — на доработку.
     """
-    remark = check_verdict_file(remarks_dir)
+    remark = _verdict_file_remark(draft_dir = remarks_dir)
     if remark is not None:
         raise PipelineError(f"черновик ревьюера {remarks_dir}: {remark}")
 

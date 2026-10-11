@@ -1,12 +1,27 @@
-"""Проверки сдачи работы: по папке черновика решают, принять ли ответ агента."""
+"""Проверки сдачи работы: по черновику и проекту решают, принять ли ответ агента."""
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 from codeteam.core.agent.prompts import MISSING_ANSWER_FILES_REMARK
 
-# Проверка сдачи: папка черновика агента → замечание агенту или None, если ответ годится.
-AnswerCheck = Callable[[Path], str | None]
+
+@dataclass(frozen = True)
+class AnswerContext:
+    """
+    Сдача работы агентом: что нужно проверкам сдачи.
+
+        project_dir: папка проекта.
+        draft_dir: папка черновика агента.
+    """
+
+    project_dir: Path
+    draft_dir: Path
+
+
+# Проверка сдачи: сдача работы → замечание агенту или None, если ответ годится.
+AnswerCheck = Callable[[AnswerContext], str | None]
 
 
 def required_files_check(*, file_names: tuple[str, ...]) -> AnswerCheck:
@@ -17,9 +32,9 @@ def required_files_check(*, file_names: tuple[str, ...]) -> AnswerCheck:
 
     Возвращает: Проверку сдачи.
     """
-    def check(answer_dir: Path) -> str | None:
+    def check(context: AnswerContext) -> str | None:
         """Находит обязательные файлы, которых нет в черновике."""
-        missing_names = [name for name in file_names if not (answer_dir / name).is_file()]
+        missing_names = [name for name in file_names if not (context.draft_dir / name).is_file()]
         if not missing_names:
             return None
 

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from codeteam.common.git import commit_all, init_repository
-from codeteam.core.agent.answer_checks import required_files_check
+from codeteam.core.agent.answer_checks import AnswerContext, required_files_check
 from codeteam.core.roles.common import ACCEPTED_VERDICT, REWORK_VERDICT, VERDICT_FILE_NAME, check_verdict_file, \
     clean_project_check
 
@@ -41,13 +41,14 @@ def test_required_files_check(tmp_path: Path) -> None:
     Нет обязательного файла — замечание с его именем; файл есть — замечания нет.
     """
     check = required_files_check(file_names = (REQUIRED_FILE_NAME,))
+    context = AnswerContext(project_dir = tmp_path, draft_dir = tmp_path)
 
-    remark = check(tmp_path)
+    remark = check(context)
     assert remark is not None
     assert REQUIRED_FILE_NAME in remark
 
     (tmp_path / REQUIRED_FILE_NAME).write_text("# Ответ\n", encoding = "utf-8")
-    assert check(tmp_path) is None
+    assert check(context) is None
 
 
 def test_verdict_file_check(tmp_path: Path) -> None:
@@ -55,24 +56,24 @@ def test_verdict_file_check(tmp_path: Path) -> None:
     Нет файла вердикта или вердикт не читается — замечание; один вердикт в первой строке — замечания нет.
     """
     verdict_file = tmp_path / VERDICT_FILE_NAME
-    assert check_verdict_file(tmp_path) is not None
+    context = AnswerContext(project_dir = tmp_path, draft_dir = tmp_path)
+    assert check_verdict_file(context) is not None
 
     verdict_file.write_text(f"{ACCEPTED_VERDICT} или {REWORK_VERDICT}\n", encoding = "utf-8")
-    assert check_verdict_file(tmp_path) is not None
+    assert check_verdict_file(context) is not None
 
     verdict_file.write_text(f"{ACCEPTED_VERDICT}\n\n## Причины\n", encoding = "utf-8")
-    assert check_verdict_file(tmp_path) is None
+    assert check_verdict_file(context) is None
 
 
 def test_clean_project_check(project_dir: Path, tmp_path_factory: pytest.TempPathFactory) -> None:
     """
     Чистый проект — замечания нет; правка отслеживаемого файла — замечание с его путём.
     """
-    draft_dir = tmp_path_factory.mktemp("draft")
-    check = clean_project_check(project_dir = project_dir)
-    assert check(draft_dir) is None
+    context = AnswerContext(project_dir = project_dir, draft_dir = tmp_path_factory.mktemp("draft"))
+    assert clean_project_check(context) is None
 
     (project_dir / "src" / "app.py").write_text("def view():\n    return 2\n", encoding = "utf-8")
-    remark = check(draft_dir)
+    remark = clean_project_check(context)
     assert remark is not None
     assert "src/app.py" in remark
