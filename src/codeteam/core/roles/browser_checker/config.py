@@ -5,10 +5,9 @@ from pathlib import Path
 
 from codeteam.common.llm import ReasoningLevel
 from codeteam.core.agent.answer_checks import required_files_check
-from codeteam.core.agent.statistics import WORK_PHASE
-from codeteam.core.agent.step_hooks import refusal_hint_hook
+from codeteam.core.agent.step_hooks import draft_phase_hint_hook, private_file_hook
 from codeteam.core.agent.workspace import CHECK_DIR
-from codeteam.core.roles.browser_checker.prompts import BROWSER_CHECKER_REFUSAL_HINTS
+from codeteam.core.roles.browser_checker.hooks import browser_checker_refusal_hook
 from codeteam.core.roles.common import DRAFT_TOOL_NAMES, RoleSettings
 from codeteam.core.roles.common.browser import playwright_server
 
@@ -22,10 +21,12 @@ BROWSER_CHECKER_ROLE = RoleSettings(
     model_name = None,
     reasoning_level = ReasoningLevel.MEDIUM,
     tool_names = DRAFT_TOOL_NAMES,
-    step_hooks = (refusal_hint_hook(phase = WORK_PHASE, hints = BROWSER_CHECKER_REFUSAL_HINTS),),
+    step_hooks = (
+        private_file_hook(answer_file_names = (OBSERVATIONS_FILE_NAME,), only_answer_files = True),
+        draft_phase_hint_hook,
+        browser_checker_refusal_hook,
+    ),
     answer_checks = (required_files_check(file_names = (OBSERVATIONS_FILE_NAME,)),),
-    answer_file_names = (OBSERVATIONS_FILE_NAME,),
-    only_answer_files = True,
     helper_tools = (),
     mcp_servers = (playwright_server,),
 )

@@ -44,10 +44,9 @@ class RoleSettings:
         model_name: модель агента; None — модель пайплайна.
         reasoning_level: уровень размышления модели агента.
         tool_names: имена инструментов агента.
-        step_hooks: хуки шага инструментов: замечания к изменённым файлам личной папки и к проекту.
+        step_hooks: все хуки шага инструментов роли, включая общие: места и имена файлов личной папки,
+            подсказка фазы черновика.
         answer_checks: проверки сдачи: замечания к черновику, когда агент отвечает DONE.
-        answer_file_names: заранее известные имена файлов ответа роли в черновике.
-        only_answer_files: в черновике роли разрешены только файлы ответа.
         helper_tools: сборщики инструментов вызова другого агента, например советника.
         mcp_servers: сборщики серверов MCP, чьи инструменты получает агент; сессии открыты, пока агент работает.
     """
@@ -60,7 +59,5 @@ class RoleSettings:
     tool_names: tuple[str, ...]
     step_hooks: tuple[StepHook, ...]
     answer_checks: tuple[AnswerCheck, ...]
-    answer_file_names: tuple[str, ...]
-    only_answer_files: bool
     helper_tools: tuple[HelperToolBuilder, ...]
     mcp_servers: tuple[McpServerBuilder, ...]

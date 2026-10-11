@@ -17,10 +17,9 @@ class AgentRole:
         model_name: модель агента.
         reasoning_level: уровень размышления модели агента.
         tool_names: имена инструментов агента, одни и те же в фазе работы и в фазе черновика.
-        step_hooks: хуки шага инструментов: замечания к изменённым файлам личной папки и к проекту.
+        step_hooks: все хуки шага инструментов роли, включая общие: места и имена файлов личной папки,
+            подсказка фазы черновика.
         answer_checks: проверки сдачи: замечания к черновику, когда агент отвечает DONE.
-        answer_file_names: заранее известные имена файлов ответа роли в черновике.
-        only_answer_files: в черновике роли разрешены только файлы ответа.
     """
 
     name: str
@@ -30,5 +29,3 @@ class AgentRole:
     tool_names: tuple[str, ...]
     step_hooks: tuple[StepHook, ...]
     answer_checks: tuple[AnswerCheck, ...]
-    answer_file_names: tuple[str, ...]
-    only_answer_files: bool

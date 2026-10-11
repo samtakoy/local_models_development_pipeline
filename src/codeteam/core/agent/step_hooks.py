@@ -1,7 +1,6 @@
 """Хуки шага инструментов: после всех вызовов шага смотрят на изменённые файлы личной папки агента, на отказы
 по пути или на проект и дают агенту замечания."""
 
-import random
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -105,26 +104,6 @@ def join_remarks(*, remarks: list[str]) -> str | None:
     Возвращает: Замечания через пустую строку; None, если замечаний нет.
     """
     return "\n\n".join(remarks) if remarks else None
-
-
-def refusal_hint_hook(*, phase: str, hints: tuple[str, ...]) -> StepHook:
-    """
-    Собирает хук шага: если в шаге фазы phase был отказ файлового инструмента по пути — одна подсказка из набора.
-
-        phase: фаза работы агента, в которой хук даёт подсказку.
-        hints: подсказки агенту.
-
-    Возвращает: Хук шага.
-    """
-
-    def hook(context: StepContext) -> str | None:
-        """Даёт подсказку к отказам по пути за шаг."""
-        if context.phase != phase or not context.refusals:
-            return None
-
-        return random.choice(hints)
-
-    return hook
 
 
 def draft_phase_hint_hook(context: StepContext) -> str | None:

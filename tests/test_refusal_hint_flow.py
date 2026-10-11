@@ -2,6 +2,7 @@
 отказы и ошибки других инструментов без подсказки, подсказка считается замечанием хука,
 повтор отказа по тому же пути остаётся повтором шага."""
 
+import random
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -14,7 +15,7 @@ from langgraph.graph import StateGraph
 
 from codeteam.core.agent.graph import AGENT_CFG_NAME, AgentState, make_tools_node
 from codeteam.core.agent.statistics import DRAFT_PHASE, STEP_HOOK_REMARK_COUNTER, WORK_PHASE, AgentStatistics
-from codeteam.core.agent.step_hooks import refusal_hint_hook
+from codeteam.core.agent.step_hooks import StepContext
 from codeteam.core.agent.workspace import Workspace
 from codeteam.core.tools.files import READ_TOOL_NAME, PathRefusals, SeenFiles, file_tool_builders
 from codeteam.core.tools.shell import BASH_TOOL_NAME, build_disabled_bash_tool
@@ -89,6 +90,20 @@ def _failing_tool() -> BaseTool:
     )
 
 
+def _hint_hook(context: StepContext) -> str | None:
+    """
+    Хук шага теста: к отказам по пути за шаг — одна подсказка из набора.
+
+        context: шаг инструментов.
+
+    Возвращает: Подсказку или None, если отказов не было.
+    """
+    if not context.refusals:
+        return None
+
+    return random.choice(HINTS)
+
+
 def _tools(*, project_dir: Path, refusals: PathRefusals) -> list[BaseTool]:
     """
     Собирает инструменты теста: read рабочего места, заглушку bash и инструмент с ошибкой.
@@ -129,7 +144,7 @@ class _StepsResult:
 def _run_steps(*, project_dir: Path, phase: str, name: str, args: dict, step_count: int) -> _StepsResult:
     """
     Выполняет несколько шагов подряд в узле инструментов графа: в каждом шаге один и тот же вызов.
-    Хук шага: подсказка к отказам по пути в фазе шагов.
+    Хук шага: подсказка к отказам по пути.
 
         project_dir: папка проекта.
         phase: фаза работы агента.
@@ -151,7 +166,7 @@ def _run_steps(*, project_dir: Path, phase: str, name: str, args: dict, step_cou
     )
     settings = SimpleNamespace(
         statistics = statistics,
-        step_hooks = (refusal_hint_hook(phase = phase, hints = HINTS),),
+        step_hooks = (_hint_hook,),
         project_dir = project_dir,
         relative_private_dir = RELATIVE_PRIVATE_DIR,
         path_refusals = refusals,

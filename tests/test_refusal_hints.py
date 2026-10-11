@@ -1,17 +1,16 @@
-"""Тесты хуков подсказки к отказу по пути: подсказка из набора, если в шаге своей фазы были отказы;
-подсказка фазы черновика с личной папкой агента."""
+"""Тесты хуков подсказки к отказу по пути: подсказка помощника с браузером в фазе работы; подсказка фазы
+черновика с личной папкой агента."""
 
 from pathlib import Path
 
 from codeteam.core.agent.statistics import DRAFT_PHASE, WORK_PHASE
-from codeteam.core.agent.step_hooks import StepContext, draft_phase_hint_hook, refusal_hint_hook
+from codeteam.core.agent.step_hooks import StepContext, draft_phase_hint_hook
+from codeteam.core.roles.browser_checker.hooks import browser_checker_refusal_hook
+from codeteam.core.roles.browser_checker.prompts import BROWSER_CHECKER_REFUSAL_HINTS
 from codeteam.core.tools.files import PathRefusal
 
 # Личная папка агента относительно папки проекта.
 RELATIVE_PRIVATE_DIR = Path(".ct-work") / "agent"
-
-# Подсказки к отказу в тестах.
-HINTS = ("пояснение-один", "пояснение-два")
 
 # Отказ чтения по пути вне доступных папок.
 READ_REFUSAL = PathRefusal(path = "src/app.py", is_write = False)
@@ -39,33 +38,30 @@ def _context(*, tmp_path: Path, phase: str, refusals: tuple[PathRefusal, ...]) -
     )
 
 
-def test_refusals_in_own_phase_get_one_hint(tmp_path: Path) -> None:
+def test_browser_checker_refusals_in_work_phase_get_one_hint(tmp_path: Path) -> None:
     """
-    Отказы чтения и записи в шаге своей фазы — одна подсказка из набора.
+    Отказы чтения и записи в шаге фазы работы — одна из подсказок помощника с браузером.
     """
-    hook = refusal_hint_hook(phase = WORK_PHASE, hints = HINTS)
     for refusals in ((READ_REFUSAL,), (WRITE_REFUSAL,), (READ_REFUSAL, WRITE_REFUSAL)):
-        remark = hook(_context(tmp_path = tmp_path, phase = WORK_PHASE, refusals = refusals))
+        remark = browser_checker_refusal_hook(_context(tmp_path = tmp_path, phase = WORK_PHASE, refusals = refusals))
 
-        assert remark in HINTS
+        assert remark in BROWSER_CHECKER_REFUSAL_HINTS
 
 
-def test_step_without_refusals_gets_no_hint(tmp_path: Path) -> None:
+def test_browser_checker_step_without_refusals_gets_no_hint(tmp_path: Path) -> None:
     """
-    Шаг без отказов — без подсказки.
+    Шаг фазы работы без отказов — без подсказки помощника с браузером.
     """
-    hook = refusal_hint_hook(phase = WORK_PHASE, hints = HINTS)
-
-    assert hook(_context(tmp_path = tmp_path, phase = WORK_PHASE, refusals = ())) is None
+    assert browser_checker_refusal_hook(_context(tmp_path = tmp_path, phase = WORK_PHASE, refusals = ())) is None
 
 
-def test_refusals_in_other_phase_get_no_hint(tmp_path: Path) -> None:
+def test_browser_checker_refusals_in_draft_phase_get_no_hint(tmp_path: Path) -> None:
     """
-    Отказы в шаге другой фазы — без подсказки.
+    Отказы в шаге фазы черновика — без подсказки помощника с браузером.
     """
-    hook = refusal_hint_hook(phase = DRAFT_PHASE, hints = HINTS)
+    context = _context(tmp_path = tmp_path, phase = DRAFT_PHASE, refusals = (READ_REFUSAL,))
 
-    assert hook(_context(tmp_path = tmp_path, phase = WORK_PHASE, refusals = (READ_REFUSAL,))) is None
+    assert browser_checker_refusal_hook(context) is None
 
 
 def test_draft_phase_refusal_gets_hint_with_private_dir(tmp_path: Path) -> None:

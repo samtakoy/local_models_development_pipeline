@@ -17,7 +17,6 @@ from codeteam.core.agent.role import AgentRole
 from codeteam.core.agent.prompts import DRAFT_PHASE_BASH_REFUSAL, AGENT_SYSTEM_INSTRUCTIONS, LIMIT_NOTICE, \
     DRAFT_PHASE_HELPER_TOOL_REFUSAL, DRAFT_PHASE_START_SERVICE_REFUSAL, REINIT_NOTICE, EMPTY_DRAFT_NOTICE, PROJECT_RULES_FILE_NAME, PROJECT_RULES_INSTRUCTIONS, PROJECT_DOCS_DIR_NAME, \
     TODAY_INSTRUCTIONS, CODE_NAME_INSTRUCTIONS
-from codeteam.core.agent.step_hooks import draft_phase_hint_hook, private_file_hook
 from codeteam.core.agent.workspace import CONTEXT_FILE_NAME, PRIVATE_ROOT, Workspace, context_path, draft_dir, \
     helpers_dir
 from codeteam.core.tools.files import DELETE_TOOL_NAME, EDIT_TOOL_NAME, READ_TOOL_NAME, WRITE_TOOL_NAME, \
@@ -235,16 +234,7 @@ def run_agent(
                 limit_notice = limit_notice,
                 reinit_notice = reinit_notice,
                 empty_draft_notice = empty_draft_notice,
-                # общие хуки всех ролей: места и имена файлов личной папки, подсказка к отказам по пути в фазе
-                # черновика; к ним добавляются хуки роли
-                step_hooks = (
-                    private_file_hook(
-                        answer_file_names = role.answer_file_names,
-                        only_answer_files = role.only_answer_files,
-                    ),
-                    draft_phase_hint_hook,
-                    *role.step_hooks,
-                ),
+                step_hooks = role.step_hooks,
                 answer_checks = role.answer_checks,
                 relative_private_dir = relative_private_dir,
                 project_dir = project_dir,

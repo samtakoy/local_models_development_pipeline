@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from codeteam.common.llm import ReasoningLevel
+from codeteam.core.agent.step_hooks import draft_phase_hint_hook, private_file_hook
 from codeteam.core.roles.common import PROJECT_TOOL_NAMES, RoleSettings
 
 RESEARCHER_ROLE = RoleSettings(
@@ -12,10 +13,11 @@ RESEARCHER_ROLE = RoleSettings(
     model_name = None,
     reasoning_level = ReasoningLevel.MEDIUM,
     tool_names = PROJECT_TOOL_NAMES,
-    step_hooks = (),
+    step_hooks = (
+        private_file_hook(answer_file_names = (), only_answer_files = False),
+        draft_phase_hint_hook,
+    ),
     answer_checks = (),
-    answer_file_names = (),
-    only_answer_files = False,
     helper_tools = (),
     mcp_servers = (),
 )
