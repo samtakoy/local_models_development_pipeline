@@ -44,7 +44,6 @@ def _run_steps(*, tool_func, targets: list[str], phase: str, tmp_path: Path) -> 
     config = {"configurable": {AGENT_CFG_NAME: SimpleNamespace(
         statistics = statistics,
         step_hooks = (),
-        step_checks = (),
         project_dir = tmp_path,
         relative_private_dir = Path(".ct-work") / "bro_check_r1",
     )}}

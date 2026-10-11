@@ -24,9 +24,9 @@ from codeteam.core.agent.statistics import ANSWER_COMMAND_REMARK_COUNTER, ANSWER
     HARD_LIMIT_COUNTER, REPEATED_RESULT_REMARK_COUNTER, REPEATED_RESULT_STOP_COUNTER, SERVER_ERROR_RETRY_COUNTER, \
     STEP_HOOK_REMARK_COUNTER, UNFINISHED_ANSWER_RETRY_COUNTER, WINDOW_FULL_RESET_COUNTER, \
     WORK_PHASE
-from codeteam.core.agent.step_hooks import StepContext
 from codeteam.core.agent.prompts import ANSWER_CHECK_NOTICE, ANSWER_COMMAND_REMARK, DONE_ANSWER, TODO_ANSWER, \
     REPEATED_RESULT_REMARKS, REPEATED_RESULT_STOP_REMARK, UNFINISHED_ANSWER_NOTICE
+from codeteam.core.agent.step_hooks import StepContext
 from codeteam.core.agent.workspace import context_path, draft_dir
 from codeteam.core.tools.files import READ_TOOL_NAME
 from codeteam.core.tools.shell import BASH_TOOL_NAME, STOP_PROCESS_TOOL_NAME

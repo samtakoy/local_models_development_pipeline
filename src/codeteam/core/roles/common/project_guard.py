@@ -1,6 +1,5 @@
 """Охрана проекта от правок роли, которая только проверяет: откат изменённых файлов проекта и замечания."""
 
-
 from codeteam.common.git import UNTRACKED_STATUS, list_uncommitted_changes, restore_paths
 from codeteam.core.agent.answer_checks import AnswerContext
 from codeteam.core.agent.step_hooks import StepContext, StepHook
@@ -19,7 +18,7 @@ def tracked_changes_check(*, remark: str) -> StepHook:
     Возвращает: Хук шага.
     """
 
-    def check(context: StepContext) -> str | None:
+    def hook(context: StepContext) -> str | None:
         """Возвращает к коммиту изменённые отслеживаемые файлы проекта."""
         project_dir = context.project_dir
         changed_paths = tuple(sorted(
@@ -32,7 +31,7 @@ def tracked_changes_check(*, remark: str) -> StepHook:
 
         return remark.format(paths = ", ".join(changed_paths))
 
-    return check
+    return hook
 
 
 def clean_project_check(context: AnswerContext) -> str | None:
