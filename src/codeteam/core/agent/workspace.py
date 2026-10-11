@@ -198,7 +198,7 @@ class Workspace:
 
         hint = self.refusal_hints[zlib.crc32(path.encode("utf-8")) % len(self.refusal_hints)]
 
-        return f"{message}. {hint}"
+        return f"{message}\n{hint}"
 
 
 def _is_inside_any(*, path: Path, roots: tuple[Path, ...]) -> bool:
