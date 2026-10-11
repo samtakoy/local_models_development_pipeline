@@ -6,6 +6,7 @@ from codeteam.core.agent.workspace import PRIVATE_ROOT, context_path, draft_dir
 from codeteam.core.pipeline.state import Review, Rework
 from codeteam.core.roles.common import last_private_dir_name, make_rework, reserve_private_dir_name, \
     role_private_dir_name
+from codeteam.core.roles.common.review import REVIEW_ROUND_LIMIT
 
 # Папка этапа, внутри которой лежат папки запусков ролей этапа.
 STAGE_DIR = Path("s10")
@@ -160,16 +161,18 @@ def test_last_private_dir_name(tmp_path: Path) -> None:
         STAGE_DIR / "developer_r2"
 
 
-def test_make_rework_only_while_rounds_left(tmp_path: Path) -> None:
+def test_make_rework_for_every_rejected_round(tmp_path: Path) -> None:
     """
-    Возврат работы создаётся только для непринятой работы, пока круги ревью не кончились.
+    Возврат работы создаётся для непринятой работы на каждом круге ревью, в том числе на последнем;
+    для принятой работы возврата нет.
     """
     rejected_first = Review(target = "developer", round = 1, accepted = False)
-    rejected_last = Review(target = "developer", round = 2, accepted = False)
+    rejected_last = Review(target = "developer", round = REVIEW_ROUND_LIMIT, accepted = False)
     accepted = Review(target = "developer", round = 1, accepted = True)
+    expected = Rework(target = "developer", remarks_dir = tmp_path, preserve_draft = True, preserve_context = False)
 
-    rework = make_rework(review = rejected_first, remarks_dir = tmp_path, preserve_draft = True, preserve_context = False)
+    for rejected in (rejected_first, rejected_last):
+        rework = make_rework(review = rejected, remarks_dir = tmp_path, preserve_draft = True, preserve_context = False)
 
-    assert rework == Rework(target = "developer", remarks_dir = tmp_path, preserve_draft = True, preserve_context = False)
-    assert make_rework(review = rejected_last, remarks_dir = tmp_path, preserve_draft = True, preserve_context = True) is None
+        assert rework == expected
     assert make_rework(review = accepted, remarks_dir = tmp_path, preserve_draft = True, preserve_context = True) is None

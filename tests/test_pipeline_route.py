@@ -10,9 +10,10 @@ from codeteam.app.config import ConfigError, load_project_config
 from codeteam.common.git import commit_all, head_commit, init_repository
 from codeteam.core.pipeline import graph as graph_module
 from codeteam.core.pipeline.graph import DEFAULT_ROLES, check_roles, choose_next_role, create_pipeline_graph
-from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState, Rework, Stages
+from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState, Review, Rework, Stages
 from codeteam.core.pipeline.state_file import load_state, save_state, state_file_path
 from codeteam.core.roles.common import PipelineError
+from codeteam.core.roles.common.review import REVIEW_ROUND_LIMIT
 
 # Полный список ролей.
 FULL_ROLES = DEFAULT_ROLES
@@ -130,6 +131,64 @@ def test_stage_loop_without_review() -> None:
 
     assert choose_next_role(roles = NO_REVIEW_ROLES, current = "developer", state = middle) == "senior"
     assert choose_next_role(roles = NO_REVIEW_ROLES, current = "developer", state = last) is None
+
+
+def _with_review(*, state: PipelineState, target: str, review_round: int) -> PipelineState:
+    """
+    Добавляет в состояние непринятое ревью работы роли.
+
+        state: состояние пайплайна.
+        target: роль, чью работу проверил ревьюер.
+        review_round: номер круга ревью.
+
+    Возвращает: Состояние с ревью.
+    """
+    return {**state, "review": Review(target = target, round = review_round, accepted = False)}
+
+
+def test_reviewer_runs_after_rework_while_rounds_left() -> None:
+    """
+    После доработки по ревью, которое не было последним кругом, снова идёт ревьюер.
+    """
+    developer_state = _with_review(
+        state = _state(started = 1, total = 3, rework = None),
+        target = "developer",
+        review_round = REVIEW_ROUND_LIMIT - 1,
+    )
+    architect_state = _with_review(
+        state = _state(started = 0, total = 3, rework = None),
+        target = "architect",
+        review_round = REVIEW_ROUND_LIMIT - 1,
+    )
+
+    assert choose_next_role(roles = FULL_ROLES, current = "developer", state = developer_state) == "developer_review"
+    assert choose_next_role(roles = FULL_ROLES, current = "architect", state = architect_state) == "architect_review"
+
+
+def test_reviewer_skipped_after_last_rework() -> None:
+    """
+    После доработки по последнему кругу ревью ревьюер пропускается: дальше сеньор следующего этапа,
+    после последнего этапа - веб-тестировщик; после архитектора - сеньор первого этапа.
+    """
+    middle = _with_review(
+        state = _state(started = 2, total = 3, rework = None),
+        target = "developer",
+        review_round = REVIEW_ROUND_LIMIT,
+    )
+    last = _with_review(
+        state = _state(started = 3, total = 3, rework = None),
+        target = "developer",
+        review_round = REVIEW_ROUND_LIMIT,
+    )
+    architect_state = _with_review(
+        state = _state(started = 0, total = 3, rework = None),
+        target = "architect",
+        review_round = REVIEW_ROUND_LIMIT,
+    )
+
+    assert choose_next_role(roles = FULL_ROLES, current = "developer", state = middle) == "senior"
+    assert choose_next_role(roles = FULL_ROLES, current = "developer", state = last) == "web_tester"
+    assert choose_next_role(roles = FULL_ROLES, current = "architect", state = architect_state) == "senior"
 
 
 def test_web_tester_fix_stage_loops() -> None:

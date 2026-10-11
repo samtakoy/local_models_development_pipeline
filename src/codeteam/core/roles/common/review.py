@@ -1,6 +1,5 @@
 """Ревью работы роли: вердикт ревьюера, круги ревью, возврат работы роли."""
 
-import logging
 import re
 import shutil
 from pathlib import Path
@@ -11,9 +10,8 @@ from codeteam.core.pipeline.state import Review, Rework
 from codeteam.core.roles.common.errors import PipelineError
 from codeteam.core.roles.common.prompts import MISSING_VERDICT_REMARK, VERDICT_LINE_REMINDER, WRONG_VERDICT_REMARK
 
-logger = logging.getLogger(__name__)
-
-# Наибольшее число кругов ревью: ревью, исправление, повторное ревью.
+# Наибольшее число кругов ревью роли: каждый круг с вердиктом FIX ведёт к доработке,
+# после доработки последнего круга ревьюер не запускается.
 REVIEW_ROUND_LIMIT = 2
 
 # Папка внутри личной папки ревьюера: копия черновика, который ревьюер проверяет в этом запуске.
@@ -64,24 +62,16 @@ def rework_for(*, rework: Rework | None, role_name: str) -> Rework | None:
 
 def make_rework(*, review: Review, remarks_dir: Path, preserve_draft: bool, preserve_context: bool) -> Rework | None:
     """
-    Собирает возврат работы роли по ревью: только если работа не принята и круги ревью не кончились.
-    Если круги кончились, а работа не принята, пишет предупреждение в лог.
+    Собирает возврат работы роли по ревью: если работа не принята.
 
         review: только что сделанное ревью.
         remarks_dir: папка черновика ревьюера: вердикт и замечания.
         preserve_draft: роль продолжит с черновиком из своей прошлой папки.
         preserve_context: роль продолжит с файлом контекста из своей прошлой папки.
 
-    Возвращает: Возврат работы роли; None, если работа принята или круги кончились.
+    Возвращает: Возврат работы роли; None, если работа принята.
     """
     if review.accepted:
-        return None
-
-    if review.round >= REVIEW_ROUND_LIMIT:
-        logger.warning(
-            f"[ревью] работа роли {review.target} не принята за {REVIEW_ROUND_LIMIT} круга: {remarks_dir}; "
-            f"пайплайн идёт дальше"
-        )
         return None
 
     return Rework(

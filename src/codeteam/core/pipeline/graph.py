@@ -1,5 +1,6 @@
 """Граф пайплайна: один узел запускает роли по списку, следующая роль выбирается по состоянию после роли."""
 
+import logging
 from collections.abc import Callable
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from codeteam.core.pipeline.state_file import save_state, state_file_path
 from codeteam.core.roles.architect import ARCHITECT_ROLE, architect_node
 from codeteam.core.roles.architect_review import ARCHITECT_REVIEW_ROLE, architect_review_node
 from codeteam.core.roles.common import PipelineError
+from codeteam.core.roles.common.review import REVIEW_ROUND_LIMIT
 from codeteam.core.roles.developer import DEVELOPER_ROLE, developer_node
 from codeteam.core.roles.developer_review import DEVELOPER_REVIEW_ROLE, developer_review_node
 from codeteam.core.roles.pm import PM_ROLE, pm_node
@@ -21,6 +23,8 @@ from codeteam.core.roles.researcher import RESEARCHER_ROLE, researcher_node
 from codeteam.core.roles.senior import SENIOR_ROLE, senior_node
 from codeteam.core.roles.tester import TESTER_ROLE, tester_node
 from codeteam.core.roles.web_tester import WEB_TESTER_ROLE, web_tester_node
+
+logger = logging.getLogger(__name__)
 
 # Узел графа, который запускает роль из next_role.
 ROLE_NODE_ID = "role"
@@ -36,6 +40,12 @@ ROLE_NODES: dict[str, Callable[[PipelineState, RunnableConfig], dict]] = {
     DEVELOPER_REVIEW_ROLE.name: developer_review_node,
     WEB_TESTER_ROLE.name: web_tester_node,
     TESTER_ROLE.name: tester_node,
+}
+
+# Ревьюеры и роли, чью работу они проверяют.
+REVIEWED_ROLES = {
+    ARCHITECT_REVIEW_ROLE.name: ARCHITECT_ROLE.name,
+    DEVELOPER_REVIEW_ROLE.name: DEVELOPER_ROLE.name,
 }
 
 # Роли этапа: в списке ролей идут подряд и повторяются для каждого этапа плана архитектора.
@@ -140,7 +150,8 @@ def choose_next_role(*, roles: tuple[str, ...], current: str, state: PipelineSta
     """
     Выбирает роль после текущей.
 
-    Возврат работы ведёт к ближайшей роли-цели перед текущей. Если следующая по списку роль стоит после ролей
+    Возврат работы ведёт к ближайшей роли-цели перед текущей. Ревьюер текущей роли пропускается, если его круги
+    ревью кончились: роль только что сделала доработку последнего круга. Если следующая роль стоит после ролей
     этапа или список кончился, а неначатые этапы есть, - к первой роли этапа. Иначе - следующая по списку.
 
         roles: последовательность ролей пайплайна.
@@ -155,11 +166,38 @@ def choose_next_role(*, roles: tuple[str, ...], current: str, state: PipelineSta
         return _nearest_before(roles = roles, position = position, role_name = rework.target)
 
     following = roles[position + 1] if position + 1 < len(roles) else None
+    if following is not None and _is_review_exhausted(reviewer = following, current = current, state = state):
+        logger.warning(
+            f"[ревью] {following} пропущен: {REVIEW_ROUND_LIMIT} круга ревью роли {current} кончились, "
+            f"последняя доработка без повторного ревью"
+        )
+        following = roles[position + 2] if position + 2 < len(roles) else None
+
     stages = state["stages"]
     if stages is not None and stages.has_unstarted and _is_after_stage_roles(roles = roles, role_name = following):
         return roles[_stage_positions(roles = roles)[0]]
 
     return following
+
+
+def _is_review_exhausted(*, reviewer: str, current: str, state: PipelineState) -> bool:
+    """
+    Проверяет, что круги ревью текущей роли кончились и её ревьюер больше не запускается.
+
+        reviewer: роль, следующая по списку за текущей.
+        current: роль, которая только что отработала.
+        state: состояние пайплайна после неё.
+
+    Возвращает: True, если reviewer — ревьюер текущей роли и последнее ревью её работы было последним кругом.
+    """
+    review = state["review"]
+
+    return (
+        REVIEWED_ROLES.get(reviewer) == current
+        and review is not None
+        and review.target == current
+        and review.round >= REVIEW_ROUND_LIMIT
+    )
 
 
 def _nearest_before(*, roles: tuple[str, ...], position: int, role_name: str) -> str:
