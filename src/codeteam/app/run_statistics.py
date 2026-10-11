@@ -11,7 +11,7 @@ from typing import Any
 
 from codeteam.core.agent.statistics import ANSWER_NOTICE_RESET_COUNTER, DRAFT_PHASE, HARD_LIMIT_COUNTER, \
     LIMIT_NOTICE_EVENT, REPEATED_RESULT_STOP_COUNTER, SERVER_ERROR_RETRY_COUNTER, STATISTICS_FILE_SUFFIX, \
-    STEP_CHECK_REMARK_COUNTER, STEP_HOOK_REMARK_COUNTER, UNFINISHED_ANSWER_HINT_EVENT, \
+    STEP_HOOK_REMARK_COUNTER, UNFINISHED_ANSWER_HINT_EVENT, \
     UNFINISHED_ANSWER_RETRY_COUNTER, WARMUP_PHASE, WINDOW_FULL_RESET_COUNTER, WORK_PHASE
 
 # Файл отчёта в папке прогона.
@@ -55,8 +55,7 @@ class RunTotals:
         answer_notice_resets: сбросов истории, когда кончились попытки сдать работу.
         unfinished_answers: ответов без инструмента и без DONE: тихие повторы и подсказки.
         server_errors: повторов после ошибки сервера ollama.
-        hook_remarks: замечаний хуков к файлам своих папок.
-        check_remarks: замечаний проверок после шага.
+        hook_remarks: замечаний хуков шага.
         failed: агентов, прерванных ошибкой.
     """
 
@@ -78,7 +77,6 @@ class RunTotals:
     unfinished_answers: int
     server_errors: int
     hook_remarks: int
-    check_remarks: int
     failed: int
 
 
@@ -103,7 +101,6 @@ COLUMN_TITLES = {
     "unfinished_answers": "без инструмента",
     "server_errors": "ошибок ollama",
     "hook_remarks": "хуки",
-    "check_remarks": "проверки",
     "failed": "упал",
 }
 
@@ -120,7 +117,6 @@ PROBLEM_COLUMNS = (
     "unfinished_answers",
     "server_errors",
     "hook_remarks",
-    "check_remarks",
     "failed",
 )
 
@@ -179,7 +175,6 @@ def agent_totals(*, statistics: dict[str, Any]) -> RunTotals:
         unfinished_answers = unfinished_answers,
         server_errors = counters.get(SERVER_ERROR_RETRY_COUNTER, 0),
         hook_remarks = counters.get(STEP_HOOK_REMARK_COUNTER, 0),
-        check_remarks = counters.get(STEP_CHECK_REMARK_COUNTER, 0),
         failed = 1 if statistics["error"] else 0,
     )
 

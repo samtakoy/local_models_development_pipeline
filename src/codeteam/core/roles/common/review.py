@@ -5,7 +5,7 @@ import shutil
 from pathlib import Path
 
 from codeteam.core.agent.answer_checks import AnswerContext
-from codeteam.core.agent.step_hooks import FolderHook
+from codeteam.core.agent.step_hooks import StepContext, join_remarks, read_changed_files
 from codeteam.core.agent.workspace import DRAFT_DIR_NAME
 from codeteam.core.pipeline.state import Review, Rework
 from codeteam.core.roles.common.errors import PipelineError
@@ -139,27 +139,27 @@ def _verdict_file_remark(*, draft_dir: Path) -> str | None:
     )
 
 
-def verdict_line_hook(path: Path, text: str) -> str | None:
+def verdict_line_hook(context: StepContext) -> str | None:
     """
-    Проверяет после записи файла вердикта, что его первая строка содержит ровно один вердикт.
+    Хук шага ревьюера: после записи файла вердикта в черновик проверяет, что его первая строка содержит
+    ровно один вердикт.
 
-        path: путь изменённого файла черновика.
-        text: текст файла.
+        context: шаг инструментов.
 
-    Возвращает: Напоминание ревьюеру или None, если файл не файл вердикта или вердикт читается.
+    Возвращает: Напоминание ревьюеру или None, если файл вердикта не менялся или вердикт читается.
     """
-    if path.name != VERDICT_FILE_NAME or _verdict_word(line = _first_line(text = text)) is not None:
-        return None
+    reminders = [
+        VERDICT_LINE_REMINDER.format(
+            verdict_file = VERDICT_FILE_NAME,
+            accepted_verdict = ACCEPTED_VERDICT,
+            rework_verdict = REWORK_VERDICT,
+        )
+        for changed_file in read_changed_files(context = context, folder = Path(DRAFT_DIR_NAME))
+        if changed_file.path.name == VERDICT_FILE_NAME
+        and _verdict_word(line = _first_line(text = changed_file.text)) is None
+    ]
 
-    return VERDICT_LINE_REMINDER.format(
-        verdict_file = VERDICT_FILE_NAME,
-        accepted_verdict = ACCEPTED_VERDICT,
-        rework_verdict = REWORK_VERDICT,
-    )
-
-
-# Хук черновика ревьюера: напоминание о первой строке файла вердикта сразу после записи.
-VERDICT_LINE_HOOK = FolderHook(folder = Path(DRAFT_DIR_NAME), hook = verdict_line_hook)
+    return join_remarks(remarks = reminders)
 
 
 def read_verdict(*, remarks_dir: Path) -> bool:

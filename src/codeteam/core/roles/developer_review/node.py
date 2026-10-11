@@ -1,7 +1,6 @@
 """Узел приёмщика этапа в графе пайплайна: проверка этапа в запущенном приложении, вердикт и замечания."""
 
 import logging
-from dataclasses import replace
 from pathlib import Path
 
 from langchain_core.runnables import RunnableConfig
@@ -10,11 +9,10 @@ from codeteam.common.git import list_uncommitted_changes
 from codeteam.core.agent.workspace import PRIVATE_ROOT
 from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState, Review
 from codeteam.core.roles.common import STAGE_TASK_DIR_NAME, build_stage_dir_name, \
-    make_journal_name, make_rework, next_review_round, read_verdict, role_private_dir_name, run_role, \
-    tracked_changes_check
+    make_journal_name, make_rework, next_review_round, read_verdict, role_private_dir_name, run_role
 from codeteam.core.roles.developer import DEVELOPER_ROLE
 from codeteam.core.roles.developer_review.config import DEVELOPER_REVIEW_ROLE
-from codeteam.core.roles.developer_review.prompts import DEVELOPER_REVIEW_TASK, TRACKED_CHANGES_REMARK
+from codeteam.core.roles.developer_review.prompts import DEVELOPER_REVIEW_TASK
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +21,7 @@ def developer_review_node(state: PipelineState, config: RunnableConfig):
     """
     Запускает приёмщика этапа на закоммиченном коде разработчика: он запускает тесты и приложение,
     проходит шаги проверки этапа и пишет вердикт с замечаниями.
-    Правки проекта приёмщиком ловят проверки после шага и при сдаче; оставшиеся правки — предупреждение в лог.
+    Правки проекта приёмщиком ловят хуки шага и проверки сдачи его роли; оставшиеся правки — предупреждение в лог.
     """
     cfg: PipelineConfig = config["configurable"][PIPELINE_CFG_NAME]
     project_dir = Path(cfg.project_path).resolve()
@@ -31,14 +29,6 @@ def developer_review_node(state: PipelineState, config: RunnableConfig):
     stage_dir_name = build_stage_dir_name(stage_file = stages.current_file)
     review_round = next_review_round(review = state["review"], target = DEVELOPER_ROLE.name)
     stage_task_dir = project_dir / PRIVATE_ROOT / stage_dir_name / STAGE_TASK_DIR_NAME
-    # проверки правок проекта знают папку проекта только при запуске, поэтому добавляются к описанию роли здесь
-    guarded_role = replace(
-        DEVELOPER_REVIEW_ROLE,
-        step_checks = (*DEVELOPER_REVIEW_ROLE.step_checks, tracked_changes_check(
-            project_dir = project_dir,
-            remark = TRACKED_CHANGES_REMARK,
-        )),
-    )
     private_dir_name = role_private_dir_name(
         project_dir = project_dir,
         parent = stage_dir_name,
@@ -48,7 +38,7 @@ def developer_review_node(state: PipelineState, config: RunnableConfig):
     journal_name = make_journal_name(journal_count = state["journal_count"], private_dir_name = private_dir_name)
     remarks_dir = run_role(
         cfg = cfg,
-        role = guarded_role,
+        role = DEVELOPER_REVIEW_ROLE,
         journal_name = journal_name,
         task = DEVELOPER_REVIEW_TASK.format(
             task = state["task"],

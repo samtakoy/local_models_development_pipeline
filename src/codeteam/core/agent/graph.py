@@ -22,8 +22,9 @@ from codeteam.core.agent.node_ids import AGENT_NODE_ID, ANSWER_NOTICE_NODE_ID, D
     DRAFT_TOOL_NODE_ID, INIT_NODE_ID, LIMIT_NOTICE_NODE_ID, REINIT_NODE_ID, TOOL_NODE_ID
 from codeteam.core.agent.statistics import ANSWER_COMMAND_REMARK_COUNTER, ANSWER_NOTICE_RESET_COUNTER, DRAFT_PHASE, \
     HARD_LIMIT_COUNTER, REPEATED_RESULT_REMARK_COUNTER, REPEATED_RESULT_STOP_COUNTER, SERVER_ERROR_RETRY_COUNTER, \
-    STEP_CHECK_REMARK_COUNTER, STEP_HOOK_REMARK_COUNTER, UNFINISHED_ANSWER_RETRY_COUNTER, WINDOW_FULL_RESET_COUNTER, \
+    STEP_HOOK_REMARK_COUNTER, UNFINISHED_ANSWER_RETRY_COUNTER, WINDOW_FULL_RESET_COUNTER, \
     WORK_PHASE
+from codeteam.core.agent.step_hooks import StepContext
 from codeteam.core.agent.prompts import ANSWER_CHECK_NOTICE, ANSWER_COMMAND_REMARK, DONE_ANSWER, TODO_ANSWER, \
     REPEATED_RESULT_REMARKS, REPEATED_RESULT_STOP_REMARK, UNFINISHED_ANSWER_NOTICE
 from codeteam.core.agent.workspace import context_path, draft_dir
@@ -254,9 +255,9 @@ def route_after_agent(state: AgentState, config: RunnableConfig) -> str:
 
 def make_tools_node(*, tools: list[BaseTool], phase: str) -> Callable:
     """
-    Собирает узел инструментов, который после шага запускает хуки на изменённых файлах черновика
-    и проверки после шага, на попытку сдать работу командой даёт замечание, а на повтор шага — тех же вызовов
-    с тем же результатом, что на одном из REPEAT_WINDOW прошлых шагов, — замечания REPEATED_RESULT_REMARKS.
+    Собирает узел инструментов, который после шага запускает хуки шага, на попытку сдать работу командой
+    даёт замечание, а на повтор шага — тех же вызовов с тем же результатом, что на одном из REPEAT_WINDOW прошлых
+    шагов, — замечания REPEATED_RESULT_REMARKS.
 
         tools: инструменты узла.
         phase: фаза работы агента, в которой работает узел: для счётчиков петли в статистике.
@@ -267,27 +268,22 @@ def make_tools_node(*, tools: list[BaseTool], phase: str) -> Callable:
 
     def tools_node(state: AgentState, config: RunnableConfig):
         """
-        Выполняет вызовы инструментов и дописывает к результату последнего вызова замечания хуков,
-        проверок, замечание о сдаче работы командой и замечание на повтор шага.
+        Выполняет вызовы инструментов и дописывает к результату последнего вызова замечания хуков шага,
+        замечание о сдаче работы командой и замечание на повтор шага.
         """
         cfg: AgentConfig = config["configurable"][AGENT_CFG_NAME]
         is_answer_command = _is_answer_command(response = state["messages"][-1])
         private_dir = cfg.project_dir / cfg.relative_private_dir
-        before = _private_dir_snapshot(private_dir = private_dir) if cfg.step_hooks else frozenset()
+        before = _private_dir_snapshot(private_dir = private_dir)
         update = tool_node.invoke(state, config)
-        hook_remarks = (
-            _step_hook_remarks(
-                cfg = cfg,
-                changed_files = _changed_files(before = before, after = _private_dir_snapshot(private_dir = private_dir)),
-            )
-            if cfg.step_hooks else []
+        step_context = StepContext(
+            project_dir = cfg.project_dir,
+            private_dir = private_dir,
+            changed_files = _changed_files(before = before, after = _private_dir_snapshot(private_dir = private_dir)),
         )
-        check_remarks = [remark for check in cfg.step_checks if (remark := check()) is not None]
-        for _ in hook_remarks:
+        remarks = [remark for hook in cfg.step_hooks if (remark := hook(step_context)) is not None]
+        for _ in remarks:
             cfg.statistics.count(name = STEP_HOOK_REMARK_COUNTER)
-        for _ in check_remarks:
-            cfg.statistics.count(name = STEP_CHECK_REMARK_COUNTER)
-        remarks = [*hook_remarks, *check_remarks]
         if is_answer_command:
             cfg.statistics.count(name = ANSWER_COMMAND_REMARK_COUNTER)
             remarks.append(ANSWER_COMMAND_REMARK)
@@ -612,34 +608,6 @@ def _is_unfinished(*, response: AIMessage) -> bool:
         and DONE_PATTERN.search(str(response.content)) is None
         and TODO_PATTERN.search(str(response.content)) is None
     )
-
-def _step_hook_remarks(*, cfg: AgentConfig, changed_files: tuple[Path, ...]) -> list[str]:
-    """
-    Запускает хуки после шага на файлах личной папки, которые появились или изменились за шаг: каждый
-    файл получают хуки, в чьей папке он лежит.
-
-        cfg: настройки агента.
-        changed_files: файлы личной папки, которые появились или изменились за шаг.
-
-    Возвращает: Замечания хуков по порядку файлов и хуков; пустой список, если замечаний нет.
-    """
-    private_dir = cfg.project_dir / cfg.relative_private_dir
-
-    remarks = []
-    for path in changed_files:
-        folder_hooks = [
-            folder_hook for folder_hook in cfg.step_hooks if path.is_relative_to(private_dir / folder_hook.folder)
-        ]
-        if not folder_hooks:
-            continue
-
-        text = path.read_text(encoding = "utf-8", errors = "replace")
-        for folder_hook in folder_hooks:
-            remark = folder_hook.hook(path, text)
-            if remark is not None:
-                remarks.append(remark)
-
-    return remarks
 
 @dataclass(frozen = True)
 class FileState:

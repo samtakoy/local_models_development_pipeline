@@ -11,7 +11,6 @@ from codeteam.common.git import list_uncommitted_changes
 from codeteam.core.agent.workspace import CHECK_DIR, PRIVATE_ROOT
 from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState
 from codeteam.core.roles.common.private_dirs import role_private_dir_name
-from codeteam.core.roles.common.project_guard import tracked_changes_check
 from codeteam.core.roles.common.prompts import FIX_STAGE_TEXT
 from codeteam.core.roles.common.review import read_verdict
 from codeteam.core.roles.common.role_settings import RoleSettings
@@ -38,19 +37,17 @@ def run_final_check(
     config: RunnableConfig,
     role: RoleSettings,
     task_template: str,
-    tracked_changes_remark: str,
 ) -> dict:
     """
     Запускает проверяющую роль после последнего этапа: она проверяет готовое приложение по требованиям
     заказчика и пишет вердикт с отчётом. Если приложение не принято и круги исправлений не кончились,
     добавляет в конец этапов этап исправлений с отчётом — его делает команда, после чего проверка повторяется.
-    Правки проекта проверяющей ролью ловят проверки после шага и при сдаче; оставшиеся правки — предупреждение в лог.
+    Правки проекта проверяющей ролью ловят хуки шага и проверки сдачи её роли; оставшиеся правки — предупреждение в лог.
 
         state: состояние пайплайна.
         config: конфигурация запуска с настройками пайплайна.
         role: описание проверяющей роли.
         task_template: задача роли с полями {task} - задача заказчика и {requirements_file} - файл чеклиста.
-        tracked_changes_remark: замечание роли после шага, изменившего файлы проекта; поле {paths} - файлы.
 
     Возвращает: Обновление состояния: папка проверки, а если добавлен этап исправлений — этапы.
     """
@@ -59,14 +56,6 @@ def run_final_check(
     requirements_dir = state["requirements_dir"]
     stages = state["stages"]
     test_round = stages.fix_rounds + 1
-    # проверки правок проекта знают папку проекта только при запуске, поэтому добавляются к описанию роли здесь
-    guarded_role = replace(
-        role,
-        step_checks = (*role.step_checks, tracked_changes_check(
-            project_dir = project_dir,
-            remark = tracked_changes_remark,
-        )),
-    )
     private_dir_name = role_private_dir_name(
         project_dir = project_dir,
         parent = Path("."),
@@ -76,7 +65,7 @@ def run_final_check(
     journal_name = make_journal_name(journal_count = state["journal_count"], private_dir_name = private_dir_name)
     report_dir = run_role(
         cfg = cfg,
-        role = guarded_role,
+        role = role,
         journal_name = journal_name,
         task = task_template.format(
             task = state["task"],

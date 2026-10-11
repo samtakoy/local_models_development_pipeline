@@ -5,7 +5,7 @@ from langchain_core.runnables import RunnableConfig
 from codeteam.core.pipeline.state import PipelineState
 from codeteam.core.roles.common.final_check import run_final_check
 from codeteam.core.roles.web_tester.config import WEB_TESTER_ROLE
-from codeteam.core.roles.web_tester.prompts import TRACKED_CHANGES_REMARK, WEB_TESTER_TASK
+from codeteam.core.roles.web_tester.prompts import WEB_TESTER_TASK
 
 
 def web_tester_node(state: PipelineState, config: RunnableConfig) -> dict:
@@ -23,5 +23,4 @@ def web_tester_node(state: PipelineState, config: RunnableConfig) -> dict:
         config = config,
         role = WEB_TESTER_ROLE,
         task_template = WEB_TESTER_TASK,
-        tracked_changes_remark = TRACKED_CHANGES_REMARK,
     )

@@ -1,4 +1,5 @@
-"""Хуки после шага инструментов: проверяют изменённые на шаге файлы личной папки агента и дают агенту замечания."""
+"""Хуки шага инструментов: после всех вызовов шага смотрят на изменённые файлы личной папки агента или на проект
+и дают агенту замечания."""
 
 import re
 from collections.abc import Callable
@@ -11,11 +12,37 @@ from codeteam.core.agent.prompts import ANSWER_LIKE_FILE_REMARK, CODE_BLOCK_LINE
 from codeteam.core.agent.workspace import CONTEXT_FILE_NAME, DRAFT_SECTION_PATTERN, LATIN_DRAFT_SECTION_PATTERN, \
     context_path, draft_dir
 
-# Хук после шага: путь и текст изменённого файла → замечание агенту или None.
-StepHook = Callable[[Path, str], str | None]
 
-# Проверка после шага: смотрит не на черновик, а на что угодно ещё (например, на проект) → замечание агенту или None.
-StepCheck = Callable[[], str | None]
+@dataclass(frozen = True)
+class StepContext:
+    """
+    Шаг инструментов: что нужно хукам шага.
+
+        project_dir: папка проекта.
+        private_dir: личная папка агента.
+        changed_files: файлы личной папки, которые появились или изменились за шаг, по порядку путей.
+    """
+
+    project_dir: Path
+    private_dir: Path
+    changed_files: tuple[Path, ...]
+
+
+# Хук шага: шаг инструментов → замечание агенту или None.
+StepHook = Callable[[StepContext], str | None]
+
+
+@dataclass(frozen = True)
+class ChangedFile:
+    """
+    Изменённый за шаг файл с текстом.
+
+        path: путь файла.
+        text: текст файла.
+    """
+
+    path: Path
+    text: str
 
 
 @dataclass(frozen = True)
@@ -33,19 +60,6 @@ class _CodeBlock:
     line_count: int
 
 
-@dataclass(frozen = True)
-class FolderHook:
-    """
-    Хук после шага и папка, за которой он следит.
-
-        folder: папка относительно личной папки агента, подпапки входят; Path(".") — вся личная папка.
-        hook: хук: получает каждый изменённый за шаг файл из папки.
-    """
-
-    folder: Path
-    hook: StepHook
-
-
 # Строка, открывающая блок с указанным языком: ``` и имя языка.
 LANGUAGE_BLOCK_START_PATTERN = re.compile(r"^```[A-Za-z0-9_+#.-]+$")
 
@@ -56,15 +70,39 @@ BLOCK_FENCE = "```"
 CONTEXT_LIKE_NAME_PATTERN = re.compile(rf"^\d+_{re.escape(CONTEXT_FILE_NAME)}$")
 
 
-def private_file_hook(
-    *,
-    project_dir: Path,
-    private_dir: Path,
-    answer_file_names: tuple[str, ...],
-    only_answer_files: bool,
-) -> StepHook:
+def read_changed_files(*, context: StepContext, folder: Path) -> list[ChangedFile]:
     """
-    Собирает хук личной папки: проверяет место и имя изменённого файла. Правила по порядку, срабатывает первое:
+    Читает изменённые за шаг файлы из папки внутри личной папки.
+
+        context: шаг инструментов.
+        folder: папка относительно личной папки, подпапки входят; Path(".") — вся личная папка.
+
+    Возвращает: Изменённые файлы папки с текстом по порядку путей.
+    """
+    root = context.private_dir / folder
+
+    return [
+        ChangedFile(path = path, text = path.read_text(encoding = "utf-8", errors = "replace"))
+        for path in context.changed_files
+        if path.is_relative_to(root)
+    ]
+
+
+def join_remarks(*, remarks: list[str]) -> str | None:
+    """
+    Склеивает замечания хука по файлам в одно.
+
+        remarks: замечания по порядку файлов.
+
+    Возвращает: Замечания через пустую строку; None, если замечаний нет.
+    """
+    return "\n\n".join(remarks) if remarks else None
+
+
+def private_file_hook(*, answer_file_names: tuple[str, ...], only_answer_files: bool) -> StepHook:
+    """
+    Собирает хук личной папки: проверяет место и имя каждого изменённого файла. Правила по порядку,
+    срабатывает первое:
     1. файл контекста на своём месте — замечания нет;
     2. файл контекста лежит в другом месте личной папки — путь файла контекста;
     3. имя похоже на файл контекста: номер и имя файла контекста — путь файла контекста;
@@ -74,78 +112,108 @@ def private_file_hook(
     6. файл в черновике — проверки имени раздела;
     7. остальные файлы — общее замечание о местах файлов личной папки.
 
-        project_dir: папка проекта: пути в замечаниях показываются от неё.
-        private_dir: личная папка агента.
         answer_file_names: заранее известные имена файлов ответа роли в черновике.
         only_answer_files: в черновике роли разрешены только файлы ответа.
 
-    Возвращает: Хук после шага для папки Path(".").
+    Возвращает: Хук шага: замечания к изменённым файлам всей личной папки.
     """
-    agent_draft_dir = draft_dir(private_dir = private_dir)
-    agent_context_file = context_path(private_dir = private_dir)
+
+    def hook(context: StepContext) -> str | None:
+        """Находит файлы не на своём месте или с неверным именем и даёт замечания с правильными путями."""
+        remarks = [
+            remark
+            for path in context.changed_files
+            if (remark := _private_file_remark(
+                context = context,
+                path = path,
+                answer_file_names = answer_file_names,
+                only_answer_files = only_answer_files,
+            )) is not None
+        ]
+
+        return join_remarks(remarks = remarks)
+
+    return hook
+
+
+def _private_file_remark(
+    *,
+    context: StepContext,
+    path: Path,
+    answer_file_names: tuple[str, ...],
+    only_answer_files: bool,
+) -> str | None:
+    """
+    Проверяет место и имя одного изменённого файла личной папки по правилам private_file_hook.
+
+        context: шаг инструментов: папка проекта, от которой показываются пути, и личная папка.
+        path: путь изменённого файла.
+        answer_file_names: заранее известные имена файлов ответа роли в черновике.
+        only_answer_files: в черновике роли разрешены только файлы ответа.
+
+    Возвращает: Замечание с правильным путём или None, если файл на своём месте.
+    """
+    agent_draft_dir = draft_dir(private_dir = context.private_dir)
+    agent_context_file = context_path(private_dir = context.private_dir)
     # файл ответа роли по теме его имени
     answer_names_by_topic = {_section_topic(name = name): name for name in answer_file_names}
 
     def shown(*, path: Path) -> str:
         """Показывает путь агенту от папки проекта."""
-        return path.relative_to(project_dir).as_posix()
+        return path.relative_to(context.project_dir).as_posix()
 
-    def hook(path: Path, text: str) -> str | None:
-        """Находит файл не на своём месте или с неверным именем и даёт замечание с правильным путём."""
-        if path == agent_context_file:
-            return None
+    if path == agent_context_file:
+        return None
 
-        # context.md не на своем месте
-        if path.name == agent_context_file.name:
-            return MISPLACED_CONTEXT_FILE_REMARK.format(
-                file_path = shown(path = path),
-                context_path = shown(path = agent_context_file),
-            )
-
-        # файл похожий на context.md не на своем месте
-        if CONTEXT_LIKE_NAME_PATTERN.match(path.name):
-            return MISPLACED_CONTEXT_REMARK.format(
-                file_path = shown(path = path),
-                context_path = shown(path = agent_context_file),
-            )
-
-        # имя черновика требуемое ответом не на своем месте
-        answer_path = agent_draft_dir / path.name
-        if path.name in answer_file_names and path != answer_path:
-            return MISPLACED_ANSWER_FILE_REMARK.format(
-                file_path = shown(path = path),
-                answer_path = shown(path = answer_path),
-            )
-
-        # раздел с темой файла ответа под другим номером
-        answer_name = answer_names_by_topic.get(_section_topic(name = path.name))
-        if answer_name is not None and path.name != answer_name:
-            return ANSWER_LIKE_FILE_REMARK.format(
-                file_path = shown(path = path),
-                answer_name = answer_name,
-                answer_path = shown(path = agent_draft_dir / answer_name),
-            )
-
-        # в черновики упал файл, но там было ограничение на разрешенные имена
-        is_draft_file = path.is_relative_to(agent_draft_dir)
-        if is_draft_file and only_answer_files and path.name not in answer_file_names:
-            return ONLY_ANSWER_FILES_REMARK.format(
-                file_path = shown(path = path),
-                answer_paths = ", ".join(shown(path = agent_draft_dir / name) for name in answer_file_names),
-            )
-
-        # отдельные проверки на нейминг файлов черновика
-        if is_draft_file:
-            return _draft_section_remark(path = path)
-
-        return STRAY_PRIVATE_FILE_REMARK.format(
+    # context.md не на своем месте
+    if path.name == agent_context_file.name:
+        return MISPLACED_CONTEXT_FILE_REMARK.format(
             file_path = shown(path = path),
-            private_dir = shown(path = private_dir),
-            draft_dir = shown(path = agent_draft_dir),
             context_path = shown(path = agent_context_file),
         )
 
-    return hook
+    # файл похожий на context.md не на своем месте
+    if CONTEXT_LIKE_NAME_PATTERN.match(path.name):
+        return MISPLACED_CONTEXT_REMARK.format(
+            file_path = shown(path = path),
+            context_path = shown(path = agent_context_file),
+        )
+
+    # имя черновика требуемое ответом не на своем месте
+    answer_path = agent_draft_dir / path.name
+    if path.name in answer_file_names and path != answer_path:
+        return MISPLACED_ANSWER_FILE_REMARK.format(
+            file_path = shown(path = path),
+            answer_path = shown(path = answer_path),
+        )
+
+    # раздел с темой файла ответа под другим номером
+    answer_name = answer_names_by_topic.get(_section_topic(name = path.name))
+    if answer_name is not None and path.name != answer_name:
+        return ANSWER_LIKE_FILE_REMARK.format(
+            file_path = shown(path = path),
+            answer_name = answer_name,
+            answer_path = shown(path = agent_draft_dir / answer_name),
+        )
+
+    # в черновики упал файл, но там было ограничение на разрешенные имена
+    is_draft_file = path.is_relative_to(agent_draft_dir)
+    if is_draft_file and only_answer_files and path.name not in answer_file_names:
+        return ONLY_ANSWER_FILES_REMARK.format(
+            file_path = shown(path = path),
+            answer_paths = ", ".join(shown(path = agent_draft_dir / name) for name in answer_file_names),
+        )
+
+    # отдельные проверки на нейминг файлов черновика
+    if is_draft_file:
+        return _draft_section_remark(path = path)
+
+    return STRAY_PRIVATE_FILE_REMARK.format(
+        file_path = shown(path = path),
+        private_dir = shown(path = context.private_dir),
+        draft_dir = shown(path = agent_draft_dir),
+        context_path = shown(path = agent_context_file),
+    )
 
 
 def _section_topic(*, name: str) -> str | None:
@@ -188,23 +256,24 @@ def _draft_section_remark(*, path: Path) -> str | None:
     return "\n".join(remarks) if remarks else None
 
 
-def code_block_hook(*, max_lines: int, remark: str, skip_file_names: tuple[str, ...]) -> StepHook:
+def code_block_hook(*, folder: Path, max_lines: int, remark: str, skip_file_names: tuple[str, ...]) -> StepHook:
     """
-    Собирает хук, который замечает в файле черновика блоки с указанным языком длиннее предела.
+    Собирает хук, который замечает в изменённых файлах папки блоки с указанным языком длиннее предела.
 
+        folder: папка относительно личной папки, подпапки входят.
         max_lines: наибольшее число строк внутри одного блока с указанным языком.
         remark: текст замечания агенту; поля {file_name}, {max_lines} и {long_blocks} в нём заменяются
             именем файла, пределом и строками всех блоков длиннее предела.
-        skip_file_names: имена файлов черновика, которые хук не проверяет.
+        skip_file_names: имена файлов, которые хук не проверяет.
 
-    Возвращает: Хук после шага.
+    Возвращает: Хук шага.
     """
-    def hook(path: Path, text: str) -> str | None:
-        """Находит блоки с указанным языком длиннее предела и называет их строки."""
-        if path.name in skip_file_names:
+    def file_remark(changed_file: ChangedFile) -> str | None:
+        """Находит в файле блоки с указанным языком длиннее предела и называет их строки."""
+        if changed_file.path.name in skip_file_names:
             return None
 
-        long_blocks = [block for block in _language_blocks(text = text) if block.line_count > max_lines]
+        long_blocks = [block for block in _language_blocks(text = changed_file.text) if block.line_count > max_lines]
         if not long_blocks:
             return None
 
@@ -213,7 +282,17 @@ def code_block_hook(*, max_lines: int, remark: str, skip_file_names: tuple[str, 
             for block in long_blocks
         )
 
-        return remark.format(file_name = path.name, max_lines = max_lines, long_blocks = shown_blocks)
+        return remark.format(file_name = changed_file.path.name, max_lines = max_lines, long_blocks = shown_blocks)
+
+    def hook(context: StepContext) -> str | None:
+        """Проверяет изменённые файлы папки."""
+        remarks = [
+            remark_text
+            for changed_file in read_changed_files(context = context, folder = folder)
+            if (remark_text := file_remark(changed_file)) is not None
+        ]
+
+        return join_remarks(remarks = remarks)
 
     return hook
 

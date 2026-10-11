@@ -187,22 +187,21 @@ class FlakyModel:
         return answer
 
 
-def _graph_config(*, statistics: AgentStatistics, model: FlakyModel, tmp_path: Path, step_checks: tuple) -> dict:
+def _graph_config(*, statistics: AgentStatistics, model: FlakyModel, tmp_path: Path, step_hooks: tuple) -> dict:
     """
     Собирает конфигурацию узлов графа с настройками, которые нужны узлам ответа и инструментов.
 
         statistics: статистика агента.
         model: заглушка модели.
         tmp_path: папка проекта теста.
-        step_checks: проверки после шага.
+        step_hooks: хуки шага.
 
     Возвращает: Конфигурацию запуска узла.
     """
     settings = SimpleNamespace(
         chat_model = model,
         statistics = statistics,
-        step_hooks = (),
-        step_checks = step_checks,
+        step_hooks = step_hooks,
         project_dir = tmp_path,
         relative_private_dir = Path(".ct-work") / "developer_r1",
     )
@@ -230,15 +229,15 @@ def test_server_error_and_unfinished_answer_retries_are_counted(tmp_path: Path) 
 
     agent_node(
         {"messages": [], "reset_count": 0, "answer_notices": 0, "repeated_results": 0, "recent_tool_steps": []},
-        _graph_config(statistics = statistics, model = model, tmp_path = tmp_path, step_checks = ()),
+        _graph_config(statistics = statistics, model = model, tmp_path = tmp_path, step_hooks = ()),
     )
 
     assert statistics.to_dict()["counters"] == {"server_error_retries": 1, "unfinished_answer_retries": 1}
 
 
-def test_step_check_remark_is_counted(tmp_path: Path) -> None:
+def test_step_hook_remark_is_counted(tmp_path: Path) -> None:
     """
-    Замечание проверки после шага инструментов считается.
+    Замечание хука шага инструментов считается.
     """
     statistics = AgentStatistics(
         role_name = "developer",
@@ -262,8 +261,8 @@ def test_step_check_remark_is_counted(tmp_path: Path) -> None:
             statistics = statistics,
             model = FlakyModel(answers = []),
             tmp_path = tmp_path,
-            step_checks = (lambda: "файлы проекта возвращены к коммиту",),
+            step_hooks = (lambda context: "файлы проекта возвращены к коммиту",),
         ),
     )
 
-    assert statistics.to_dict()["counters"] == {"step_check_remarks": 1}
+    assert statistics.to_dict()["counters"] == {"step_hook_remarks": 1}

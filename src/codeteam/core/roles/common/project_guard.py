@@ -1,28 +1,27 @@
 """Охрана проекта от правок роли, которая только проверяет: откат изменённых файлов проекта и замечания."""
 
-from pathlib import Path
 
 from codeteam.common.git import UNTRACKED_STATUS, list_uncommitted_changes, restore_paths
 from codeteam.core.agent.answer_checks import AnswerContext
-from codeteam.core.agent.step_hooks import StepCheck
+from codeteam.core.agent.step_hooks import StepContext, StepHook
 from codeteam.core.roles.common.prompts import PROJECT_CHANGES_REMARK
 
 
-def tracked_changes_check(*, project_dir: Path, remark: str) -> StepCheck:
+def tracked_changes_check(*, remark: str) -> StepHook:
     """
-    Собирает проверку после шага: роль изменила отслеживаемые файлы проекта. Изменённые файлы
-    возвращаются к последнему коммиту, замечание называет их.
+    Собирает хук шага: роль изменила отслеживаемые файлы проекта. Изменённые файлы возвращаются
+    к последнему коммиту, замечание называет их. Изменения личной папки хук не смотрит.
 
     Проект на начало работы роли должен быть закоммичен.
 
-        project_dir: папка проекта.
         remark: текст замечания роли с заготовкой {paths} - изменённые файлы через запятую.
 
-    Возвращает: Проверку после шага.
+    Возвращает: Хук шага.
     """
 
-    def check() -> str | None:
+    def check(context: StepContext) -> str | None:
         """Возвращает к коммиту изменённые отслеживаемые файлы проекта."""
+        project_dir = context.project_dir
         changed_paths = tuple(sorted(
             path for status, path in list_uncommitted_changes(project_dir = project_dir) if status != UNTRACKED_STATUS
         ))

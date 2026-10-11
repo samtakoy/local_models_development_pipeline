@@ -20,7 +20,6 @@ BROWSER_CHECKER_ROLE = RoleSettings(
     reasoning_level = ReasoningLevel.MEDIUM,
     tool_names = DRAFT_TOOL_NAMES,
     step_hooks = (),
-    step_checks = (),
     answer_checks = (required_files_check(file_names = (OBSERVATIONS_FILE_NAME,)),),
     answer_file_names = (OBSERVATIONS_FILE_NAME,),
     only_answer_files = True,

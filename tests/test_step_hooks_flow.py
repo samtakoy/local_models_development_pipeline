@@ -14,7 +14,7 @@ from langgraph.graph import StateGraph
 from codeteam.common.git import UNTRACKED_STATUS, commit_all, init_repository, list_uncommitted_changes
 from codeteam.core.agent.graph import AGENT_CFG_NAME, AgentState, make_tools_node
 from codeteam.core.agent.statistics import WORK_PHASE, AgentStatistics
-from codeteam.core.agent.step_hooks import FolderHook
+from codeteam.core.agent.step_hooks import StepContext, join_remarks
 from codeteam.core.roles.common import tracked_changes_check
 
 # Личная папка агента относительно папки проекта.
@@ -115,6 +115,17 @@ def _noop_tool() -> BaseTool:
     return _tool(name = "noop", action = lambda: None)
 
 
+def _file_hook(context: StepContext) -> str | None:
+    """
+    Хук шага теста: замечание к каждому изменённому файлу личной папки.
+
+        context: шаг инструментов.
+
+    Возвращает: Замечания с именами файлов или None.
+    """
+    return join_remarks(remarks = [f"{FILE_REMARK} {path.name}" for path in context.changed_files])
+
+
 def _run_step(*, project_dir: Path, tools: list[BaseTool]) -> list[ToolMessage]:
     """
     Выполняет один шаг инструментов в узле графа: все инструменты вызываются одним ответом модели по порядку.
@@ -135,8 +146,7 @@ def _run_step(*, project_dir: Path, tools: list[BaseTool]) -> list[ToolMessage]:
     )
     settings = SimpleNamespace(
         statistics = statistics,
-        step_hooks = (FolderHook(folder = Path("."), hook = lambda path, text: f"{FILE_REMARK} {path.name}"),),
-        step_checks = (tracked_changes_check(project_dir = project_dir, remark = PROJECT_REMARK),),
+        step_hooks = (_file_hook, tracked_changes_check(remark = PROJECT_REMARK)),
         project_dir = project_dir,
         relative_private_dir = RELATIVE_PRIVATE_DIR,
     )

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from codeteam.common.llm import ReasoningLevel
 from codeteam.core.agent.answer_checks import AnswerCheck
-from codeteam.core.agent.step_hooks import FolderHook, StepCheck
+from codeteam.core.agent.step_hooks import StepHook
 from codeteam.core.roles.common.external_tools import HelperToolBuilder, McpServerBuilder
 from codeteam.core.tools.files import DELETE_TOOL_NAME, EDIT_TOOL_NAME, GLOB_TOOL_NAME, GREP_TOOL_NAME, \
     READ_TOOL_NAME, WRITE_TOOL_NAME
@@ -44,8 +44,7 @@ class RoleSettings:
         model_name: модель агента; None — модель пайплайна.
         reasoning_level: уровень размышления модели агента.
         tool_names: имена инструментов агента.
-        step_hooks: хуки после шага инструментов: замечания к изменённым файлам своих папок.
-        step_checks: проверки после шага инструментов: замечания не к черновику, а, например, к проекту.
+        step_hooks: хуки шага инструментов: замечания к изменённым файлам личной папки и к проекту.
         answer_checks: проверки сдачи: замечания к черновику, когда агент отвечает DONE.
         answer_file_names: заранее известные имена файлов ответа роли в черновике.
         only_answer_files: в черновике роли разрешены только файлы ответа.
@@ -61,8 +60,7 @@ class RoleSettings:
     model_name: str | None
     reasoning_level: ReasoningLevel
     tool_names: tuple[str, ...]
-    step_hooks: tuple[FolderHook, ...]
-    step_checks: tuple[StepCheck, ...]
+    step_hooks: tuple[StepHook, ...]
     answer_checks: tuple[AnswerCheck, ...]
     answer_file_names: tuple[str, ...]
     only_answer_files: bool

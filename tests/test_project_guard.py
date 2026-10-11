@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from codeteam.common.git import commit_all, init_repository, list_uncommitted_changes
+from codeteam.core.agent.step_hooks import StepContext
 from codeteam.core.roles.common import tracked_changes_check
 
 # Текст замечания роли для теста.
@@ -38,24 +39,35 @@ def project_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return tmp_path
 
 
+def _context(*, project_dir: Path) -> StepContext:
+    """
+    Собирает шаг инструментов без изменений личной папки.
+
+        project_dir: папка проекта.
+
+    Возвращает: Шаг инструментов.
+    """
+    return StepContext(project_dir = project_dir, private_dir = project_dir / ".ct-work" / "agent", changed_files = ())
+
+
 def test_clean_project_gives_no_remark(project_dir: Path) -> None:
     """
     Без правок проверка молчит.
     """
-    check = tracked_changes_check(project_dir = project_dir, remark = REMARK)
+    check = tracked_changes_check(remark = REMARK)
 
-    assert check() is None
+    assert check(_context(project_dir = project_dir)) is None
 
 
 def test_changed_files_are_restored(project_dir: Path) -> None:
     """
     Изменённый и удалённый отслеживаемые файлы возвращаются к коммиту, замечание называет оба.
     """
-    check = tracked_changes_check(project_dir = project_dir, remark = REMARK)
+    check = tracked_changes_check(remark = REMARK)
     (project_dir / "src" / "app.py").write_text("def view():\n    return 2\n", encoding = "utf-8")
     (project_dir / "README.md").unlink()
 
-    remark = check()
+    remark = check(_context(project_dir = project_dir))
 
     assert remark is not None
     assert "src/app.py" in remark
@@ -69,13 +81,13 @@ def test_repeated_change_is_restored_again(project_dir: Path) -> None:
     """
     Повторная правка того же файла снова откатывается и снова попадает в замечание.
     """
-    check = tracked_changes_check(project_dir = project_dir, remark = REMARK)
+    check = tracked_changes_check(remark = REMARK)
     app_file = project_dir / "src" / "app.py"
     app_file.write_text("first\n", encoding = "utf-8")
-    check()
+    check(_context(project_dir = project_dir))
 
     app_file.write_text("second\n", encoding = "utf-8")
-    remark = check()
+    remark = check(_context(project_dir = project_dir))
 
     assert remark is not None
     assert "src/app.py" in remark
@@ -86,9 +98,9 @@ def test_new_files_are_kept(project_dir: Path) -> None:
     """
     Новый файл, которого нет в коммите, проверка после шага не трогает.
     """
-    check = tracked_changes_check(project_dir = project_dir, remark = REMARK)
+    check = tracked_changes_check(remark = REMARK)
     new_file = project_dir / "notes.txt"
     new_file.write_text("note\n", encoding = "utf-8")
 
-    assert check() is None
+    assert check(_context(project_dir = project_dir)) is None
     assert new_file.read_text(encoding = "utf-8") == "note\n"

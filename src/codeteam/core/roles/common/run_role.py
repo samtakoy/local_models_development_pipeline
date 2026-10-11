@@ -50,7 +50,6 @@ def run_role(
         reasoning_level = role.reasoning_level,
         tool_names = role.tool_names,
         step_hooks = role.step_hooks,
-        step_checks = role.step_checks,
         answer_checks = role.answer_checks,
         answer_file_names = role.answer_file_names,
         only_answer_files = role.only_answer_files,

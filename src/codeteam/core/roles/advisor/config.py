@@ -18,7 +18,6 @@ ADVISOR_ROLE = RoleSettings(
     reasoning_level = ReasoningLevel.HIGH,
     tool_names = PROJECT_TOOL_NAMES,
     step_hooks = (),
-    step_checks = (),
     answer_checks = (required_files_check(file_names = (ADVICE_FILE_NAME,)),),
     answer_file_names = (ADVICE_FILE_NAME,),
     only_answer_files = True,
