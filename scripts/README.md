@@ -47,3 +47,12 @@ cd /Users/samtakot/devs/learnings/DLS/notebooks/cards
 cp data/library.json /tmp/probe_library.json
 CARDVIEWER_LIBRARY=/tmp/probe_library.json CARDVIEWER_PORT=5055 CARDVIEWER_DEBUG=0 .venv/bin/cardviewer
 ```
+
+# run_stats.py
+
+Пересобирает отчёт статистики прогона `stats_report.md` из файлов `*.stats.json` в папке прогона
+и печатает путь к отчёту. Запуск из папки codeteam_v2:
+
+```bash
+uv run python scripts/run_stats.py runs/<прогон>
+```

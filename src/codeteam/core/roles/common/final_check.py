@@ -28,6 +28,9 @@ FIX_STAGE_NUMBER_BASE = 900
 # Файл отчёта по требованиям в черновике проверяющей роли.
 REPORT_FILE_NAME = "100_report.md"
 
+# Файл в папке прогона: вердикт и отчёт последней финальной проверки.
+TESTER_REPORT_FILE_NAME = "tester_report.md"
+
 
 def run_final_check(
     *,
@@ -130,10 +133,38 @@ def _write_fix_stage(*, report_dir: Path, target_dir: Path, test_round: int) -> 
 
     Возвращает: Файл этапа исправлений <номер>_fix_<круг>.md.
     """
-    report = "\n\n".join(
-        path.read_text(encoding = "utf-8", errors = "replace").strip() for path in sorted(report_dir.glob("*.md"))
-    )
     fix_stage_file = target_dir / f"{FIX_STAGE_NUMBER_BASE + test_round}_fix_{test_round}.md"
-    fix_stage_file.write_text(FIX_STAGE_TEXT.format(round = test_round, report = report), encoding = "utf-8")
+    fix_stage_file.write_text(
+        FIX_STAGE_TEXT.format(round = test_round, report = _read_report(report_dir = report_dir)),
+        encoding = "utf-8",
+    )
 
     return fix_stage_file
+
+
+def write_tester_report(*, run_dir: Path, report_dir: Path) -> Path:
+    """
+    Пишет в папку прогона вердикт и отчёт последней финальной проверки одним файлом.
+
+        run_dir: папка прогона.
+        report_dir: папка черновика проверяющей роли: вердикт и отчёт.
+
+    Возвращает: Файл tester_report.md в папке прогона.
+    """
+    report_file = run_dir / TESTER_REPORT_FILE_NAME
+    report_file.write_text(_read_report(report_dir = report_dir) + "\n", encoding = "utf-8")
+
+    return report_file
+
+
+def _read_report(*, report_dir: Path) -> str:
+    """
+    Склеивает файлы *.md черновика проверяющей роли по порядку имён.
+
+        report_dir: папка черновика проверяющей роли: вердикт и отчёт.
+
+    Возвращает: Текст файлов через пустую строку.
+    """
+    return "\n\n".join(
+        path.read_text(encoding = "utf-8", errors = "replace").strip() for path in sorted(report_dir.glob("*.md"))
+    )

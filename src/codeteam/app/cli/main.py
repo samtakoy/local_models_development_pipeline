@@ -12,6 +12,7 @@ from codeteam.app.settings import load_settings
 from codeteam.core.pipeline.run_pipeline import run_pipeline
 from codeteam.core.pipeline.state_file import load_state
 from codeteam.core.roles.common import PipelineError, read_verdict
+from codeteam.core.roles.common.final_check import write_tester_report
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,8 @@ def main():
     if result["web_test_dir"] is not None:
         verdict = "принято" if read_verdict(remarks_dir = result["web_test_dir"]) else "не принято"
         logger.info(f"веб-тестировщик: приложение {verdict}, вердикт и отчёт: {result['web_test_dir']}")
+        tester_report = write_tester_report(run_dir = run_dir, report_dir = result["web_test_dir"])
+        logger.info(f"отчёт тестировщика: {tester_report}")
 
 
 def _parse_arguments() -> argparse.Namespace:
