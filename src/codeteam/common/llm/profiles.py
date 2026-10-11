@@ -76,6 +76,22 @@ PROFILES: tuple[ModelProfile, ...] = (
         },
     ),
     ModelProfile(
+        name = "gemma4:12b-it-qat",
+        source = "https://huggingface.co/google/gemma-4-26B-A4B-it",
+        samplings = {
+            GenerationMode.THINKING: GEMMA4_SAMPLING,
+            GenerationMode.NON_THINKING: GEMMA4_SAMPLING,
+        },
+    ),
+    ModelProfile(
+        name = "gemma4:e4b-it-qat",
+        source = "https://huggingface.co/google/gemma-4-26B-A4B-it",
+        samplings = {
+            GenerationMode.THINKING: GEMMA4_SAMPLING,
+            GenerationMode.NON_THINKING: GEMMA4_SAMPLING,
+        },
+    ),
+    ModelProfile(
         name = "qwen3.6-35b-a3b",
         source = "https://huggingface.co/Qwen/Qwen3.6-35B-A3B",
         samplings = {
