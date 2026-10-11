@@ -5,7 +5,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from codeteam.core.agent.prompts import CODE_BLOCK_LINES, DUPLICATE_SECTION_NUMBER_REMARK, \
+from codeteam.core.agent.prompts import ANSWER_LIKE_FILE_REMARK, CODE_BLOCK_LINES, DUPLICATE_SECTION_NUMBER_REMARK, \
     LATIN_SECTION_NAME_REMARK, MISPLACED_ANSWER_FILE_REMARK, MISPLACED_CONTEXT_FILE_REMARK, MISPLACED_CONTEXT_REMARK, \
     NOT_DRAFT_SECTION_REMARK, ONLY_ANSWER_FILES_REMARK, STRAY_PRIVATE_FILE_REMARK
 from codeteam.core.agent.workspace import CONTEXT_FILE_NAME, DRAFT_SECTION_PATTERN, LATIN_DRAFT_SECTION_PATTERN, \
@@ -69,6 +69,7 @@ def private_file_hook(
     2. файл контекста лежит в другом месте личной папки — путь файла контекста;
     3. имя похоже на файл контекста: номер и имя файла контекста — путь файла контекста;
     4. файл ответа роли лежит не в черновике под своим именем — его путь в черновике;
+       то же для раздела с темой файла ответа под другим номером, например 100_verdict.md для 000_verdict.md;
     5. в черновике роли, где разрешены только файлы ответа, другой файл — пути файлов ответа;
     6. файл в черновике — проверки имени раздела;
     7. остальные файлы — общее замечание о местах файлов личной папки.
@@ -82,6 +83,8 @@ def private_file_hook(
     """
     agent_draft_dir = draft_dir(private_dir = private_dir)
     agent_context_file = context_path(private_dir = private_dir)
+    # файл ответа роли по теме его имени
+    answer_names_by_topic = {_section_topic(name = name): name for name in answer_file_names}
 
     def shown(*, path: Path) -> str:
         """Показывает путь агенту от папки проекта."""
@@ -114,6 +117,15 @@ def private_file_hook(
                 answer_path = shown(path = answer_path),
             )
 
+        # раздел с темой файла ответа под другим номером
+        answer_name = answer_names_by_topic.get(_section_topic(name = path.name))
+        if answer_name is not None and path.name != answer_name:
+            return ANSWER_LIKE_FILE_REMARK.format(
+                file_path = shown(path = path),
+                answer_name = answer_name,
+                answer_path = shown(path = agent_draft_dir / answer_name),
+            )
+
         # в черновики упал файл, но там было ограничение на разрешенные имена
         is_draft_file = path.is_relative_to(agent_draft_dir)
         if is_draft_file and only_answer_files and path.name not in answer_file_names:
@@ -134,6 +146,20 @@ def private_file_hook(
         )
 
     return hook
+
+
+def _section_topic(*, name: str) -> str | None:
+    """
+    Находит тему в имени раздела черновика: часть имени после номера.
+
+        name: имя файла.
+
+    Возвращает: Тему с расширением, например verdict.md для 000_verdict.md; None, если имя не раздел черновика.
+    """
+    if DRAFT_SECTION_PATTERN.match(name) is None:
+        return None
+
+    return name.split("_", 1)[1]
 
 
 def _draft_section_remark(*, path: Path) -> str | None:

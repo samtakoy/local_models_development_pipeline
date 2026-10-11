@@ -4,8 +4,8 @@ from pathlib import Path
 
 from codeteam.common.llm import ReasoningLevel
 from codeteam.core.agent.workspace import CHECK_DIR, CONTEXT_FILE_NAME
-from codeteam.core.roles.common import ACCEPTED_VERDICT, REWORK_VERDICT, VERDICT_FILE_NAME, RoleSettings, \
-    check_verdict_file
+from codeteam.core.roles.common import ACCEPTED_VERDICT, REWORK_VERDICT, VERDICT_FILE_NAME, VERDICT_LINE_HOOK, \
+    RoleSettings, check_verdict_file
 from codeteam.core.roles.common.browser import playwright_server
 from codeteam.core.roles.common.final_check import REPORT_FILE_NAME
 from codeteam.core.tools.files import DELETE_TOOL_NAME, EDIT_TOOL_NAME, GLOB_TOOL_NAME, GREP_TOOL_NAME, \
@@ -40,7 +40,7 @@ WEB_TESTER_ROLE = RoleSettings(
     model_name = None,
     reasoning_level = ReasoningLevel.LOW,
     tool_names = WEB_TESTER_TOOL_NAMES,
-    step_hooks = (),
+    step_hooks = (VERDICT_LINE_HOOK,),
     step_checks = (),
     answer_checks = (check_verdict_file,),
     answer_file_names = (VERDICT_FILE_NAME, REPORT_FILE_NAME),

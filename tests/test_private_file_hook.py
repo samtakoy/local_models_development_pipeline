@@ -88,6 +88,17 @@ def test_misplaced_answer_file_gets_answer_path(tmp_path: Path) -> None:
         assert remark is not None and SHOWN_ANSWER_PATH in remark
 
 
+def test_answer_topic_with_other_number_gets_answer_path(tmp_path: Path) -> None:
+    """
+    Раздел с темой файла ответа под другим номером, в черновике и вне его, — в замечании путь файла ответа;
+    у роли без ограничения на файлы черновика тоже.
+    """
+    for file_path in ("draft/100_observations.md", "draft/00_observations.md", "helpers/200_observations.md"):
+        remark = _remark(project_dir = tmp_path, only_answer_files = False, file_path = file_path)
+
+        assert remark is not None and SHOWN_ANSWER_PATH in remark
+
+
 def test_other_draft_file_gets_answer_path_when_only_answer_files(tmp_path: Path) -> None:
     """
     В черновике роли только с файлами ответа другой раздел получает замечание с путём файла ответа;

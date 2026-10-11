@@ -5,9 +5,11 @@ import re
 import shutil
 from pathlib import Path
 
+from codeteam.core.agent.step_hooks import FolderHook
+from codeteam.core.agent.workspace import DRAFT_DIR_NAME
 from codeteam.core.pipeline.state import Review, Rework
 from codeteam.core.roles.common.errors import PipelineError
-from codeteam.core.roles.common.prompts import MISSING_VERDICT_REMARK, WRONG_VERDICT_REMARK
+from codeteam.core.roles.common.prompts import MISSING_VERDICT_REMARK, VERDICT_LINE_REMINDER, WRONG_VERDICT_REMARK
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +137,29 @@ def check_verdict_file(answer_dir: Path) -> str | None:
     )
 
 
+def verdict_line_hook(path: Path, text: str) -> str | None:
+    """
+    Проверяет после записи файла вердикта, что его первая строка содержит ровно один вердикт.
+
+        path: путь изменённого файла черновика.
+        text: текст файла.
+
+    Возвращает: Напоминание ревьюеру или None, если файл не файл вердикта или вердикт читается.
+    """
+    if path.name != VERDICT_FILE_NAME or _verdict_word(line = _first_line(text = text)) is not None:
+        return None
+
+    return VERDICT_LINE_REMINDER.format(
+        verdict_file = VERDICT_FILE_NAME,
+        accepted_verdict = ACCEPTED_VERDICT,
+        rework_verdict = REWORK_VERDICT,
+    )
+
+
+# Хук черновика ревьюера: напоминание о первой строке файла вердикта сразу после записи.
+VERDICT_LINE_HOOK = FolderHook(folder = Path(DRAFT_DIR_NAME), hook = verdict_line_hook)
+
+
 def read_verdict(*, remarks_dir: Path) -> bool:
     """
     Читает вердикт ревьюера из файла вердикта.
@@ -175,7 +200,18 @@ def _verdict_line(*, verdict_path: Path) -> str:
 
     Возвращает: Первую непустую строку; пустую строку, если файл пустой.
     """
-    lines = [line.strip().lstrip("#").strip() for line in verdict_path.read_text(encoding = "utf-8").splitlines()]
+    return _first_line(text = verdict_path.read_text(encoding = "utf-8"))
+
+
+def _first_line(*, text: str) -> str:
+    """
+    Берёт первую непустую строку текста вердикта без знаков заголовка markdown.
+
+        text: текст файла вердикта.
+
+    Возвращает: Первую непустую строку; пустую строку, если текст пустой.
+    """
+    lines = [line.strip().lstrip("#").strip() for line in text.splitlines()]
 
     return next((line for line in lines if line), "")
 

@@ -6,7 +6,7 @@ from codeteam.common.llm import ReasoningLevel
 from codeteam.core.agent.workspace import CHECK_DIR, CONTEXT_FILE_NAME
 from codeteam.core.roles.browser_checker import build_check_in_browser_tool
 from codeteam.core.roles.common import ACCEPTED_VERDICT, PROJECT_TOOL_NAMES, REWORK_VERDICT, VERDICT_FILE_NAME, \
-    RoleSettings, check_verdict_file
+    VERDICT_LINE_HOOK, RoleSettings, check_verdict_file
 from codeteam.core.tools.shell import START_SERVICE_TOOL_NAME, STOP_PROCESS_TOOL_NAME
 
 DEVELOPER_REVIEW_ROLE = RoleSettings(
@@ -24,7 +24,7 @@ DEVELOPER_REVIEW_ROLE = RoleSettings(
     model_name = None,
     reasoning_level = ReasoningLevel.LOW,
     tool_names = PROJECT_TOOL_NAMES,
-    step_hooks = (),
+    step_hooks = (VERDICT_LINE_HOOK,),
     step_checks = (),
     answer_checks = (check_verdict_file,),
     answer_file_names = (VERDICT_FILE_NAME,),
