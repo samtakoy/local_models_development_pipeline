@@ -44,7 +44,7 @@ AGENT_CFG_NAME = "agent"
 
 # Сколько прошлых шагов инструментов помнит проверка повторов: повтор — тот же шаг среди них, так ловится и петля
 # из нескольких чередующихся вызовов.
-REPEAT_WINDOW = 1 # 5
+REPEAT_WINDOW = 2 # 5
 
 # Сколько повторов подряд переводят работу к записи ответа: после всех замечаний REPEATED_RESULT_REMARKS.
 REPEATED_RESULTS_LIMIT = len(REPEATED_RESULT_REMARKS) + 1
