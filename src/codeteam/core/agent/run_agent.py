@@ -170,6 +170,7 @@ def run_agent(
     limit_notice = LIMIT_NOTICE.format(
         draft_dir = draft_dir(private_dir = relative_private_dir),
         context_file_path = context_path(private_dir = relative_private_dir),
+        context_file_name = CONTEXT_FILE_NAME,
     )
     reinit_notice = REINIT_NOTICE.format(
         draft_dir = draft_dir(private_dir = relative_private_dir),
