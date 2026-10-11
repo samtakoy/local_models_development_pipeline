@@ -6,6 +6,7 @@ from pathlib import Path
 
 from codeteam.app.config import load_project_config
 from codeteam.app.prompts_db import PROMPTS_ROOT, save_prompts
+from codeteam.app.run_statistics import write_run_report
 from codeteam.app.sandbox_check import confirm_unprotected_run
 from codeteam.app.settings import load_settings
 from codeteam.core.pipeline.run_pipeline import run_pipeline
@@ -45,6 +46,9 @@ def main():
     except PipelineError as error:
         logger.error(f"прогон остановлен: {error}")
         sys.exit(1)
+    finally:
+        # отчёт статистики пишется и после остановки прогона: по уже отработавшим агентам
+        logger.info(f"статистика прогона: {write_run_report(run_dir = run_dir)}")
 
     logger.info(f"отчёт исследователя: {result['research_dir']}")
     logger.info(f"этапы архитектора: {result['plan_dir']}")

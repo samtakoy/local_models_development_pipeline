@@ -1,10 +1,12 @@
-"""Тесты сводки статистики прогона: итоги агента, суммы по ролям и за прогон."""
+"""Тесты отчёта статистики прогона: итоги агента, группы по ролям, время прогона, файл отчёта."""
 
 from pathlib import Path
 
 from langchain_core.messages import AIMessage, ToolMessage
 
-from codeteam.app.run_statistics import agent_totals, load_run_statistics, role_totals, run_report, sum_totals
+from codeteam.app.run_statistics import RUN_REPORT_FILE_NAME, agent_totals, load_run_statistics, max_context, \
+    run_report, run_seconds, speed_by_context, sum_totals, tokens_per_second, tool_error_percent, totals_by_role, \
+    window_overflows, write_run_report
 from codeteam.core.agent.statistics import REPEATED_RESULT_STOP_COUNTER, SERVER_ERROR_RETRY_COUNTER, \
     STATISTICS_FILE_SUFFIX, WORK_PHASE, AgentStatistics
 
@@ -19,7 +21,13 @@ def _write_agent(*, run_dir: Path, role_name: str, journal_name: str, input_toke
         input_tokens: входные токены запроса.
         tool_errors: сколько вызовов bash вернули ошибку; ещё один вызов успешный.
     """
-    statistics = AgentStatistics(role_name = role_name, journal_name = journal_name, model_name = "model")
+    statistics = AgentStatistics(
+        role_name = role_name,
+        journal_name = journal_name,
+        model_name = "model",
+        reasoning_level = "low",
+        context_window = 1000,
+    )
     answer = AIMessage(
         content = "",
         tool_calls = [{"id": "call", "name": "bash", "args": {}}],
@@ -35,14 +43,14 @@ def _write_agent(*, run_dir: Path, role_name: str, journal_name: str, input_toke
 
 def test_totals_by_agent_role_and_run(tmp_path: Path) -> None:
     """
-    Итоги агентов складываются по ролям и за прогон.
+    Итоги агентов собираются по ролям и складываются за роль и за прогон.
     """
     _write_agent(run_dir = tmp_path, role_name = "developer", journal_name = "05_developer_r1", input_tokens = 100, tool_errors = 1)
     _write_agent(run_dir = tmp_path, role_name = "developer_review", journal_name = "06_developer_review_r1", input_tokens = 50, tool_errors = 0)
     _write_agent(run_dir = tmp_path, role_name = "developer", journal_name = "07_developer_r2", input_tokens = 200, tool_errors = 2)
 
     run_statistics = load_run_statistics(run_dir = tmp_path)
-    roles = role_totals(run_statistics = run_statistics)
+    roles = {role: sum_totals(totals = totals) for role, totals in totals_by_role(run_statistics = run_statistics).items()}
     run_total = sum_totals(totals = [agent_totals(statistics = statistics) for statistics in run_statistics])
 
     assert [statistics["journal"] for statistics in run_statistics] == ["05_developer_r1", "06_developer_review_r1", "07_developer_r2"]
@@ -56,7 +64,13 @@ def test_loop_to_draft_is_not_counted_as_limit(tmp_path: Path) -> None:
     """
     Переход в фазу черновика из-за петли считается отдельно от перехода по лимиту истории.
     """
-    statistics = AgentStatistics(role_name = "bro_check", journal_name = "01_bro_check_r1", model_name = "model")
+    statistics = AgentStatistics(
+        role_name = "bro_check",
+        journal_name = "01_bro_check_r1",
+        model_name = "model",
+        reasoning_level = "low",
+        context_window = 1000,
+    )
     statistics.record(event = {"limit_notice": {"messages": []}})
     statistics.count_in_phase(name = REPEATED_RESULT_STOP_COUNTER, phase = WORK_PHASE)
     statistics.write(path = tmp_path / f"01_bro_check_r1{STATISTICS_FILE_SUFFIX}")
@@ -71,3 +85,96 @@ def test_report_without_statistics(tmp_path: Path) -> None:
     Папка без файлов статистики - сводка сообщает об этом, а не падает.
     """
     assert STATISTICS_FILE_SUFFIX in run_report(run_dir = tmp_path)
+
+
+def test_run_seconds_from_first_start_to_last_end() -> None:
+    """
+    Время прогона — от старта первого агента до конца последнего, а не сумма времени агентов.
+    """
+    run_statistics = [
+        {"started_at": "2026-10-11T10:00:00", "elapsed_seconds": 100.0},
+        # помощник внутри первого агента
+        {"started_at": "2026-10-11T10:00:30", "elapsed_seconds": 20.0},
+        {"started_at": "2026-10-11T10:01:40", "elapsed_seconds": 60.0},
+    ]
+
+    assert run_seconds(run_statistics = run_statistics) == 160.0
+
+
+def test_report_file_in_run_dir(tmp_path: Path) -> None:
+    """
+    Отчёт пишется файлом в папку прогона и называет каждого агента.
+    """
+    _write_agent(run_dir = tmp_path, role_name = "developer", journal_name = "05_developer_r1", input_tokens = 100, tool_errors = 1)
+    _write_agent(run_dir = tmp_path, role_name = "developer", journal_name = "07_developer_r2", input_tokens = 200, tool_errors = 0)
+
+    report_path = write_run_report(run_dir = tmp_path)
+
+    assert report_path == tmp_path / RUN_REPORT_FILE_NAME
+    report = report_path.read_text(encoding = "utf-8")
+    assert "05_developer_r1" in report and "07_developer_r2" in report
+
+
+def _request(*, input_tokens: int, output_tokens: int, tokens_per_second: float | None) -> dict:
+    """
+    Собирает запрос к модели, как он записан в файле статистики.
+
+        input_tokens: входные токены.
+        output_tokens: выходные токены.
+        tokens_per_second: скорость генерации; None — скорости нет.
+
+    Возвращает: Запрос к модели.
+    """
+    return {"input_tokens": input_tokens, "output_tokens": output_tokens, "tokens_per_second": tokens_per_second}
+
+
+def test_speed_by_context_buckets() -> None:
+    """
+    Скорость в интервале контекста — выходные токены на суммарное время генерации запросов интервала.
+    """
+    run_statistics = [
+        {"requests": [
+            _request(input_tokens = 10_000, output_tokens = 100, tokens_per_second = 50),
+            _request(input_tokens = 30_000, output_tokens = 30, tokens_per_second = 10),
+        ]},
+        {"requests": [_request(input_tokens = 15_000, output_tokens = 50, tokens_per_second = 25)]},
+    ]
+
+    assert speed_by_context(run_statistics = run_statistics) == {0: (2, 37.5), 20_000: (1, 10.0)}
+
+
+def test_max_context_is_largest_request() -> None:
+    """
+    Наибольший контекст агента — входные токены его самого большого запроса; без запросов — 0.
+    """
+    requests = [_request(input_tokens = tokens, output_tokens = 1, tokens_per_second = 1) for tokens in (500, 900, 700)]
+
+    assert max_context(statistics = {"requests": requests}) == 900
+    assert max_context(statistics = {"requests": []}) == 0
+
+
+def test_speed_and_error_percent_of_agent(tmp_path: Path) -> None:
+    """
+    Скорость агента — выходные токены на время генерации; процент ошибок — ошибки на вызовы.
+    """
+    _write_agent(run_dir = tmp_path, role_name = "developer", journal_name = "05_developer_r1", input_tokens = 100, tool_errors = 1)
+    totals = agent_totals(statistics = load_run_statistics(run_dir = tmp_path)[0])
+
+    assert tool_error_percent(totals = totals) == 50.0
+    # в записанном запросе нет данных о времени генерации
+    assert tokens_per_second(totals = totals) is None
+
+
+def test_window_overflows_count_input_and_output() -> None:
+    """
+    Переполнение окна — запрос, у которого вход и выход вместе не меньше окна модели;
+    без записанного окна запросы не проверяются.
+    """
+    requests = [
+        _request(input_tokens = 900, output_tokens = 50, tokens_per_second = 1),
+        _request(input_tokens = 990, output_tokens = 10, tokens_per_second = 1),
+        _request(input_tokens = 995, output_tokens = 20, tokens_per_second = 1),
+    ]
+
+    assert window_overflows(statistics = {"context_window": 1000, "requests": requests}) == [1000, 1015]
+    assert window_overflows(statistics = {"requests": requests}) is None

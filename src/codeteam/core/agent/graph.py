@@ -18,9 +18,10 @@ from typing import TypedDict, Annotated
 from codeteam.core.agent.config import AgentConfig
 from codeteam.core.agent.node_ids import AGENT_NODE_ID, ANSWER_NOTICE_NODE_ID, DRAFT_AGENT_NODE_ID, \
     DRAFT_TOOL_NODE_ID, INIT_NODE_ID, LIMIT_NOTICE_NODE_ID, REINIT_NODE_ID, TOOL_NODE_ID
-from codeteam.core.agent.statistics import ANSWER_COMMAND_REMARK_COUNTER, DRAFT_PHASE, REPEATED_RESULT_REMARK_COUNTER, \
-    REPEATED_RESULT_STOP_COUNTER, SERVER_ERROR_RETRY_COUNTER, STEP_CHECK_REMARK_COUNTER, STEP_HOOK_REMARK_COUNTER, \
-    UNFINISHED_ANSWER_RETRY_COUNTER, WORK_PHASE
+from codeteam.core.agent.statistics import ANSWER_COMMAND_REMARK_COUNTER, ANSWER_NOTICE_RESET_COUNTER, DRAFT_PHASE, \
+    HARD_LIMIT_COUNTER, REPEATED_RESULT_REMARK_COUNTER, REPEATED_RESULT_STOP_COUNTER, SERVER_ERROR_RETRY_COUNTER, \
+    STEP_CHECK_REMARK_COUNTER, STEP_HOOK_REMARK_COUNTER, UNFINISHED_ANSWER_RETRY_COUNTER, WINDOW_FULL_RESET_COUNTER, \
+    WORK_PHASE
 from codeteam.core.agent.prompts import ANSWER_CHECK_NOTICE, ANSWER_COMMAND_REMARK, DONE_ANSWER, TODO_ANSWER, \
     REPEATED_RESULT_REMARKS, REPEATED_RESULT_STOP_REMARK, UNFINISHED_ANSWER_NOTICE
 from codeteam.core.agent.workspace import context_path, draft_dir
@@ -66,9 +67,11 @@ def init_node(state: AgentState, config: RunnableConfig):
 def reinit_node(state: AgentState, config: RunnableConfig):
     """
     Пересобирает историю агента после сброса: старт заново и чтение памяти; снимает фоновые процессы
-    прежнего агента и обнуляет счётчик отказов в приёме работы.
+    прежнего агента и обнуляет счётчик отказов в приёме работы. Считает сбросы по опасным причинам:
+    кончились попытки сдать работу, история дошла до края окна модели.
     """
     cfg: AgentConfig = config["configurable"][AGENT_CFG_NAME]
+    count_reset_reason(cfg = cfg, state = state)
 
     memory_calls = [
         # список разделов черновика и контекст работы
@@ -106,6 +109,19 @@ def reinit_node(state: AgentState, config: RunnableConfig):
         "repeated_results": 0,
         "recent_tool_steps": [],
     }
+
+def count_reset_reason(*, cfg: AgentConfig, state: AgentState) -> None:
+    """
+    Считает опасную причину сброса истории: кончились попытки сдать работу или история дошла до края окна модели.
+
+        cfg: настройки агента.
+        state: состояние агента перед сбросом.
+    """
+    if state["answer_notices"] >= ANSWER_NOTICE_LIMIT:
+        cfg.statistics.count(name = ANSWER_NOTICE_RESET_COUNTER)
+    elif _last_input_tokens(messages = state["messages"]) >= cfg.context_window_limit:
+        cfg.statistics.count(name = WINDOW_FULL_RESET_COUNTER)
+
 
 UNFINISHED_ANSWER_RETRIES = 1
 def agent_node(
@@ -161,7 +177,7 @@ def limit_notice_node(
 ) -> AgentState:
     """
     Снимает фоновые процессы агента и дописывает уведомление о лимите в конец результата
-    последнего инструмента.
+    последнего инструмента. Считает переходы по жёсткому лимиту истории.
 
         state: состояние агента; последнее сообщение истории - результат инструмента.
         config: конфигурация запуска с настройками агента.
@@ -169,6 +185,10 @@ def limit_notice_node(
     Возвращает: Обновление состояния с результатом инструмента, дополненным уведомлением.
     """
     cfg: AgentConfig = config["configurable"][AGENT_CFG_NAME]
+
+    is_loop = state["repeated_results"] >= REPEATED_RESULTS_LIMIT
+    if not is_loop and _last_input_tokens(messages = state["messages"]) >= cfg.history_token_hard_limit:
+        cfg.statistics.count(name = HARD_LIMIT_COUNTER)
 
     # в фазе черновика запускать нельзя: фоновые процессы агента снимаются
     cfg.shell_processes.kill_all()

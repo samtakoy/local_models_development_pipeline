@@ -199,7 +199,13 @@ def run_agent(
     project_docs_reads = [(READ_TOOL_NAME, {"file_path": PROJECT_DOCS_DIR_NAME})] if has_project_docs else []
 
     # Статистика запуска: события графа и явные счётчики, файл рядом с журналом
-    statistics = AgentStatistics(role_name = role.name, journal_name = journal_path.stem, model_name = role.model_name)
+    statistics = AgentStatistics(
+        role_name = role.name,
+        journal_name = journal_path.stem,
+        model_name = role.model_name,
+        reasoning_level = role.reasoning_level.value,
+        context_window = settings.agent_ctx_window,
+    )
 
     # Сегодняшняя дата: одна на всю работу агента
     today_instructions = TODAY_INSTRUCTIONS.format(today = date.today().isoformat())

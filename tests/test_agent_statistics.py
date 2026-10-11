@@ -84,7 +84,13 @@ def test_statistics_of_agent_run() -> None:
     """
     Шаги, запросы к модели, инструменты по фазам, события и фаза черновика считаются по событиям графа.
     """
-    statistics = AgentStatistics(role_name = "developer", journal_name = "05_s10_developer_r1", model_name = "model")
+    statistics = AgentStatistics(
+        role_name = "developer",
+        journal_name = "05_s10_developer_r1",
+        model_name = "model",
+        reasoning_level = "low",
+        context_window = 1000,
+    )
 
     _record_run(statistics = statistics)
     result = statistics.to_dict()
@@ -108,7 +114,13 @@ def test_counters_error_and_file(tmp_path: Path) -> None:
     """
     Явные счётчики и ошибка запуска попадают в файл JSON.
     """
-    statistics = AgentStatistics(role_name = "developer", journal_name = "05_s10_developer_r1", model_name = "model")
+    statistics = AgentStatistics(
+        role_name = "developer",
+        journal_name = "05_s10_developer_r1",
+        model_name = "model",
+        reasoning_level = "low",
+        context_window = 1000,
+    )
     statistics.count(name = "server_error_retries")
     statistics.count(name = "server_error_retries")
     statistics.fail(error = RuntimeError("модель недоступна"))
@@ -172,7 +184,13 @@ def test_server_error_and_unfinished_answer_retries_are_counted(tmp_path: Path) 
     """
     Повтор запроса после ошибки сервера ollama и тихий повтор после ответа без инструмента считаются.
     """
-    statistics = AgentStatistics(role_name = "developer", journal_name = "05_developer_r1", model_name = "model")
+    statistics = AgentStatistics(
+        role_name = "developer",
+        journal_name = "05_developer_r1",
+        model_name = "model",
+        reasoning_level = "low",
+        context_window = 1000,
+    )
     model = FlakyModel(answers = [
         ResponseError("сервер занят"),
         AIMessage(content = "думаю"),
@@ -191,7 +209,13 @@ def test_step_check_remark_is_counted(tmp_path: Path) -> None:
     """
     Замечание проверки после шага инструментов считается.
     """
-    statistics = AgentStatistics(role_name = "developer", journal_name = "05_developer_r1", model_name = "model")
+    statistics = AgentStatistics(
+        role_name = "developer",
+        journal_name = "05_developer_r1",
+        model_name = "model",
+        reasoning_level = "low",
+        context_window = 1000,
+    )
     noop = StructuredTool.from_function(func = lambda: "ок", name = "noop", description = "ничего")
     # узел инструментов langgraph работает только внутри графа
     workflow = StateGraph(AgentState)

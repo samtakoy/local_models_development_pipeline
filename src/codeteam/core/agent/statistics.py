@@ -62,6 +62,12 @@ ANSWER_COMMAND_REMARK_COUNTER = "answer_command_remarks"
 REPEATED_RESULT_REMARK_COUNTER = "repeated_result_remarks"
 REPEATED_RESULT_STOP_COUNTER = "repeated_result_stops"
 
+# Явные счётчики опасных переходов: переход в фазу черновика по жёсткому лимиту истории, сброс истории,
+# когда история дошла до края окна модели в фазе черновика, сброс после того, как кончились попытки сдать работу.
+HARD_LIMIT_COUNTER = "hard_limit_notices"
+WINDOW_FULL_RESET_COUNTER = "window_full_resets"
+ANSWER_NOTICE_RESET_COUNTER = "answer_notice_resets"
+
 # Знаков после запятой у секунд и скоростей в файле.
 ROUND_DIGITS = 3
 
@@ -71,17 +77,29 @@ class AgentStatistics:
     Статистика одного запуска агента.
     """
 
-    def __init__(self, *, role_name: str, journal_name: str, model_name: str) -> None:
+    def __init__(
+        self,
+        *,
+        role_name: str,
+        journal_name: str,
+        model_name: str,
+        reasoning_level: str,
+        context_window: int,
+    ) -> None:
         """
         Начинает статистику запуска.
 
             role_name: имя роли агента.
             journal_name: имя журнала агента без расширения.
             model_name: имя модели агента.
+            reasoning_level: уровень размышления модели агента.
+            context_window: окно модели, токены: вход и выход запроса вместе.
         """
         self._role_name = role_name
         self._journal_name = journal_name
         self._model_name = model_name
+        self._reasoning_level = reasoning_level
+        self._context_window = context_window
         self._started_at = datetime.now()
         self._started_monotonic = time.monotonic()
         self._step_counts: Counter[str] = Counter()
@@ -166,8 +184,9 @@ class AgentStatistics:
         """
         Собирает статистику словарём.
 
-        Возвращает: Роль, журнал, модель, время, шаги по узлам, запросы к модели и их сумму, инструменты
-            по фазам, события, явные счётчики, явные счётчики по фазам, фазу черновика и ошибку запуска.
+        Возвращает: Роль, журнал, модель, уровень размышления, окно модели, время, шаги по узлам, запросы к модели
+            и их сумму, инструменты по фазам, события, явные счётчики, явные счётчики по фазам, фазу черновика
+            и ошибку запуска.
         """
         now = time.monotonic()
         draft_seconds = self._draft_seconds
@@ -178,6 +197,8 @@ class AgentStatistics:
             "role": self._role_name,
             "journal": self._journal_name,
             "model_name": self._model_name,
+            "reasoning_level": self._reasoning_level,
+            "context_window": self._context_window,
             "started_at": self._started_at.isoformat(timespec = "seconds"),
             "elapsed_seconds": round(now - self._started_monotonic, ROUND_DIGITS),
             "error": self._error,

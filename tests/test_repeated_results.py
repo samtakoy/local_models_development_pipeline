@@ -33,7 +33,13 @@ def _run_steps(*, tool_func, targets: list[str], phase: str, tmp_path: Path) -> 
 
     Возвращает: Состояния после каждого шага, статистику агента и конфигурацию запуска.
     """
-    statistics = AgentStatistics(role_name = "bro_check", journal_name = "01_bro_check_r1", model_name = "model")
+    statistics = AgentStatistics(
+        role_name = "bro_check",
+        journal_name = "01_bro_check_r1",
+        model_name = "model",
+        reasoning_level = "low",
+        context_window = 1000,
+    )
     config = {"configurable": {AGENT_CFG_NAME: SimpleNamespace(
         statistics = statistics,
         step_hooks = (),
