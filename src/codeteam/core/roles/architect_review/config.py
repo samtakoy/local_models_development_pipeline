@@ -15,7 +15,7 @@ ARCHITECT_REVIEW_ROLE = RoleSettings(
         "rework_verdict": REWORK_VERDICT,
     },
     model_name = None,
-    reasoning_level = ReasoningLevel.LOW,
+    reasoning_level = ReasoningLevel.MEDIUM,
     tool_names = PROJECT_TOOL_NAMES,
     step_hooks = (VERDICT_LINE_HOOK,),
     step_checks = (),

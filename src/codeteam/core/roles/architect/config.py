@@ -20,7 +20,7 @@ ARCHITECT_ROLE = RoleSettings(
     system_prompt_path = Path(__file__).parent / "system_prompt.md",
     prompt_fields = {"architecture_file": ARCHITECTURE_FILE_NAME},
     model_name = None,
-    reasoning_level = ReasoningLevel.LOW,
+    reasoning_level = ReasoningLevel.MEDIUM,
     tool_names = PROJECT_TOOL_NAMES,
     step_hooks = (
         FolderHook(

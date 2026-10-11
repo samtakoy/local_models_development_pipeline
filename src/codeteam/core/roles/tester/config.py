@@ -26,7 +26,7 @@ TESTER_ROLE = RoleSettings(
         "check_in_browser_tool": CHECK_IN_BROWSER_TOOL_NAME,
     },
     model_name = None,
-    reasoning_level = ReasoningLevel.LOW,
+    reasoning_level = ReasoningLevel.MEDIUM,
     tool_names = PROJECT_TOOL_NAMES,
     step_hooks = (VERDICT_LINE_HOOK,),
     step_checks = (),

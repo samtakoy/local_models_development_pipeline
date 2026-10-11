@@ -22,7 +22,7 @@ DEVELOPER_REVIEW_ROLE = RoleSettings(
         "stop_process_tool": STOP_PROCESS_TOOL_NAME,
     },
     model_name = None,
-    reasoning_level = ReasoningLevel.LOW,
+    reasoning_level = ReasoningLevel.MEDIUM,
     tool_names = PROJECT_TOOL_NAMES,
     step_hooks = (VERDICT_LINE_HOOK,),
     step_checks = (),

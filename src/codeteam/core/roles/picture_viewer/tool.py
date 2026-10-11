@@ -63,7 +63,7 @@ def build_describe_picture_tool(caller_context: CallerContext) -> BaseTool | Non
             context_window = settings.agent_ctx_window,
         ),
         generation_mode = GenerationMode.THINKING,
-        reasoning_level = ReasoningLevel.LOW,
+        reasoning_level = ReasoningLevel.MEDIUM,
     )
 
     def describe_picture(*, file_path: str, focus: str | None = None) -> str:
