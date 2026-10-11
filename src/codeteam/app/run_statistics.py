@@ -12,7 +12,7 @@ from typing import Any
 from codeteam.core.agent.statistics import ANSWER_NOTICE_RESET_COUNTER, DRAFT_PHASE, HARD_LIMIT_COUNTER, \
     LIMIT_NOTICE_EVENT, REPEATED_RESULT_STOP_COUNTER, SERVER_ERROR_RETRY_COUNTER, STATISTICS_FILE_SUFFIX, \
     STEP_CHECK_REMARK_COUNTER, STEP_HOOK_REMARK_COUNTER, UNFINISHED_ANSWER_HINT_EVENT, \
-    UNFINISHED_ANSWER_RETRY_COUNTER, WINDOW_FULL_RESET_COUNTER, WORK_PHASE
+    UNFINISHED_ANSWER_RETRY_COUNTER, WARMUP_PHASE, WINDOW_FULL_RESET_COUNTER, WORK_PHASE
 
 # Файл отчёта в папке прогона.
 RUN_REPORT_FILE_NAME = "stats_report.md"
@@ -120,6 +120,9 @@ PROBLEM_COLUMNS = (
     "check_remarks",
     "failed",
 )
+
+# Фазы в таблице инструментов и их заголовки.
+TOOL_PHASE_TITLES = {WORK_PHASE: "работа", DRAFT_PHASE: "черновик", WARMUP_PHASE: "разогрев"}
 
 # Свёртка значений поля по агентам строки таблицы: сумма или среднее.
 Aggregate = Callable[[list[float]], float]
@@ -289,6 +292,101 @@ def window_overflows(*, statistics: dict[str, Any]) -> list[int] | None:
     return [size for size in request_sizes if size >= context_window]
 
 
+def is_offered_tool(*, statistics: dict[str, Any], tool_name: str) -> bool:
+    """
+    Проверяет, что инструмент был выдан модели агента.
+
+        statistics: статистика агента из файла.
+        tool_name: имя вызванного инструмента.
+
+    Возвращает: True, если инструмент в списке выданных; True и для файлов без списка: проверить нечем.
+    """
+    # в файлах, записанных до появления списка выданных инструментов, его нет
+    tool_names = statistics.get("tool_names")
+
+    return tool_names is None or tool_name in tool_names
+
+
+def tool_phase_counts(*, run_statistics: list[dict[str, Any]]) -> dict[str, dict[str, tuple[int, int]]]:
+    """
+    Складывает вызовы и ошибки каждого выданного агентам инструмента по фазам; несуществующие инструменты
+    не входят.
+
+        run_statistics: статистика агентов.
+
+    Возвращает: По имени инструмента: по фазе — вызовы и ошибки; инструменты по убыванию доли ошибок,
+        при равенстве — по убыванию числа ошибок.
+    """
+    counts: dict[str, dict[str, tuple[int, int]]] = {}
+    for statistics in run_statistics:
+        for tool_name, phases in statistics["tools"].items():
+            if not is_offered_tool(statistics = statistics, tool_name = tool_name):
+                continue
+
+            tool_counts = counts.setdefault(tool_name, {})
+            for phase, phase_counts in phases.items():
+                calls, errors = tool_counts.get(phase, (0, 0))
+                tool_counts[phase] = (calls + phase_counts.get("calls", 0), errors + phase_counts.get("errors", 0))
+
+    def order(item: tuple[str, dict[str, tuple[int, int]]]) -> tuple[float, int]:
+        """Ключ сортировки: доля ошибок и число ошибок инструмента во всех фазах."""
+        calls = sum(phase_calls for phase_calls, _ in item[1].values())
+        errors = sum(phase_errors for _, phase_errors in item[1].values())
+
+        return errors / calls if calls else 0.0, errors
+
+    return dict(sorted(counts.items(), key = order, reverse = True))
+
+
+def unknown_tool_calls(*, run_statistics: list[dict[str, Any]]) -> dict[str, tuple[int, list[str]]]:
+    """
+    Находит вызовы несуществующих инструментов: имён, которых нет среди выданных агенту.
+
+        run_statistics: статистика агентов.
+
+    Возвращает: По имени инструмента: число вызовов и роли, которые его вызывали, в порядке появления;
+        инструменты по убыванию вызовов.
+    """
+    calls: dict[str, int] = {}
+    roles: dict[str, list[str]] = {}
+    for statistics in run_statistics:
+        for tool_name, phases in statistics["tools"].items():
+            if is_offered_tool(statistics = statistics, tool_name = tool_name):
+                continue
+
+            calls[tool_name] = calls.get(tool_name, 0) + sum(counts.get("calls", 0) for counts in phases.values())
+            tool_roles = roles.setdefault(tool_name, [])
+            if statistics["role"] not in tool_roles:
+                tool_roles.append(statistics["role"])
+
+    ordered_names = sorted(calls, key = lambda name: calls[name], reverse = True)
+
+    return {name: (calls[name], roles[name]) for name in ordered_names}
+
+
+def unused_tools_by_role(*, run_statistics: list[dict[str, Any]]) -> dict[str, list[str]]:
+    """
+    Находит инструменты, выданные агентам роли, которые ни один агент роли не вызвал.
+
+        run_statistics: статистика агентов.
+
+    Возвращает: По имени роли: невызванные инструменты в порядке выдачи; роли, у которых все инструменты
+        вызывались, и роли без списка выданных инструментов не входят.
+    """
+    unused = {}
+    for role, role_statistics in _statistics_by_role(run_statistics = run_statistics).items():
+        if any("tool_names" not in statistics for statistics in role_statistics):
+            continue
+
+        offered = dict.fromkeys(name for statistics in role_statistics for name in statistics["tool_names"])
+        called = {name for statistics in role_statistics for name in statistics["tools"]}
+        role_unused = [name for name in offered if name not in called]
+        if role_unused:
+            unused[role] = role_unused
+
+    return unused
+
+
 def speed_by_context(*, run_statistics: list[dict[str, Any]]) -> dict[int, tuple[int, float | None]]:
     """
     Считает скорость генерации по интервалам размера контекста шириной CONTEXT_BUCKET_TOKENS.
@@ -382,6 +480,19 @@ def run_report(*, run_dir: Path) -> str:
         "## Контекст",
         _context_section(run_statistics = run_statistics),
         "## Инструменты",
+        "### По инструментам, весь прогон",
+        _tool_table(run_statistics = run_statistics),
+        "### Несуществующие инструменты",
+        _unknown_tools_section(run_statistics = run_statistics),
+        "### Неиспользуемые инструменты",
+        _unused_tools_section(run_statistics = run_statistics),
+        _details(
+            title = "По инструментам, по ролям",
+            body = "\n\n".join(
+                f"**{role}**\n\n{_tool_table(run_statistics = role_statistics)}"
+                for role, role_statistics in _statistics_by_role(run_statistics = run_statistics).items()
+            ),
+        ),
         "### По ролям, среднее на агента",
         format_table(rows = role_averages_and_all, columns = TOOL_COLUMNS, aggregate = mean, with_agent_count = True),
         _details(
@@ -491,6 +602,148 @@ def _overflow_section(*, run_statistics: list[dict[str, Any]]) -> str:
     return "\n\n".join(parts)
 
 
+def _tool_table(*, run_statistics: list[dict[str, Any]]) -> str:
+    """
+    Оформляет таблицу инструментов: всего вызовов, ошибок и процент ошибок, затем вызовы и ошибки по фазам.
+
+        run_statistics: статистика агентов, чьи вызовы складываются.
+
+    Возвращает: Таблицу markdown.
+    """
+    phase_titles = [f"{title}: вызовов / ошибок" for title in TOOL_PHASE_TITLES.values()]
+    total_titles = [COLUMN_TITLES[column] for column in ("tool_calls", "tool_errors", "tool_error_percent")]
+    header = ["", *total_titles, *phase_titles]
+    lines = [_table_row(cells = header), _table_alignment(column_count = len(header))]
+    for tool_name, phases in tool_phase_counts(run_statistics = run_statistics).items():
+        calls = sum(phase_calls for phase_calls, _ in phases.values())
+        errors = sum(phase_errors for _, phase_errors in phases.values())
+        percent = 100 * errors / calls if calls else None
+        phase_cells = [
+            _calls_and_errors(counts = phases[phase]) if phase in phases else NO_VALUE
+            for phase in TOOL_PHASE_TITLES
+        ]
+        lines.append(_table_row(cells = [
+            tool_name,
+            _number(value = calls),
+            _number(value = errors),
+            _optional_number(value = percent),
+            *phase_cells,
+        ]))
+
+    return "\n".join(lines)
+
+
+def _unknown_tools_section(*, run_statistics: list[dict[str, Any]]) -> str:
+    """
+    Оформляет раздел несуществующих инструментов: имена, которые модель вызвала, но которых ей не выдавали.
+
+        run_statistics: статистика агентов прогона.
+
+    Возвращает: Таблицу markdown или строку, что таких вызовов нет; отдельной строкой — сколько агентов
+        без списка выданных инструментов.
+    """
+    unknown = unknown_tool_calls(run_statistics = run_statistics)
+    note = _missing_tool_names_note(run_statistics = run_statistics)
+    parts = []
+    if unknown:
+        lines = [
+            _table_row(cells = ["", COLUMN_TITLES["tool_calls"], "роли"]),
+            "|---|---:|---|",
+            *(
+                _table_row(cells = [name, _number(value = calls), ", ".join(roles)])
+                for name, (calls, roles) in unknown.items()
+            ),
+        ]
+        parts.append("\n".join(lines))
+    elif _has_tool_names(run_statistics = run_statistics):
+        parts.append("Вызовов несуществующих инструментов нет.")
+
+    parts.extend(note)
+
+    return "\n\n".join(parts)
+
+
+def _unused_tools_section(*, run_statistics: list[dict[str, Any]]) -> str:
+    """
+    Оформляет раздел неиспользуемых инструментов: по роли — выданные инструменты, которые никто не вызвал.
+
+        run_statistics: статистика агентов прогона.
+
+    Возвращает: Таблицу markdown или строку, что неиспользуемых нет; отдельной строкой — сколько агентов
+        без списка выданных инструментов.
+    """
+    unused = unused_tools_by_role(run_statistics = run_statistics)
+    note = _missing_tool_names_note(run_statistics = run_statistics)
+    parts = []
+    if unused:
+        lines = [
+            _table_row(cells = ["", "ни разу не вызваны"]),
+            "|---|---|",
+            *(_table_row(cells = [role, ", ".join(names)]) for role, names in unused.items()),
+        ]
+        parts.append("\n".join(lines))
+    elif _has_tool_names(run_statistics = run_statistics):
+        parts.append("Все выданные инструменты вызывались.")
+
+    parts.extend(note)
+
+    return "\n\n".join(parts)
+
+
+def _has_tool_names(*, run_statistics: list[dict[str, Any]]) -> bool:
+    """
+    Проверяет, что список выданных инструментов записан хотя бы у одного агента.
+
+        run_statistics: статистика агентов прогона.
+
+    Возвращает: True, если хотя бы у одного агента список есть.
+    """
+    return any("tool_names" in statistics for statistics in run_statistics)
+
+
+def _missing_tool_names_note(*, run_statistics: list[dict[str, Any]]) -> list[str]:
+    """
+    Собирает пометку об агентах, у которых в статистике нет списка выданных инструментов.
+
+        run_statistics: статистика агентов прогона.
+
+    Возвращает: Пометку одной строкой в списке; пустой список, если список есть у всех агентов.
+    """
+    missing_count = sum(1 for statistics in run_statistics if "tool_names" not in statistics)
+    if not missing_count:
+        return []
+
+    return [f"Список выданных инструментов не записан в статистике {missing_count} агентов: их вызовы не проверены."]
+
+
+def _calls_and_errors(*, counts: tuple[int, int]) -> str:
+    """
+    Показывает вызовы и ошибки инструмента в фазе одной ячейкой.
+
+        counts: вызовы и ошибки.
+
+    Возвращает: Ячейку вида «12 / 3».
+    """
+    calls, errors = counts
+
+    return f"{_number(value = calls)} / {_number(value = errors)}"
+
+
+def _statistics_by_role(*, run_statistics: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    """
+    Собирает статистику агентов по ролям.
+
+        run_statistics: статистика агентов прогона.
+
+    Возвращает: Статистику агентов по имени роли, в порядке первого появления роли в прогоне.
+    """
+    by_role: dict[str, list[dict[str, Any]]] = {}
+    for statistics in run_statistics:
+        by_role.setdefault(statistics["role"], []).append(statistics)
+
+    return by_role
+
+
 def _roles_table(*, run_statistics: list[dict[str, Any]]) -> str:
     """
     Оформляет таблицу ролей: модель, уровень размышления и число агентов роли.
@@ -499,10 +752,7 @@ def _roles_table(*, run_statistics: list[dict[str, Any]]) -> str:
 
     Возвращает: Таблицу markdown.
     """
-    by_role: dict[str, list[dict[str, Any]]] = {}
-    for statistics in run_statistics:
-        by_role.setdefault(statistics["role"], []).append(statistics)
-
+    by_role = _statistics_by_role(run_statistics = run_statistics)
     lines = [
         _table_row(cells = ["", "модель", "размышление", COLUMN_TITLES["agents"]]),
         "|---|---|---|---:|",

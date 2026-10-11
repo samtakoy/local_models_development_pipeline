@@ -26,6 +26,7 @@ def _statistics() -> AgentStatistics:
         model_name = "model",
         reasoning_level = "low",
         context_window = 1000,
+        tool_names = ["bash"],
     )
 
 

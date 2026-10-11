@@ -6,7 +6,7 @@ from langchain_core.messages import AIMessage, ToolMessage
 
 from codeteam.app.run_statistics import RUN_REPORT_FILE_NAME, agent_totals, load_run_statistics, max_context, \
     run_report, run_seconds, speed_by_context, sum_totals, tokens_per_second, tool_error_percent, totals_by_role, \
-    window_overflows, write_run_report
+    tool_phase_counts, unknown_tool_calls, unused_tools_by_role, window_overflows, write_run_report
 from codeteam.core.agent.statistics import REPEATED_RESULT_STOP_COUNTER, SERVER_ERROR_RETRY_COUNTER, \
     STATISTICS_FILE_SUFFIX, WORK_PHASE, AgentStatistics
 
@@ -27,6 +27,7 @@ def _write_agent(*, run_dir: Path, role_name: str, journal_name: str, input_toke
         model_name = "model",
         reasoning_level = "low",
         context_window = 1000,
+        tool_names = ["bash"],
     )
     answer = AIMessage(
         content = "",
@@ -70,6 +71,7 @@ def test_loop_to_draft_is_not_counted_as_limit(tmp_path: Path) -> None:
         model_name = "model",
         reasoning_level = "low",
         context_window = 1000,
+        tool_names = ["bash"],
     )
     statistics.record(event = {"limit_notice": {"messages": []}})
     statistics.count_in_phase(name = REPEATED_RESULT_STOP_COUNTER, phase = WORK_PHASE)
@@ -178,3 +180,45 @@ def test_window_overflows_count_input_and_output() -> None:
 
     assert window_overflows(statistics = {"context_window": 1000, "requests": requests}) == [1000, 1015]
     assert window_overflows(statistics = {"requests": requests}) is None
+
+
+def test_tool_phase_counts_sum_agents_and_sort_by_errors() -> None:
+    """
+    Вызовы и ошибки инструмента складываются по фазам у всех агентов; инструменты идут по убыванию доли ошибок.
+    """
+    run_statistics = [
+        {"tools": {
+            "read": {"work": {"calls": 10, "errors": 1}, "warmup": {"calls": 3}},
+            "bash": {"work": {"calls": 4, "errors": 2}},
+        }},
+        {"tools": {
+            "read": {"draft": {"calls": 2, "errors": 2}},
+            "bash": {"work": {"calls": 1}},
+        }},
+    ]
+
+    counts = tool_phase_counts(run_statistics = run_statistics)
+
+    # bash: 2 ошибки из 5 вызовов; read: 3 из 15
+    assert list(counts) == ["bash", "read"]
+    assert counts["read"] == {"work": (10, 1), "warmup": (3, 0), "draft": (2, 2)}
+    assert counts["bash"] == {"work": (5, 2)}
+
+
+def test_unknown_and_unused_tools() -> None:
+    """
+    Вызов инструмента, которого нет среди выданных, — несуществующий и не входит в таблицу инструментов;
+    выданный инструмент, который не вызвал ни один агент роли, — неиспользуемый.
+    """
+    run_statistics = [
+        {"role": "developer", "tool_names": ["read", "bash", "get_advice"], "tools": {
+            "read": {"work": {"calls": 3}},
+            "todo": {"draft": {"calls": 1, "errors": 1}},
+        }},
+        {"role": "developer", "tool_names": ["read", "bash", "get_advice"], "tools": {"bash": {"work": {"calls": 2}}}},
+        {"role": "pm", "tool_names": ["read"], "tools": {"read": {"work": {"calls": 1}}}},
+    ]
+
+    assert list(tool_phase_counts(run_statistics = run_statistics)) == ["read", "bash"]
+    assert unknown_tool_calls(run_statistics = run_statistics) == {"todo": (1, ["developer"])}
+    assert unused_tools_by_role(run_statistics = run_statistics) == {"developer": ["get_advice"]}

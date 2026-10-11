@@ -39,6 +39,7 @@ def _run_steps(*, tool_func, targets: list[str], phase: str, tmp_path: Path) -> 
         model_name = "model",
         reasoning_level = "low",
         context_window = 1000,
+        tool_names = ["bash"],
     )
     config = {"configurable": {AGENT_CFG_NAME: SimpleNamespace(
         statistics = statistics,

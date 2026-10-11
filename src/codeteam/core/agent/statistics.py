@@ -85,6 +85,7 @@ class AgentStatistics:
         model_name: str,
         reasoning_level: str,
         context_window: int,
+        tool_names: list[str],
     ) -> None:
         """
         Начинает статистику запуска.
@@ -94,12 +95,14 @@ class AgentStatistics:
             model_name: имя модели агента.
             reasoning_level: уровень размышления модели агента.
             context_window: окно модели, токены: вход и выход запроса вместе.
+            tool_names: имена инструментов, выданных модели агента.
         """
         self._role_name = role_name
         self._journal_name = journal_name
         self._model_name = model_name
         self._reasoning_level = reasoning_level
         self._context_window = context_window
+        self._tool_names = tool_names
         self._started_at = datetime.now()
         self._started_monotonic = time.monotonic()
         self._step_counts: Counter[str] = Counter()
@@ -184,9 +187,9 @@ class AgentStatistics:
         """
         Собирает статистику словарём.
 
-        Возвращает: Роль, журнал, модель, уровень размышления, окно модели, время, шаги по узлам, запросы к модели
-            и их сумму, инструменты по фазам, события, явные счётчики, явные счётчики по фазам, фазу черновика
-            и ошибку запуска.
+        Возвращает: Роль, журнал, модель, уровень размышления, окно модели, выданные инструменты, время, шаги
+            по узлам, запросы к модели и их сумму, инструменты по фазам, события, явные счётчики, явные счётчики
+            по фазам, фазу черновика и ошибку запуска.
         """
         now = time.monotonic()
         draft_seconds = self._draft_seconds
@@ -204,6 +207,8 @@ class AgentStatistics:
             "reasoning_level": self._reasoning_level,
             # окно модели, токены: по нему отчёт находит переполнение
             "context_window": self._context_window,
+            # инструменты, выданные модели: по ним отчёт находит неиспользуемые и несуществующие инструменты
+            "tool_names": self._tool_names,
             # время старта агента
             "started_at": self._started_at.isoformat(timespec = "seconds"),
             # время работы агента вместе с его помощниками, секунды

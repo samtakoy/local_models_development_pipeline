@@ -90,6 +90,7 @@ def test_statistics_of_agent_run() -> None:
         model_name = "model",
         reasoning_level = "low",
         context_window = 1000,
+        tool_names = ["bash"],
     )
 
     _record_run(statistics = statistics)
@@ -120,6 +121,7 @@ def test_counters_error_and_file(tmp_path: Path) -> None:
         model_name = "model",
         reasoning_level = "low",
         context_window = 1000,
+        tool_names = ["bash"],
     )
     statistics.count(name = "server_error_retries")
     statistics.count(name = "server_error_retries")
@@ -190,6 +192,7 @@ def test_server_error_and_unfinished_answer_retries_are_counted(tmp_path: Path) 
         model_name = "model",
         reasoning_level = "low",
         context_window = 1000,
+        tool_names = ["bash"],
     )
     model = FlakyModel(answers = [
         ResponseError("сервер занят"),
@@ -215,6 +218,7 @@ def test_step_check_remark_is_counted(tmp_path: Path) -> None:
         model_name = "model",
         reasoning_level = "low",
         context_window = 1000,
+        tool_names = ["bash"],
     )
     noop = StructuredTool.from_function(func = lambda: "ок", name = "noop", description = "ничего")
     # узел инструментов langgraph работает только внутри графа

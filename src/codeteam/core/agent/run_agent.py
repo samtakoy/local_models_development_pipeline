@@ -205,6 +205,7 @@ def run_agent(
         model_name = role.model_name,
         reasoning_level = role.reasoning_level.value,
         context_window = settings.agent_ctx_window,
+        tool_names = [tool.name for tool in tools],
     )
 
     # Сегодняшняя дата: одна на всю работу агента
