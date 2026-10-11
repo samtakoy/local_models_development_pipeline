@@ -279,7 +279,9 @@ def make_tools_node(*, tools: list[BaseTool], phase: str) -> Callable:
         step_context = StepContext(
             project_dir = cfg.project_dir,
             private_dir = private_dir,
+            phase = phase,
             changed_files = _changed_files(before = before, after = _private_dir_snapshot(private_dir = private_dir)),
+            refusals = cfg.path_refusals.take(),
         )
         remarks = [remark for hook in cfg.step_hooks if (remark := hook(step_context)) is not None]
         for _ in remarks:

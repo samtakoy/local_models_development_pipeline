@@ -7,7 +7,7 @@ from codeteam.common.shell import ShellProcesses
 from codeteam.core.agent.answer_checks import AnswerCheck
 from codeteam.core.agent.statistics import AgentStatistics
 from codeteam.core.agent.step_hooks import StepHook
-from codeteam.core.tools.files import SeenFiles
+from codeteam.core.tools.files import PathRefusals, SeenFiles
 
 
 @dataclass(frozen = True)
@@ -30,7 +30,7 @@ class AgentConfig:
     reinit_notice: str
     # ответ агенту, который сдал работу с пустым черновиком
     empty_draft_notice: str
-    # хуки шага инструментов: замечания к изменённым файлам личной папки и к проекту
+    # хуки шага инструментов: замечания к изменённым файлам личной папки, к отказам по пути и к проекту
     step_hooks: tuple[StepHook, ...]
     # проверки сдачи роли: при DONE замечания к черновику, после которых агент продолжает работу
     answer_checks: tuple[AnswerCheck, ...]
@@ -40,6 +40,8 @@ class AgentConfig:
     relative_private_dir: Path
     # файлы, которые видел агент; общие с файловыми инструментами, забываются при сбросе истории
     seen_files: SeenFiles
+    # отказы файловых инструментов по пути за шаг; общие с файловыми инструментами, забираются после шага
+    path_refusals: PathRefusals
     # фоновые процессы команд агента; общие с инструментами оболочки, снимаются при уведомлении о лимите
     # и при сбросе истории
     shell_processes: ShellProcesses

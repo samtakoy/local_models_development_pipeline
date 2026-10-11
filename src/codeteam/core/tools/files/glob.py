@@ -16,6 +16,7 @@ from codeteam.core.tools.files.glob_prompts import (
     GLOB_PATTERN_DESCRIPTION,
 )
 from codeteam.core.tools.files._internal._paths import compile_path_mask, resolve_visible_path
+from codeteam.core.tools.files.refusals import PathRefusals
 
 # Имя инструмента поиска файлов по маске.
 GLOB_TOOL_NAME = "glob"
@@ -33,12 +34,13 @@ class GlobArguments(BaseModel):
     path: str | None = Field(default = None, description = GLOB_PATH_DESCRIPTION)
 
 
-def build_glob_tool(*, workspace: Workspace, ignore_rules: IgnoreRules) -> BaseTool:
+def build_glob_tool(*, workspace: Workspace, ignore_rules: IgnoreRules, refusals: PathRefusals) -> BaseTool:
     """
     Собирает инструмент glob для рабочего места вызова.
 
         workspace: рабочее место вызова.
         ignore_rules: правила пропуска файлов проекта.
+        refusals: отказы по пути за шаг агента.
 
     Возвращает: Инструмент glob.
     """
@@ -55,6 +57,7 @@ def build_glob_tool(*, workspace: Workspace, ignore_rules: IgnoreRules) -> BaseT
         search_dir = resolve_visible_path(
             workspace = workspace,
             ignore_rules = ignore_rules,
+            refusals = refusals,
             path = "." if path is None else path,
         )
         if not search_dir.is_dir():

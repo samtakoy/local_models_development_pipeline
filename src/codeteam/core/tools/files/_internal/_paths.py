@@ -9,17 +9,25 @@ from pathspec import GitIgnoreSpec
 from codeteam.common.files import IgnoreRules
 from codeteam.core.agent.workspace import PathOutsideWorkspace, Workspace
 from codeteam.core.tools.files.common_prompts import FILE_NOT_FOUND_ERROR, HIDDEN_PATH_ERROR, PATH_ACCESS_ERROR
+from codeteam.core.tools.files.refusals import PathRefusal, PathRefusals
 
 # Группа в фигурных скобках без вложенных скобок внутри.
 _BRACE_GROUP_PATTERN = re.compile(r"\{([^{}]*)\}")
 
 
-def resolve_visible_path(*, workspace: Workspace, ignore_rules: IgnoreRules, path: str) -> Path:
+def resolve_visible_path(
+    *,
+    workspace: Workspace,
+    ignore_rules: IgnoreRules,
+    refusals: PathRefusals,
+    path: str,
+) -> Path:
     """
     Переводит путь от агента в абсолютный и проверяет, что агенту можно его видеть.
 
         workspace: рабочее место вызова.
         ignore_rules: правила пропуска файлов проекта.
+        refusals: отказы по пути за шаг агента.
         path: путь от агента, абсолютный или относительно папки проекта.
 
     Возвращает: Существующий путь внутри папок чтения, не закрытый правилами.
@@ -28,7 +36,11 @@ def resolve_visible_path(*, workspace: Workspace, ignore_rules: IgnoreRules, pat
     try:
         resolved = workspace.resolve_readable(path = path)
     except PathOutsideWorkspace as error:
-        raise ToolException(PATH_ACCESS_ERROR.format(error = error)) from error
+        raise path_refusal_error(
+            error = error,
+            refusal = PathRefusal(path = path, is_write = False),
+            refusals = refusals,
+        ) from error
 
     refuse_hidden_path(workspace = workspace, ignore_rules = ignore_rules, path = resolved)
     if not resolved.exists():
@@ -36,6 +48,26 @@ def resolve_visible_path(*, workspace: Workspace, ignore_rules: IgnoreRules, pat
         raise ToolException(FILE_NOT_FOUND_ERROR.format(shown_path = shown_path))
 
     return resolved
+
+
+def path_refusal_error(
+    *,
+    error: PathOutsideWorkspace,
+    refusal: PathRefusal,
+    refusals: PathRefusals,
+) -> ToolException:
+    """
+    Запоминает отказ по пути и собирает ошибку для агента.
+
+        error: отказ рабочего места.
+        refusal: отказ по пути.
+        refusals: отказы по пути за шаг агента.
+
+    Возвращает: Ошибку с текстом отказа.
+    """
+    refusals.add(refusal = refusal)
+
+    return ToolException(PATH_ACCESS_ERROR.format(error = error))
 
 
 def refuse_hidden_path(*, workspace: Workspace, ignore_rules: IgnoreRules, path: Path) -> None:

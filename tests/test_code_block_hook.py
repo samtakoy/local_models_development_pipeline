@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from codeteam.core.agent.prompts import CODE_BLOCK_LINES
+from codeteam.core.agent.statistics import WORK_PHASE
 from codeteam.core.agent.step_hooks import StepContext, code_block_hook
 
 # Предел строк в блоке для теста.
@@ -29,7 +30,15 @@ def _remark(*, private_dir: Path, text: str) -> str | None:
     plan_file.write_text(text, encoding = "utf-8")
     hook = code_block_hook(folder = FOLDER, max_lines = MAX_LINES, remark = REMARK, skip_file_names = ())
 
-    return hook(StepContext(project_dir = private_dir, private_dir = private_dir, changed_files = (plan_file,)))
+    context = StepContext(
+        project_dir = private_dir,
+        private_dir = private_dir,
+        phase = WORK_PHASE,
+        changed_files = (plan_file,),
+        refusals = (),
+    )
+
+    return hook(context)
 
 
 def _block(*, language: str, line_count: int) -> list[str]:

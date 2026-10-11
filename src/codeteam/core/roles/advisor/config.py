@@ -21,7 +21,6 @@ ADVISOR_ROLE = RoleSettings(
     answer_checks = (required_files_check(file_names = (ADVICE_FILE_NAME,)),),
     answer_file_names = (ADVICE_FILE_NAME,),
     only_answer_files = True,
-    work_refusal_hints = (),
     helper_tools = (),
     mcp_servers = (),
 )

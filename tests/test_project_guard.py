@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from codeteam.common.git import commit_all, init_repository, list_uncommitted_changes
+from codeteam.core.agent.statistics import WORK_PHASE
 from codeteam.core.agent.step_hooks import StepContext
 from codeteam.core.roles.common import tracked_changes_check
 
@@ -47,7 +48,13 @@ def _context(*, project_dir: Path) -> StepContext:
 
     Возвращает: Шаг инструментов.
     """
-    return StepContext(project_dir = project_dir, private_dir = project_dir / ".ct-work" / "agent", changed_files = ())
+    return StepContext(
+        project_dir = project_dir,
+        private_dir = project_dir / ".ct-work" / "agent",
+        phase = WORK_PHASE,
+        changed_files = (),
+        refusals = (),
+    )
 
 
 def test_clean_project_gives_no_remark(project_dir: Path) -> None:

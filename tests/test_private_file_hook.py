@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from codeteam.core.agent.statistics import WORK_PHASE
 from codeteam.core.agent.step_hooks import StepContext, private_file_hook
 
 # Личная папка агента в тестах относительно папки проекта.
@@ -31,7 +32,9 @@ def _remark(*, project_dir: Path, only_answer_files: bool, file_path: str) -> st
     context = StepContext(
         project_dir = project_dir,
         private_dir = project_dir / PRIVATE_DIR,
+        phase = WORK_PHASE,
         changed_files = (project_dir / PRIVATE_DIR / file_path,),
+        refusals = (),
     )
 
     return hook(context)

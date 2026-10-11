@@ -14,6 +14,7 @@ from langgraph.graph import StateGraph
 
 from codeteam.core.agent.graph import AGENT_CFG_NAME, AgentState, agent_node, make_tools_node
 from codeteam.core.agent.statistics import WORK_PHASE, AgentStatistics
+from codeteam.core.tools.files import PathRefusals
 
 # Длительности ответа модели в наносекундах: весь ответ и вывод токенов.
 TOTAL_DURATION = 2_000_000_000
@@ -204,6 +205,7 @@ def _graph_config(*, statistics: AgentStatistics, model: FlakyModel, tmp_path: P
         step_hooks = step_hooks,
         project_dir = tmp_path,
         relative_private_dir = Path(".ct-work") / "developer_r1",
+        path_refusals = PathRefusals(),
     )
 
     return {"configurable": {AGENT_CFG_NAME: settings}}

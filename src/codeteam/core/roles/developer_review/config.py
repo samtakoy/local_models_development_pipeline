@@ -29,7 +29,6 @@ DEVELOPER_REVIEW_ROLE = RoleSettings(
     answer_checks = (check_verdict_file, clean_project_check),
     answer_file_names = (VERDICT_FILE_NAME,),
     only_answer_files = False,
-    work_refusal_hints = (),
     helper_tools = (build_check_in_browser_tool,),
     mcp_servers = (),
 )

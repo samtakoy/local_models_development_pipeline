@@ -14,14 +14,14 @@ from codeteam.core.agent.graph import create_agent_graph, AgentState, AGENT_CFG_
 from codeteam.core.agent.journal import AgentJournal
 from codeteam.core.agent.statistics import STATISTICS_FILE_SUFFIX, AgentStatistics
 from codeteam.core.agent.role import AgentRole
-from codeteam.core.agent.prompts import DRAFT_PHASE_HINT, DRAFT_PHASE_BASH_REFUSAL, AGENT_SYSTEM_INSTRUCTIONS, LIMIT_NOTICE, \
+from codeteam.core.agent.prompts import DRAFT_PHASE_BASH_REFUSAL, AGENT_SYSTEM_INSTRUCTIONS, LIMIT_NOTICE, \
     DRAFT_PHASE_HELPER_TOOL_REFUSAL, DRAFT_PHASE_START_SERVICE_REFUSAL, REINIT_NOTICE, EMPTY_DRAFT_NOTICE, PROJECT_RULES_FILE_NAME, PROJECT_RULES_INSTRUCTIONS, PROJECT_DOCS_DIR_NAME, \
     TODAY_INSTRUCTIONS, CODE_NAME_INSTRUCTIONS
-from codeteam.core.agent.step_hooks import private_file_hook
+from codeteam.core.agent.step_hooks import draft_phase_hint_hook, private_file_hook
 from codeteam.core.agent.workspace import CONTEXT_FILE_NAME, PRIVATE_ROOT, Workspace, context_path, draft_dir, \
     helpers_dir
 from codeteam.core.tools.files import DELETE_TOOL_NAME, EDIT_TOOL_NAME, READ_TOOL_NAME, WRITE_TOOL_NAME, \
-    file_tool_builders, SeenFiles
+    file_tool_builders, PathRefusals, SeenFiles
 from codeteam.common.shell import CommandHost, ShellProcesses
 from codeteam.core.tools.disabled import build_disabled_tool
 from codeteam.core.tools.shell import BASH_TOOL_NAME, START_SERVICE_TOOL_NAME, STOP_PROCESS_TOOL_NAME, \
@@ -99,6 +99,8 @@ def run_agent(
 
     # Просмотренный файлы - одинаковые для фазы работы и фазы черновика
     seen_files = SeenFiles()
+    # Отказы файловых инструментов по пути за шаг - одни для фазы работы и фазы черновика
+    path_refusals = PathRefusals()
 
     _check_required_tools(tool_names = role.tool_names)
 
@@ -109,7 +111,6 @@ def run_agent(
         input_dirs = input_dirs,
         readable_dirs = (private_dir, helpers_dir(private_dir = private_dir), *input_dirs, *extra_readable_dirs),
         writable_dirs = (private_dir, *extra_writable_dirs),
-        refusal_hints = role.work_refusal_hints,
     )
     # Рабочее место команд bash и start_service: папки записи фазы работы и папки, открытые только командам
     command_workspace = replace(workspace, writable_dirs = (*workspace.writable_dirs, *extra_command_writable_dirs))
@@ -119,7 +120,7 @@ def run_agent(
     stop_process_tool = build_stop_process_tool(processes = shell_processes)
     tools = _build_tools(
         builders = {
-            **file_tool_builders(workspace = workspace, seen_files = seen_files),
+            **file_tool_builders(workspace = workspace, seen_files = seen_files, refusals = path_refusals),
             BASH_TOOL_NAME: lambda: build_bash_tool(
                 workspace = command_workspace, processes = shell_processes, host = command_host
             ),
@@ -139,17 +140,11 @@ def run_agent(
         input_dirs = (),
         readable_dirs = (private_dir, helpers_dir(private_dir = private_dir)),
         writable_dirs = (private_dir,),
-        refusal_hints = (
-            DRAFT_PHASE_HINT.format(
-                private_dir = relative_private_dir,
-                context_file_path = CONTEXT_FILE_NAME
-            ),
-        ),
     )
     # тот же набор инструментов, но с другими ограничениями
     draft_tools = _build_tools(
         builders = {
-            **file_tool_builders(workspace = draft_workspace, seen_files = seen_files),
+            **file_tool_builders(workspace = draft_workspace, seen_files = seen_files, refusals = path_refusals),
             BASH_TOOL_NAME: lambda: build_disabled_bash_tool(
                 refusal = DRAFT_PHASE_BASH_REFUSAL.format(
                     draft_dir = draft_dir(private_dir = relative_private_dir),
@@ -240,18 +235,21 @@ def run_agent(
                 limit_notice = limit_notice,
                 reinit_notice = reinit_notice,
                 empty_draft_notice = empty_draft_notice,
-                # правила мест и имён файлов личной папки общие для всех ролей, к ним добавляются хуки роли
+                # общие хуки всех ролей: места и имена файлов личной папки, подсказка к отказам по пути в фазе
+                # черновика; к ним добавляются хуки роли
                 step_hooks = (
                     private_file_hook(
                         answer_file_names = role.answer_file_names,
                         only_answer_files = role.only_answer_files,
                     ),
+                    draft_phase_hint_hook,
                     *role.step_hooks,
                 ),
                 answer_checks = role.answer_checks,
                 relative_private_dir = relative_private_dir,
                 project_dir = project_dir,
                 seen_files = seen_files,
+                path_refusals = path_refusals,
                 shell_processes = shell_processes,
                 statistics = statistics,
             )

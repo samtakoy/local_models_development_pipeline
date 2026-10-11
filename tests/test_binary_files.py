@@ -7,7 +7,7 @@ from langchain_core.tools import BaseTool
 
 from codeteam.common.files import decode_text
 from codeteam.core.agent.workspace import Workspace
-from codeteam.core.tools.files import SeenFiles, build_file_tools
+from codeteam.core.tools.files import PathRefusals, SeenFiles, build_file_tools
 from codeteam.core.tools.files.common_prompts import NOT_TEXT_REFUSAL
 
 # Файл с нулевым байтом: в кодировке utf-8 он допустим, но по правилу он двоичный.
@@ -37,10 +37,9 @@ def file_tools(tmp_path: Path, seen_files: SeenFiles) -> dict[str, BaseTool]:
         input_dirs = (),
         readable_dirs = (tmp_path,),
         writable_dirs = (tmp_path,),
-        refusal_hints = (),
     )
 
-    return {tool.name: tool for tool in build_file_tools(workspace = workspace, seen_files = seen_files)}
+    return {tool.name: tool for tool in build_file_tools(workspace = workspace, seen_files = seen_files, refusals = PathRefusals())}
 
 
 @pytest.mark.parametrize(

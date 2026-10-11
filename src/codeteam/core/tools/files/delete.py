@@ -7,9 +7,10 @@ from pydantic import BaseModel, Field
 
 from codeteam.common.files import IgnoreRules
 from codeteam.core.agent.workspace import PathOutsideWorkspace, Workspace
-from codeteam.core.tools.files.common_prompts import FILE_NOT_FOUND_ERROR, FILE_PATH_DESCRIPTION, PATH_ACCESS_ERROR
+from codeteam.core.tools.files.common_prompts import FILE_NOT_FOUND_ERROR, FILE_PATH_DESCRIPTION
 from codeteam.core.tools.files.delete_prompts import DELETE_DESCRIPTION, DELETE_DIRECTORY_ERROR, DELETE_RESULT
-from codeteam.core.tools.files._internal._paths import refuse_hidden_path
+from codeteam.core.tools.files._internal._paths import path_refusal_error, refuse_hidden_path
+from codeteam.core.tools.files.refusals import PathRefusal, PathRefusals
 
 # Имя инструмента удаления файла.
 DELETE_TOOL_NAME = "delete"
@@ -23,12 +24,13 @@ class DeleteArguments(BaseModel):
     file_path: str = Field(description = FILE_PATH_DESCRIPTION)
 
 
-def build_delete_tool(*, workspace: Workspace, ignore_rules: IgnoreRules) -> BaseTool:
+def build_delete_tool(*, workspace: Workspace, ignore_rules: IgnoreRules, refusals: PathRefusals) -> BaseTool:
     """
     Собирает инструмент delete для рабочего места вызова.
 
         workspace: рабочее место вызова.
         ignore_rules: правила пропуска файлов проекта.
+        refusals: отказы по пути за шаг агента.
 
     Возвращает: Инструмент delete.
     """
@@ -44,7 +46,11 @@ def build_delete_tool(*, workspace: Workspace, ignore_rules: IgnoreRules) -> Bas
         try:
             path = workspace.resolve_writable(path = file_path)
         except PathOutsideWorkspace as error:
-            raise ToolException(PATH_ACCESS_ERROR.format(error = error)) from error
+            raise path_refusal_error(
+                error = error,
+                refusal = PathRefusal(path = file_path, is_write = True),
+                refusals = refusals,
+            ) from error
 
         refuse_hidden_path(workspace = workspace, ignore_rules = ignore_rules, path = path)
 

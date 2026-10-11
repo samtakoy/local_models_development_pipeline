@@ -22,6 +22,7 @@ from codeteam.core.tools.files.grep_prompts import (
     GREP_PATTERN_ERROR,
 )
 from codeteam.core.tools.files._internal._paths import compile_path_mask, resolve_visible_path
+from codeteam.core.tools.files.refusals import PathRefusals
 
 # Имя инструмента поиска текста.
 GREP_TOOL_NAME = "grep"
@@ -58,12 +59,13 @@ class _LineMatch:
     text: str
 
 
-def build_grep_tool(*, workspace: Workspace, ignore_rules: IgnoreRules) -> BaseTool:
+def build_grep_tool(*, workspace: Workspace, ignore_rules: IgnoreRules, refusals: PathRefusals) -> BaseTool:
     """
     Собирает инструмент grep для рабочего места вызова.
 
         workspace: рабочее место вызова.
         ignore_rules: правила пропуска файлов проекта.
+        refusals: отказы по пути за шаг агента.
 
     Возвращает: Инструмент grep.
     """
@@ -86,6 +88,7 @@ def build_grep_tool(*, workspace: Workspace, ignore_rules: IgnoreRules) -> BaseT
         search_path = resolve_visible_path(
             workspace = workspace,
             ignore_rules = ignore_rules,
+            refusals = refusals,
             path = "." if path is None else path,
         )
         files = _searched_files(ignore_rules = ignore_rules, search_path = search_path, include = include)

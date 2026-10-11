@@ -8,7 +8,7 @@ from langchain_core.tools import BaseTool
 from codeteam.common.files import FileKind, FileStats, file_stats
 from codeteam.common.files.text_lines import FILE_STATS_READ_LIMIT_BYTES
 from codeteam.core.agent.workspace import Workspace
-from codeteam.core.tools.files import READ_TOOL_NAME, SeenFiles, build_file_tools
+from codeteam.core.tools.files import READ_TOOL_NAME, PathRefusals, SeenFiles, build_file_tools
 
 
 @pytest.fixture
@@ -24,9 +24,8 @@ def read_tool(tmp_path: Path) -> BaseTool:
         input_dirs = (),
         readable_dirs = (tmp_path,),
         writable_dirs = (tmp_path,),
-        refusal_hints = (),
     )
-    tools = build_file_tools(workspace = workspace, seen_files = SeenFiles())
+    tools = build_file_tools(workspace = workspace, seen_files = SeenFiles(), refusals = PathRefusals())
 
     return next(tool for tool in tools if tool.name == READ_TOOL_NAME)
 

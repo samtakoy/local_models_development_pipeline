@@ -48,8 +48,6 @@ class RoleSettings:
         answer_checks: проверки сдачи: замечания к черновику, когда агент отвечает DONE.
         answer_file_names: заранее известные имена файлов ответа роли в черновике.
         only_answer_files: в черновике роли разрешены только файлы ответа.
-        work_refusal_hints: пояснения к отказу по пути в фазе работы: одно, выбранное по пути;
-            пустой кортеж — без пояснения.
         helper_tools: сборщики инструментов вызова другого агента, например советника.
         mcp_servers: сборщики серверов MCP, чьи инструменты получает агент; сессии открыты, пока агент работает.
     """
@@ -64,6 +62,5 @@ class RoleSettings:
     answer_checks: tuple[AnswerCheck, ...]
     answer_file_names: tuple[str, ...]
     only_answer_files: bool
-    work_refusal_hints: tuple[str, ...]
     helper_tools: tuple[HelperToolBuilder, ...]
     mcp_servers: tuple[McpServerBuilder, ...]

@@ -61,7 +61,6 @@ def agent_shell(tmp_path: Path) -> Iterator[AgentShell]:
         input_dirs = (),
         readable_dirs = (tmp_path,),
         writable_dirs = (tmp_path,),
-        refusal_hints = (),
     )
     processes = ShellProcesses()
     host = CommandHost(write_roots = workspace.writable_dirs, processes = processes)

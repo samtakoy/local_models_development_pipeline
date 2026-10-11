@@ -16,6 +16,7 @@ from codeteam.core.agent.graph import AGENT_CFG_NAME, AgentState, make_tools_nod
 from codeteam.core.agent.statistics import WORK_PHASE, AgentStatistics
 from codeteam.core.agent.step_hooks import StepContext, join_remarks
 from codeteam.core.roles.common import tracked_changes_check
+from codeteam.core.tools.files import PathRefusals
 
 # Личная папка агента относительно папки проекта.
 RELATIVE_PRIVATE_DIR = Path(".ct-work") / "developer_r1"
@@ -149,6 +150,7 @@ def _run_step(*, project_dir: Path, tools: list[BaseTool]) -> list[ToolMessage]:
         step_hooks = (_file_hook, tracked_changes_check(remark = PROJECT_REMARK)),
         project_dir = project_dir,
         relative_private_dir = RELATIVE_PRIVATE_DIR,
+        path_refusals = PathRefusals(),
     )
     # узел инструментов langgraph работает только внутри графа
     workflow = StateGraph(AgentState)

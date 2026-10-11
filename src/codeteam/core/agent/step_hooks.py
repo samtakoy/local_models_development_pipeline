@@ -1,16 +1,20 @@
-"""Хуки шага инструментов: после всех вызовов шага смотрят на изменённые файлы личной папки агента или на проект
-и дают агенту замечания."""
+"""Хуки шага инструментов: после всех вызовов шага смотрят на изменённые файлы личной папки агента, на отказы
+по пути или на проект и дают агенту замечания."""
 
+import random
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from codeteam.core.agent.prompts import ANSWER_LIKE_FILE_REMARK, CODE_BLOCK_LINES, DUPLICATE_SECTION_NUMBER_REMARK, \
-    LATIN_SECTION_NAME_REMARK, MISPLACED_ANSWER_FILE_REMARK, MISPLACED_CONTEXT_FILE_REMARK, MISPLACED_CONTEXT_REMARK, \
-    NOT_DRAFT_SECTION_REMARK, ONLY_ANSWER_FILES_REMARK, STRAY_PRIVATE_FILE_REMARK
+from codeteam.core.agent.prompts import ANSWER_LIKE_FILE_REMARK, CODE_BLOCK_LINES, DRAFT_PHASE_HINT, \
+    DUPLICATE_SECTION_NUMBER_REMARK, LATIN_SECTION_NAME_REMARK, MISPLACED_ANSWER_FILE_REMARK, \
+    MISPLACED_CONTEXT_FILE_REMARK, MISPLACED_CONTEXT_REMARK, NOT_DRAFT_SECTION_REMARK, ONLY_ANSWER_FILES_REMARK, \
+    STRAY_PRIVATE_FILE_REMARK
+from codeteam.core.agent.statistics import DRAFT_PHASE
 from codeteam.core.agent.workspace import CONTEXT_FILE_NAME, DRAFT_SECTION_PATTERN, LATIN_DRAFT_SECTION_PATTERN, \
     context_path, draft_dir
+from codeteam.core.tools.files import PathRefusal
 
 
 @dataclass(frozen = True)
@@ -20,12 +24,16 @@ class StepContext:
 
         project_dir: папка проекта.
         private_dir: личная папка агента.
+        phase: фаза работы агента, в которой сделан шаг.
         changed_files: файлы личной папки, которые появились или изменились за шаг, по порядку путей.
+        refusals: отказы файловых инструментов по пути за шаг.
     """
 
     project_dir: Path
     private_dir: Path
+    phase: str
     changed_files: tuple[Path, ...]
+    refusals: tuple[PathRefusal, ...]
 
 
 # Хук шага: шаг инструментов → замечание агенту или None.
@@ -97,6 +105,44 @@ def join_remarks(*, remarks: list[str]) -> str | None:
     Возвращает: Замечания через пустую строку; None, если замечаний нет.
     """
     return "\n\n".join(remarks) if remarks else None
+
+
+def refusal_hint_hook(*, phase: str, hints: tuple[str, ...]) -> StepHook:
+    """
+    Собирает хук шага: если в шаге фазы phase был отказ файлового инструмента по пути — одна подсказка из набора.
+
+        phase: фаза работы агента, в которой хук даёт подсказку.
+        hints: подсказки агенту.
+
+    Возвращает: Хук шага.
+    """
+
+    def hook(context: StepContext) -> str | None:
+        """Даёт подсказку к отказам по пути за шаг."""
+        if context.phase != phase or not context.refusals:
+            return None
+
+        return random.choice(hints)
+
+    return hook
+
+
+def draft_phase_hint_hook(context: StepContext) -> str | None:
+    """
+    Хук шага: в шаге фазы черновика был отказ файлового инструмента по пути — подсказка о том, что сейчас
+    разрешено.
+
+        context: шаг инструментов.
+
+    Возвращает: Подсказку или None.
+    """
+    if context.phase != DRAFT_PHASE or not context.refusals:
+        return None
+
+    return DRAFT_PHASE_HINT.format(
+        private_dir = context.private_dir.relative_to(context.project_dir).as_posix(),
+        context_file_path = CONTEXT_FILE_NAME,
+    )
 
 
 def private_file_hook(*, answer_file_names: tuple[str, ...], only_answer_files: bool) -> StepHook:

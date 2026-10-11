@@ -19,7 +19,6 @@ DEVELOPER_ROLE = RoleSettings(
     answer_checks = (),
     answer_file_names = (),
     only_answer_files = False,
-    work_refusal_hints = (),
     helper_tools = (build_get_advice_tool, build_check_in_browser_tool),
     mcp_servers = (),
 )

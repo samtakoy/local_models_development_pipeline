@@ -40,6 +40,7 @@ from codeteam.core.tools.files.read_prompts import (
 from codeteam.core.tools.files._internal._paths import resolve_visible_path
 from codeteam.core.tools.files._internal._seen_files import SeenFiles
 from codeteam.core.tools.files._internal.format import format_header, parse_header
+from codeteam.core.tools.files.refusals import PathRefusals
 
 # Имя инструмента чтения.
 READ_TOOL_NAME = "read"
@@ -91,13 +92,20 @@ class ReadArguments(BaseModel):
     limit: int | None = Field(default = None, description = READ_LIMIT_DESCRIPTION.format(line_limit = READ_LINE_LIMIT))
 
 
-def build_read_tool(*, workspace: Workspace, seen_files: SeenFiles, ignore_rules: IgnoreRules) -> BaseTool:
+def build_read_tool(
+    *,
+    workspace: Workspace,
+    seen_files: SeenFiles,
+    ignore_rules: IgnoreRules,
+    refusals: PathRefusals,
+) -> BaseTool:
     """
     Собирает инструмент read для рабочего места вызова.
 
         workspace: рабочее место вызова.
         seen_files: файлы, которые видел вызов, общие с write и edit.
         ignore_rules: правила пропуска файлов проекта.
+        refusals: отказы по пути за шаг агента.
 
     Возвращает: Инструмент read.
     """
@@ -112,7 +120,12 @@ def build_read_tool(*, workspace: Workspace, seen_files: SeenFiles, ignore_rules
 
         Возвращает: Заголовок файла и строки с номерами. Ошибку для агента поднимает ToolException.
         """
-        path = resolve_visible_path(workspace = workspace, ignore_rules = ignore_rules, path = file_path)
+        path = resolve_visible_path(
+            workspace = workspace,
+            ignore_rules = ignore_rules,
+            refusals = refusals,
+            path = file_path,
+        )
 
         return _read(
             workspace = workspace,

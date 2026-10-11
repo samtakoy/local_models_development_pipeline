@@ -49,7 +49,6 @@ def workspace(tmp_path: Path) -> Workspace:
         input_dirs = (),
         readable_dirs = (tmp_path,),
         writable_dirs = (tmp_path,),
-        refusal_hints = (),
     )
 
 

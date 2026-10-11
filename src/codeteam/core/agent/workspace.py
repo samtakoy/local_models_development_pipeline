@@ -1,7 +1,6 @@
 """Рабочее место вызова агента: папки, доступные для чтения и записи, и закрытые имена."""
 
 import re
-import zlib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -84,8 +83,6 @@ class Workspace:
             личных папок.
         readable_dirs: папки, где вызову разрешено чтение.
         writable_dirs: папки, где вызову разрешены запись и правка.
-        refusal_hints: пояснения к отказу по пути для агента: к отказу дописывается одно, выбранное по пути;
-            пустой кортеж — без пояснения.
     """
 
     project_dir: Path
@@ -93,7 +90,6 @@ class Workspace:
     input_dirs: tuple[Path, ...]
     readable_dirs: tuple[Path, ...]
     writable_dirs: tuple[Path, ...]
-    refusal_hints: tuple[str, ...]
 
     @property
     def draft_dir(self) -> Path:
@@ -121,9 +117,7 @@ class Workspace:
         resolved = self._resolve(path = path)
         if not _is_inside_any(path = resolved, roots = self.readable_dirs):
             shown = self.show_folders(folders = self.readable_dirs)
-            raise PathOutsideWorkspace(
-                self._with_hint(message = f"путь {path} вне доступных папок: {shown}", path = path)
-            )
+            raise PathOutsideWorkspace(f"путь {path} вне доступных папок: {shown}")
 
         return resolved
 
@@ -138,9 +132,7 @@ class Workspace:
         resolved = self._resolve(path = path)
         if not _is_inside_any(path = resolved, roots = self.writable_dirs):
             shown = self.show_folders(folders = self.writable_dirs)
-            raise PathOutsideWorkspace(
-                self._with_hint(message = f"запись в {path} запрещена, разрешены папки: {shown}", path = path)
-            )
+            raise PathOutsideWorkspace(f"запись в {path} запрещена, разрешены папки: {shown}")
 
         return resolved
 
@@ -182,23 +174,6 @@ class Workspace:
             candidate = self.project_dir / candidate
 
         return candidate.resolve()
-
-    def _with_hint(self, *, message: str, path: str) -> str:
-        """
-        Добавляет к тексту отказа пояснение рабочего места: для одного и того же пути всегда одно и то же,
-        поэтому повтор отказа остаётся тем же результатом для проверки повторов.
-
-            message: текст отказа.
-            path: путь от агента, по которому выбирается пояснение.
-
-        Возвращает: Текст отказа с пояснением или без него.
-        """
-        if not self.refusal_hints:
-            return message
-
-        hint = self.refusal_hints[zlib.crc32(path.encode("utf-8")) % len(self.refusal_hints)]
-
-        return f"{message}\n{hint}"
 
 
 def _is_inside_any(*, path: Path, roots: tuple[Path, ...]) -> bool:

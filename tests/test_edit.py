@@ -6,7 +6,7 @@ import pytest
 from langchain_core.tools import BaseTool
 
 from codeteam.core.agent.workspace import Workspace
-from codeteam.core.tools.files import SeenFiles, build_file_tools
+from codeteam.core.tools.files import PathRefusals, SeenFiles, build_file_tools
 from codeteam.core.tools.files.edit_prompts import (
     EMPTY_OLD_STRING_MESSAGE,
     IDENTICAL_STRINGS_MESSAGE,
@@ -29,7 +29,6 @@ def workspace(tmp_path: Path) -> Workspace:
         input_dirs = (),
         readable_dirs = (tmp_path,),
         writable_dirs = (tmp_path,),
-        refusal_hints = (),
     )
 
 
@@ -42,7 +41,7 @@ def tools(workspace: Workspace) -> dict[str, BaseTool]:
 
     Возвращает: Инструменты по имени.
     """
-    return {tool.name: tool for tool in build_file_tools(workspace = workspace, seen_files = SeenFiles())}
+    return {tool.name: tool for tool in build_file_tools(workspace = workspace, seen_files = SeenFiles(), refusals = PathRefusals())}
 
 
 def _edit(*, tools: dict[str, BaseTool], old_string: str, new_string: str) -> str:
@@ -175,11 +174,10 @@ def test_edit_outside_writable_dirs(workspace: Workspace) -> None:
         input_dirs = (),
         readable_dirs = (workspace.project_dir,),
         writable_dirs = (workspace.private_dir,),
-        refusal_hints = (),
     )
     tools = {
         tool.name: tool
-        for tool in build_file_tools(workspace = read_only_workspace, seen_files = SeenFiles())
+        for tool in build_file_tools(workspace = read_only_workspace, seen_files = SeenFiles(), refusals = PathRefusals())
     }
     (workspace.project_dir / "app.py").write_text("a = 1\n")
 

@@ -13,6 +13,7 @@ from codeteam.core.tools.files.grep import GREP_TOOL_NAME, build_grep_tool
 from codeteam.core.tools.files.read import READ_TOOL_NAME, build_read_tool
 from codeteam.core.tools.files.edit import EDIT_TOOL_NAME, build_edit_tool
 from codeteam.core.tools.files.write import WRITE_TOOL_NAME, build_write_tool
+from codeteam.core.tools.files.refusals import PathRefusals
 
 # Служебные папки и файлы, которые поиск glob и grep пропускает на любой глубине;
 # запись в виде правил .gitignore.
@@ -30,7 +31,12 @@ SEARCH_SKIPPED_NAMES = (
 )
 
 
-def file_tool_builders(*, workspace: Workspace, seen_files: SeenFiles) -> dict[str, Callable[[], BaseTool]]:
+def file_tool_builders(
+    *,
+    workspace: Workspace,
+    seen_files: SeenFiles,
+    refusals: PathRefusals,
+) -> dict[str, Callable[[], BaseTool]]:
     """
     Собирает сборщики инструментов read, glob, grep, write, edit и delete для рабочего места вызова.
 
@@ -39,40 +45,56 @@ def file_tool_builders(*, workspace: Workspace, seen_files: SeenFiles) -> dict[s
 
         workspace: рабочее место вызова.
         seen_files: файлы, которые видел вызов, общие для всех наборов инструментов агента.
+        refusals: отказы по пути за шаг агента, общие для всех наборов инструментов агента.
 
     Возвращает: Сборщики инструментов по именам инструментов.
     """
     ignore_rules = _workspace_ignore_rules(workspace = workspace)
 
     return {
-        READ_TOOL_NAME: lambda: build_read_tool(workspace = workspace, seen_files = seen_files, ignore_rules = ignore_rules),
-        GLOB_TOOL_NAME: lambda: build_glob_tool(workspace = workspace, ignore_rules = ignore_rules),
-        GREP_TOOL_NAME: lambda: build_grep_tool(workspace = workspace, ignore_rules = ignore_rules),
-        WRITE_TOOL_NAME: lambda: build_write_tool(workspace = workspace, seen_files = seen_files, ignore_rules = ignore_rules),
-        EDIT_TOOL_NAME: lambda: build_edit_tool(workspace = workspace, seen_files = seen_files),
-        DELETE_TOOL_NAME: lambda: build_delete_tool(workspace = workspace, ignore_rules = ignore_rules),
+        READ_TOOL_NAME: lambda: build_read_tool(
+            workspace = workspace,
+            seen_files = seen_files,
+            ignore_rules = ignore_rules,
+            refusals = refusals,
+        ),
+        GLOB_TOOL_NAME: lambda: build_glob_tool(workspace = workspace, ignore_rules = ignore_rules, refusals = refusals),
+        GREP_TOOL_NAME: lambda: build_grep_tool(workspace = workspace, ignore_rules = ignore_rules, refusals = refusals),
+        WRITE_TOOL_NAME: lambda: build_write_tool(
+            workspace = workspace,
+            seen_files = seen_files,
+            ignore_rules = ignore_rules,
+            refusals = refusals,
+        ),
+        EDIT_TOOL_NAME: lambda: build_edit_tool(workspace = workspace, seen_files = seen_files, refusals = refusals),
+        DELETE_TOOL_NAME: lambda: build_delete_tool(
+            workspace = workspace,
+            ignore_rules = ignore_rules,
+            refusals = refusals,
+        ),
     }
 
 
-def build_file_tools(*, workspace: Workspace, seen_files: SeenFiles) -> list[BaseTool]:
+def build_file_tools(*, workspace: Workspace, seen_files: SeenFiles, refusals: PathRefusals) -> list[BaseTool]:
     """
     Собирает все файловые инструменты для рабочего места вызова.
 
         workspace: рабочее место вызова.
         seen_files: файлы, которые видел вызов, общие для всех наборов инструментов агента.
+        refusals: отказы по пути за шаг агента, общие для всех наборов инструментов агента.
 
     Возвращает: Инструменты read, glob, grep, write, edit, delete.
     """
-    builders = file_tool_builders(workspace = workspace, seen_files = seen_files)
+    builders = file_tool_builders(workspace = workspace, seen_files = seen_files, refusals = refusals)
 
     return [build() for build in builders.values()]
 
-def build_read_tools(*, workspace: Workspace) -> list[BaseTool]:
+def build_read_tools(*, workspace: Workspace, refusals: PathRefusals) -> list[BaseTool]:
     ignore_rules = _workspace_ignore_rules(workspace = workspace)
     return [
-        build_read_tool(workspace = workspace, seen_files = SeenFiles(), ignore_rules = ignore_rules),
-        build_glob_tool(workspace = workspace, ignore_rules = ignore_rules),
-        build_grep_tool(workspace = workspace, ignore_rules = ignore_rules),
+        build_read_tool(workspace = workspace, seen_files = SeenFiles(), ignore_rules = ignore_rules, refusals = refusals),
+        build_glob_tool(workspace = workspace, ignore_rules = ignore_rules, refusals = refusals),
+        build_grep_tool(workspace = workspace, ignore_rules = ignore_rules, refusals = refusals),
     ]
 
 

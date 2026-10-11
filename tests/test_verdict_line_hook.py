@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from codeteam.core.agent.statistics import WORK_PHASE
 from codeteam.core.agent.step_hooks import StepContext
 from codeteam.core.roles.common import ACCEPTED_VERDICT, REWORK_VERDICT, VERDICT_FILE_NAME
 from codeteam.core.roles.common.review import verdict_line_hook
@@ -21,7 +22,15 @@ def _reminder(*, private_dir: Path, file_name: str, text: str) -> str | None:
     draft_file.parent.mkdir(parents = True, exist_ok = True)
     draft_file.write_text(text, encoding = "utf-8")
 
-    return verdict_line_hook(StepContext(project_dir = private_dir, private_dir = private_dir, changed_files = (draft_file,)))
+    context = StepContext(
+        project_dir = private_dir,
+        private_dir = private_dir,
+        phase = WORK_PHASE,
+        changed_files = (draft_file,),
+        refusals = (),
+    )
+
+    return verdict_line_hook(context)
 
 
 def test_readable_verdict_gives_no_reminder(tmp_path: Path) -> None:

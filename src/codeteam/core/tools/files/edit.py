@@ -15,7 +15,6 @@ from codeteam.core.tools.files.common_prompts import (
     DIRECTORY_ERROR,
     FILE_PATH_DESCRIPTION,
     NOT_TEXT_REFUSAL,
-    PATH_ACCESS_ERROR,
 )
 from codeteam.core.tools.files.edit_prompts import (
     EDIT_ERROR,
@@ -31,6 +30,7 @@ from codeteam.core.tools.files.edit_prompts import (
     SIMILAR_FRAGMENT_NOTE,
     TEXT_REPLACE_EDIT_DESCRIPTION,
 )
+from codeteam.core.tools.files._internal._paths import path_refusal_error
 from codeteam.core.tools.files._internal._seen_files import SeenFiles
 from codeteam.core.tools.files.read import (
     READ_CHARACTER_LIMIT,
@@ -44,6 +44,7 @@ from codeteam.core.tools.files._internal.edit_utils import (
     replace_text,
     similar_fragment,
 )
+from codeteam.core.tools.files.refusals import PathRefusal, PathRefusals
 
 EDIT_TOOL_NAME = "edit"
 
@@ -59,12 +60,13 @@ class TextReplaceEditArguments(BaseModel):
     replace_all: bool | None = Field(default = None, description = EDIT_REPLACE_ALL_DESCRIPTION)
 
 
-def build_edit_tool(*, workspace: Workspace, seen_files: SeenFiles) -> BaseTool:
+def build_edit_tool(*, workspace: Workspace, seen_files: SeenFiles, refusals: PathRefusals) -> BaseTool:
     """
     Собирает инструмент edit с заменой текста для рабочего места вызова.
 
         workspace: рабочее место вызова.
         seen_files: файлы, которые видел вызов, общие с read и write.
+        refusals: отказы по пути за шаг агента.
 
     Возвращает: Инструмент edit.
     """
@@ -83,7 +85,11 @@ def build_edit_tool(*, workspace: Workspace, seen_files: SeenFiles) -> BaseTool:
         try:
             path = workspace.resolve_writable(path = file_path)
         except PathOutsideWorkspace as error:
-            raise ToolException(PATH_ACCESS_ERROR.format(error = error)) from error
+            raise path_refusal_error(
+                error = error,
+                refusal = PathRefusal(path = file_path, is_write = True),
+                refusals = refusals,
+            ) from error
 
         if not old_string:
             raise ToolException(EDIT_ERROR.format(message = EMPTY_OLD_STRING_MESSAGE))

@@ -17,6 +17,7 @@ from codeteam.core.agent.graph import AGENT_CFG_NAME, REPEATED_RESULTS_LIMIT, Ag
     route_after_draft, route_after_tools
 from codeteam.core.agent.node_ids import DRAFT_TOOL_NODE_ID, LIMIT_NOTICE_NODE_ID, REINIT_NODE_ID
 from codeteam.core.agent.statistics import DRAFT_PHASE, WORK_PHASE, AgentStatistics
+from codeteam.core.tools.files import PathRefusals
 
 # Ответ инструмента, который не меняется от вызова к вызову.
 SAME_RESULT = "Error: unexpected token"
@@ -46,6 +47,7 @@ def _run_steps(*, tool_func, targets: list[str], phase: str, tmp_path: Path) -> 
         step_hooks = (),
         project_dir = tmp_path,
         relative_private_dir = Path(".ct-work") / "bro_check_r1",
+        path_refusals = PathRefusals(),
     )}}
     tool = StructuredTool.from_function(func = tool_func, name = "browser_click", description = "нажать")
     # узел инструментов langgraph работает только внутри графа
