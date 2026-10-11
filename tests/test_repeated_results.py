@@ -12,6 +12,7 @@ from langchain_core.tools import StructuredTool
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 
+from codeteam.core.agent import graph as graph_module
 from codeteam.core.agent.graph import AGENT_CFG_NAME, REPEATED_RESULTS_LIMIT, AgentState, make_tools_node, \
     route_after_draft, route_after_tools
 from codeteam.core.agent.node_ids import DRAFT_TOOL_NODE_ID, LIMIT_NOTICE_NODE_ID, REINIT_NODE_ID
@@ -32,13 +33,13 @@ def _run_steps(*, tool_func, targets: list[str], phase: str, tmp_path: Path) -> 
 
     Возвращает: Состояния после каждого шага, статистику агента и конфигурацию запуска.
     """
-    statistics = AgentStatistics(role_name = "browser_checker", journal_name = "01_browser_checker_r1", model_name = "model")
+    statistics = AgentStatistics(role_name = "bro_check", journal_name = "01_bro_check_r1", model_name = "model")
     config = {"configurable": {AGENT_CFG_NAME: SimpleNamespace(
         statistics = statistics,
         step_hooks = (),
         step_checks = (),
         project_dir = tmp_path,
-        relative_private_dir = Path(".ct-work") / "browser_checker_r1",
+        relative_private_dir = Path(".ct-work") / "bro_check_r1",
     )}}
     tool = StructuredTool.from_function(func = tool_func, name = "browser_click", description = "нажать")
     # узел инструментов langgraph работает только внутри графа
@@ -114,10 +115,12 @@ def test_changing_result_gets_no_remarks(tmp_path: Path) -> None:
     assert statistics.to_dict()["phase_counters"] == {}
 
 
-def test_alternating_calls_are_repeats(tmp_path: Path) -> None:
+def test_alternating_calls_are_repeats_within_window(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """
-    Петля из двух чередующихся вызовов с теми же ответами: повтором считается шаг, который был среди недавних.
+    Окно в два шага: петля из двух чередующихся вызовов с теми же ответами считается повтором с третьего шага.
     """
+    monkeypatch.setattr(graph_module, "REPEAT_WINDOW", 2)
+
     states, _, _ = _run_steps(
         tool_func = lambda target: SAME_RESULT,
         targets = ["e13", "e15", "e13", "e15", "e13"],

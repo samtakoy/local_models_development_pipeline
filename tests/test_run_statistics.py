@@ -56,10 +56,10 @@ def test_loop_to_draft_is_not_counted_as_limit(tmp_path: Path) -> None:
     """
     Переход в фазу черновика из-за петли считается отдельно от перехода по лимиту истории.
     """
-    statistics = AgentStatistics(role_name = "browser_checker", journal_name = "01_browser_checker_r1", model_name = "model")
+    statistics = AgentStatistics(role_name = "bro_check", journal_name = "01_bro_check_r1", model_name = "model")
     statistics.record(event = {"limit_notice": {"messages": []}})
     statistics.count_in_phase(name = REPEATED_RESULT_STOP_COUNTER, phase = WORK_PHASE)
-    statistics.write(path = tmp_path / f"01_browser_checker_r1{STATISTICS_FILE_SUFFIX}")
+    statistics.write(path = tmp_path / f"01_bro_check_r1{STATISTICS_FILE_SUFFIX}")
 
     totals = agent_totals(statistics = load_run_statistics(run_dir = tmp_path)[0])
 

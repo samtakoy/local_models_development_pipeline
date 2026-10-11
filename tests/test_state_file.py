@@ -21,26 +21,26 @@ def test_full_state_round_trip(tmp_path: Path) -> None:
         stages = Stages(
             files = (Path("/p/a/100_config.md"), Path("/p/a/200_ui.md")),
             started = 1,
-            plan_dir = Path("/p/.ct-work/stage_100/senior_r1/draft"),
+            plan_dir = Path("/p/.ct-work/s100/senior_r1/draft"),
             fix_rounds = 0,
         ),
         review = Review(target = "developer", round = 1, accepted = False),
         rework = Rework(
             target = "developer",
-            remarks_dir = Path("/p/.ct-work/stage_100/developer_review_r1/draft"),
+            remarks_dir = Path("/p/.ct-work/s100/developer_review_r1/draft"),
             preserve_draft = True,
             preserve_context = False,
         ),
         web_test_dir = None,
         next_role = "developer",
-        journal_name = "07_stage_100_developer_review_r1",
+        journal_name = "07_s100_developer_review_r1",
         journal_count = 7,
     )
     path = state_file_path(run_dir = tmp_path, journal_name = state["journal_name"])
 
     save_state(state = state, commit = "abc123", path = path)
 
-    assert path.name == "07_stage_100_developer_review_r1.state.json"
+    assert path.name == "07_s100_developer_review_r1.state.json"
     assert load_state(path = path) == state
     assert json.loads(path.read_text(encoding = "utf-8"))["commit"] == "abc123"
 

@@ -84,7 +84,7 @@ def test_statistics_of_agent_run() -> None:
     """
     Шаги, запросы к модели, инструменты по фазам, события и фаза черновика считаются по событиям графа.
     """
-    statistics = AgentStatistics(role_name = "developer", journal_name = "05_stage_10_developer_r1", model_name = "model")
+    statistics = AgentStatistics(role_name = "developer", journal_name = "05_s10_developer_r1", model_name = "model")
 
     _record_run(statistics = statistics)
     result = statistics.to_dict()
@@ -108,11 +108,11 @@ def test_counters_error_and_file(tmp_path: Path) -> None:
     """
     Явные счётчики и ошибка запуска попадают в файл JSON.
     """
-    statistics = AgentStatistics(role_name = "developer", journal_name = "05_stage_10_developer_r1", model_name = "model")
+    statistics = AgentStatistics(role_name = "developer", journal_name = "05_s10_developer_r1", model_name = "model")
     statistics.count(name = "server_error_retries")
     statistics.count(name = "server_error_retries")
     statistics.fail(error = RuntimeError("модель недоступна"))
-    path = tmp_path / "run" / "05_stage_10_developer_r1.stats.json"
+    path = tmp_path / "run" / "05_s10_developer_r1.stats.json"
 
     statistics.write(path = path)
     saved = json.loads(path.read_text(encoding = "utf-8"))

@@ -31,8 +31,8 @@ def test_advisor_failure_returns_error_to_caller(tmp_path: Path, monkeypatch: py
             settings = None,
         ),
         caller_name = "developer",
-        caller_private_dir_name = Path("stage_10/developer_r1"),
-        caller_journal_name = "05_stage_10_developer_r1",
+        caller_private_dir_name = Path("s10/developer_r1"),
+        caller_journal_name = "05_s10_developer_r1",
         shell_processes = ShellProcesses(),
     )
 

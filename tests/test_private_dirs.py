@@ -8,7 +8,7 @@ from codeteam.core.roles.common import last_private_dir_name, make_rework, reser
     role_private_dir_name
 
 # Папка этапа, внутри которой лежат папки запусков ролей этапа.
-STAGE_DIR = Path("stage_10")
+STAGE_DIR = Path("s10")
 
 
 def _reserve(*, project_dir: Path, preserve_draft: bool, preserve_context: bool) -> Path:

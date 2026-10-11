@@ -19,7 +19,7 @@ def role_private_dir_name(*, project_dir: Path, parent: Path, role_name: str, re
         role_name: имя роли.
         rework: возврат работы из состояния пайплайна; None - возврата нет.
 
-    Возвращает: Путь новой папки внутри папки личных папок, например stage_10/developer_r2.
+    Возвращает: Путь новой папки внутри папки личных папок, например s10/developer_r2.
     """
     own_rework = rework_for(rework = rework, role_name = role_name)
 
@@ -50,7 +50,7 @@ def reserve_private_dir_name(
         preserve_draft: скопировать в новую папку черновик из прошлой папки роли.
         preserve_context: скопировать в новую папку файл контекста из прошлой папки роли.
 
-    Возвращает: Путь новой папки внутри папки личных папок, например stage_10/developer_r2.
+    Возвращает: Путь новой папки внутри папки личных папок, например s10/developer_r2.
     """
     parent_dir = project_dir / PRIVATE_ROOT / parent
     parent_dir.mkdir(parents = True, exist_ok = True)

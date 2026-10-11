@@ -20,11 +20,11 @@ from codeteam.core.roles.common import CallerContext
 from tests.shell_helpers import error_page_server_command, free_port, requires_sandbox, wait_port_open
 
 # Личная папка и журнал спрашивающего агента.
-CALLER_DIR_NAME = Path("stage_10/developer_review_r1")
+CALLER_DIR_NAME = Path("s10/developer_review_r1")
 
 # Папка помощников спрашивающего агента: рядом с его личной папкой.
-CALLER_HELPERS_DIR_NAME = Path("stage_10/developer_review_r1.helpers")
-CALLER_JOURNAL_NAME = "12_stage_10_developer_review_r1"
+CALLER_HELPERS_DIR_NAME = Path("s10/developer_review_r1.helpers")
+CALLER_JOURNAL_NAME = "12_s10_developer_review_r1"
 
 # Наблюдения, которые пишет заглушка помощника.
 OBSERVATIONS = "Открыл главную: видна таблица.\n"
@@ -340,13 +340,13 @@ def test_running_app_starts_helper(
     assert first == OBSERVATIONS
     assert second == OBSERVATIONS
     assert [call["private_dir_name"] for call in fake_run_role.calls] == [
-        CALLER_HELPERS_DIR_NAME / "browser_checker_r1",
-        CALLER_HELPERS_DIR_NAME / "browser_checker_r2",
+        CALLER_HELPERS_DIR_NAME / "bro_check_r1",
+        CALLER_HELPERS_DIR_NAME / "bro_check_r2",
     ]
     assert not (tmp_path / PRIVATE_ROOT / CALLER_DIR_NAME).exists()
     assert [call["journal_name"] for call in fake_run_role.calls] == [
-        f"{CALLER_JOURNAL_NAME}.browser_checker_r1",
-        f"{CALLER_JOURNAL_NAME}.browser_checker_r2",
+        f"{CALLER_JOURNAL_NAME}.bro_check_r1",
+        f"{CALLER_JOURNAL_NAME}.bro_check_r2",
     ]
     assert app_url in fake_run_role.calls[0]["task"]
 

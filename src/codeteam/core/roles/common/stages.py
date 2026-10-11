@@ -17,7 +17,7 @@ def build_stage_dir_name(*, stage_file: Path) -> Path:
 
         stage_file: файл этапа.
 
-    Возвращает: Путь папки этапа внутри папки личных папок: stage_<номер этапа>.
+    Возвращает: Путь папки этапа внутри папки личных папок: s<номер этапа>.
     """
     return Path(f"stage_{parse_stage_number(stage_file = stage_file)}")
 

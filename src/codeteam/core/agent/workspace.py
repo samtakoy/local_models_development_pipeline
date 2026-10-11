@@ -15,7 +15,7 @@ DRAFT_DIR_NAME = "draft"
 CONTEXT_FILE_NAME = "context.md"
 
 # Окончание имени папки помощников агента: рядом с личной папкой, <личная папка>.helpers.
-HELPERS_DIR_SUFFIX = ".helpers"
+HELPERS_DIR_SUFFIX = "_help"
 
 # Имя раздела черновика: номер, тема буквами любого алфавита, .md. Группа 1 — номер раздела.
 DRAFT_SECTION_PATTERN = re.compile(r"^(\d+)_[\w-]+\.md$")

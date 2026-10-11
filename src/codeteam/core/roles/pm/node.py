@@ -4,6 +4,7 @@ from pathlib import Path
 
 from langchain_core.runnables import RunnableConfig
 
+from codeteam.core.agent.prompts import PROJECT_DOCS_DIR_NAME
 from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState
 from codeteam.core.roles.common import PipelineError, make_journal_name, role_private_dir_name, run_role
 from codeteam.core.roles.pm.config import PM_ROLE, REQUIREMENTS_FILE_NAME
@@ -11,10 +12,14 @@ from codeteam.core.roles.pm.prompts import PM_TASK
 
 
 def pm_node(state: PipelineState, config: RunnableConfig):
-    """Запускает менеджера продукта: по тексту задачи пользователя он пишет чеклист требований без доступа к проекту."""
+    """
+    Запускает менеджера продукта: по тексту задачи пользователя он пишет чеклист требований. Из проекта ему
+    открыта на чтение только папка документации.
+    """
     cfg: PipelineConfig = config["configurable"][PIPELINE_CFG_NAME]
+    project_dir = Path(cfg.project_path).resolve()
     private_dir_name = role_private_dir_name(
-        project_dir = Path(cfg.project_path).resolve(),
+        project_dir = project_dir,
         parent = Path("."),
         role_name = PM_ROLE.name,
         rework = state["rework"],
@@ -27,7 +32,7 @@ def pm_node(state: PipelineState, config: RunnableConfig):
         task = PM_TASK.format(task = state["task"]),
         input_dirs = (),
         private_dir_name = private_dir_name,
-        extra_readable_dirs = (),
+        extra_readable_dirs = (project_dir / PROJECT_DOCS_DIR_NAME,),
         extra_writable_dirs = (),
         extra_command_writable_dirs = (),
     )

@@ -12,7 +12,7 @@ from codeteam.core.roles.common.browser import playwright_server
 OBSERVATIONS_FILE_NAME = "000_observations.md"
 
 BROWSER_CHECKER_ROLE = RoleSettings(
-    name = "browser_checker",
+    name = "bro_check",
     system_prompt_path = Path(__file__).parent / "system_prompt.md",
     prompt_fields = {"observations_file": OBSERVATIONS_FILE_NAME, "check_dir": CHECK_DIR.as_posix()},
     model_name = None,
