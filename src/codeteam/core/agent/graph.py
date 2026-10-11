@@ -25,7 +25,7 @@ from codeteam.core.agent.prompts import ANSWER_CHECK_NOTICE, ANSWER_COMMAND_REMA
     REPEATED_RESULT_REMARKS, REPEATED_RESULT_STOP_REMARK, UNFINISHED_ANSWER_NOTICE
 from codeteam.core.agent.workspace import context_path, draft_dir
 from codeteam.core.tools.files import READ_TOOL_NAME
-from codeteam.core.tools.shell import BASH_TOOL_NAME
+from codeteam.core.tools.shell import BASH_TOOL_NAME, STOP_PROCESS_TOOL_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -298,8 +298,9 @@ def route_after_tools(state: AgentState, config: RunnableConfig) -> str:
     Выбирает узел после выполнения инструментов: продолжение работы или фаза черновика. Фаза черновика
     включается и после REPEATED_RESULTS_LIMIT повторов шага инструментов подряд.
 
-    Мягкий лимит history_token_limit не действует на шаге, где агент работал со своим ответом
-    или пытался сдать работу командой; жёсткий лимит history_token_hard_limit действует всегда.
+    Мягкий лимит history_token_limit не действует на шаге, где агент работал со своим ответом,
+    пытался сдать работу командой или только останавливал свои процессы; жёсткий лимит
+    history_token_hard_limit действует всегда.
 
         state: состояние агента.
         config: конфигурация запуска с настройками агента.
@@ -314,11 +315,14 @@ def route_after_tools(state: AgentState, config: RunnableConfig) -> str:
     if input_tokens >= cfg.history_token_hard_limit:
         return LIMIT_NOTICE_NODE_ID
 
-    is_answer_step = (
+    last_response = _last_response(messages = state["messages"])
+    # шаги, на которые мягкий лимит не действует
+    ignores_soft_limit = (
         _works_with_answer(cfg = cfg, messages = state["messages"])
-        or _is_answer_command(response = _last_response(messages = state["messages"]))
+        or _is_answer_command(response = last_response)
+        or _is_stop_process_step(response = last_response)
     )
-    if input_tokens >= cfg.history_token_limit and not is_answer_step:
+    if input_tokens >= cfg.history_token_limit and not ignores_soft_limit:
         return LIMIT_NOTICE_NODE_ID
 
     return AGENT_NODE_ID
@@ -341,6 +345,20 @@ def _is_answer_command(*, response: BaseMessage | None) -> bool:
         and ANSWER_COMMAND_PATTERN.fullmatch(str(call["args"].get("command", ""))) is not None
         for call in response.tool_calls
     )
+
+
+def _is_stop_process_step(*, response: BaseMessage | None) -> bool:
+    """
+    Проверяет, что ответ модели — только остановка своих процессов: все вызовы — stop_process.
+
+        response: ответ модели.
+
+    Возвращает: True, если в ответе есть вызовы инструментов и все они stop_process.
+    """
+    if not isinstance(response, AIMessage) or not response.tool_calls:
+        return False
+
+    return all(call["name"] == STOP_PROCESS_TOOL_NAME for call in response.tool_calls)
 
 
 def _last_response(*, messages: Sequence[BaseMessage]) -> AIMessage | None:
