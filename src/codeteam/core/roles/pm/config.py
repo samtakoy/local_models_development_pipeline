@@ -4,7 +4,7 @@ from pathlib import Path
 
 from codeteam.common.llm import ReasoningLevel
 from codeteam.core.agent.answer_checks import required_files_check
-from codeteam.core.agent.step_hooks import draft_phase_hint_hook, private_file_hook
+from codeteam.core.agent.step_hooks import draft_phase_hint_hook, private_file_hook, readonly_work_phase_hint_hook
 from codeteam.core.roles.common import DRAFT_TOOL_NAMES, RoleSettings
 from codeteam.core.roles.picture_viewer import DESCRIBE_PICTURE_TOOL_NAME, build_describe_picture_tool
 
@@ -21,6 +21,7 @@ PM_ROLE = RoleSettings(
     step_hooks = (
         private_file_hook(answer_file_names = (REQUIREMENTS_FILE_NAME,), only_answer_files = False),
         draft_phase_hint_hook,
+        readonly_work_phase_hint_hook,
     ),
     answer_checks = (required_files_check(file_names = (REQUIREMENTS_FILE_NAME,)),),
     helper_tools = (build_describe_picture_tool,),

@@ -6,11 +6,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from codeteam.core.agent.prompts import ANSWER_LIKE_FILE_REMARK, CODE_BLOCK_LINES, DRAFT_PHASE_HINT, \
-    DUPLICATE_SECTION_NUMBER_REMARK, LATIN_SECTION_NAME_REMARK, MISPLACED_ANSWER_FILE_REMARK, \
-    MISPLACED_CONTEXT_FILE_REMARK, MISPLACED_CONTEXT_REMARK, NOT_DRAFT_SECTION_REMARK, ONLY_ANSWER_FILES_REMARK, \
-    STRAY_PRIVATE_FILE_REMARK
-from codeteam.core.agent.statistics import DRAFT_PHASE
+from codeteam.core.agent.prompts import ANSWER_LIKE_FILE_REMARK, CODE_BLOCK_LINES, CONTEXT_FILE_PATH_LINE, \
+    DRAFT_PHASE_HINT, DRAFT_PHASE_RULE, DRAFT_SECTION_PATH_LINE, DUPLICATE_SECTION_NUMBER_REMARK, \
+    LATIN_SECTION_NAME_REMARK, MISPLACED_ANSWER_FILE_REMARK, MISPLACED_CONTEXT_FILE_REMARK, MISPLACED_CONTEXT_REMARK, \
+    NOT_DRAFT_SECTION_REMARK, ONLY_ANSWER_FILES_REMARK, READONLY_WORK_PHASE_RULE, STRAY_PRIVATE_FILE_REMARK
+from codeteam.core.agent.statistics import DRAFT_PHASE, WORK_PHASE
 from codeteam.core.agent.workspace import CONTEXT_FILE_NAME, DRAFT_SECTION_PATTERN, LATIN_DRAFT_SECTION_PATTERN, \
     context_path, draft_dir
 from codeteam.core.tools.files import PathRefusal
@@ -109,7 +109,8 @@ def join_remarks(*, remarks: list[str]) -> str | None:
 def draft_phase_hint_hook(context: StepContext) -> str | None:
     """
     Хук шага: в шаге фазы черновика был отказ файлового инструмента по пути — подсказка о том, что сейчас
-    разрешено.
+    разрешено. Если среди отказов есть запись файла контекста или раздела черновика <номер>_<тема>.md — что
+    разрешено и правильный путь для каждого такого файла; иначе общая подсказка.
 
         context: шаг инструментов.
 
@@ -118,10 +119,66 @@ def draft_phase_hint_hook(context: StepContext) -> str | None:
     if context.phase != DRAFT_PHASE or not context.refusals:
         return None
 
-    return DRAFT_PHASE_HINT.format(
-        private_dir = context.private_dir.relative_to(context.project_dir).as_posix(),
-        context_file_path = CONTEXT_FILE_NAME,
-    )
+    shown_private_dir = context.private_dir.relative_to(context.project_dir).as_posix()
+
+    # отказы записи своих файлов: что разрешено один раз, дальше строки с путями
+    path_lines = _write_refusal_path_lines(context = context)
+    if path_lines:
+        return "\n".join([DRAFT_PHASE_RULE.format(private_dir = shown_private_dir), *path_lines])
+
+    # иначе общая подсказка
+    return DRAFT_PHASE_HINT.format(private_dir = shown_private_dir, context_file_path = CONTEXT_FILE_NAME)
+
+
+def readonly_work_phase_hint_hook(context: StepContext) -> str | None:
+    """
+    Хук шага роли, которой проект только для чтения: в фазе работы к отказу записи файла контекста или раздела
+    черновика <номер>_<тема>.md — правильный путь в личной папке под тем же именем. Отказы записи других файлов
+    и отказы чтения хук пропускает.
+
+        context: шаг инструментов.
+
+    Возвращает: Подсказку или None.
+    """
+    if context.phase != WORK_PHASE:
+        return None
+
+    # отказы записи своих файлов: правило один раз, дальше строки с путями
+    path_lines = _write_refusal_path_lines(context = context)
+    if path_lines:
+        return "\n".join([READONLY_WORK_PHASE_RULE, *path_lines])
+
+    return None
+
+
+def _write_refusal_path_lines(*, context: StepContext) -> list[str]:
+    """
+    Собирает строки с правильными путями к отказам записи своих файлов: файла контекста и раздела черновика
+    <номер>_<тема>.md — путь в личной папке под тем же именем. Отказы записи других файлов и отказы чтения
+    пропускает.
+
+        context: шаг инструментов.
+
+    Возвращает: Строки с путями по порядку отказов; пустой список, если таких отказов нет.
+    """
+    # пути, как их видит агент: от папки проекта
+    shown_context_file = context_path(private_dir = context.private_dir).relative_to(context.project_dir).as_posix()
+    shown_draft_dir = draft_dir(private_dir = context.private_dir).relative_to(context.project_dir).as_posix()
+
+    path_lines = []
+    for refusal in context.refusals:
+        if not refusal.is_write:
+            continue
+
+        file_name = Path(refusal.path).name
+        # файл контекста
+        if file_name == CONTEXT_FILE_NAME:
+            path_lines.append(CONTEXT_FILE_PATH_LINE.format(context_path = shown_context_file))
+        # раздел черновика
+        elif DRAFT_SECTION_PATTERN.match(file_name):
+            path_lines.append(DRAFT_SECTION_PATH_LINE.format(draft_path = f"{shown_draft_dir}/{file_name}"))
+
+    return path_lines
 
 
 def private_file_hook(*, answer_file_names: tuple[str, ...], only_answer_files: bool) -> StepHook:

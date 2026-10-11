@@ -1,5 +1,5 @@
 """Тесты хуков шага ролей: у каждой роли в её описании есть общие хуки — места файлов личной папки
-и подсказка фазы черновика."""
+и подсказка фазы черновика; у ролей, которым проект только для чтения, — подсказка пути своего файла в фазе работы."""
 
 from pathlib import Path
 
@@ -7,7 +7,8 @@ import pytest
 
 from codeteam.common.git import commit_all, init_repository
 from codeteam.core.agent.statistics import DRAFT_PHASE, WORK_PHASE
-from codeteam.core.agent.step_hooks import StepContext, draft_phase_hint_hook, private_file_hook
+from codeteam.core.agent.step_hooks import StepContext, draft_phase_hint_hook, private_file_hook, \
+    readonly_work_phase_hint_hook
 from codeteam.core.roles.advisor.config import ADVISOR_ROLE
 from codeteam.core.roles.architect.config import ARCHITECT_ROLE
 from codeteam.core.roles.architect_review.config import ARCHITECT_REVIEW_ROLE
@@ -36,6 +37,9 @@ ROLES = (
     TESTER_ROLE,
     WEB_TESTER_ROLE,
 )
+
+# Роли, которым проект только для чтения: запись только в личную папку.
+READONLY_ROLES = (ARCHITECT_ROLE, ARCHITECT_REVIEW_ROLE, PM_ROLE, RESEARCHER_ROLE, SENIOR_ROLE)
 
 # Личная папка агента относительно папки проекта.
 RELATIVE_PRIVATE_DIR = Path(".ct-work") / "agent_r1"
@@ -110,3 +114,21 @@ def test_role_gets_stray_private_file_remark(project_dir: Path, role: RoleSettin
 
     assert stray_remark is not None
     assert stray_remark in _remarks(role = role, context = context)
+
+
+@pytest.mark.parametrize("role", READONLY_ROLES, ids = [role.name for role in READONLY_ROLES])
+def test_readonly_role_gets_draft_section_path(project_dir: Path, role: RoleSettings) -> None:
+    """
+    Отказ записи раздела черновика по имени без папки в фазе работы — среди замечаний хуков роли правильный путь.
+    """
+    context = StepContext(
+        project_dir = project_dir,
+        private_dir = project_dir / RELATIVE_PRIVATE_DIR,
+        phase = WORK_PHASE,
+        changed_files = (),
+        refusals = (PathRefusal(path = "100_project_overview.md", is_write = True),),
+    )
+    hint = readonly_work_phase_hint_hook(context)
+
+    assert hint is not None
+    assert hint in _remarks(role = role, context = context)
