@@ -38,6 +38,7 @@ class McpServer:
         args: аргументы программы.
         cwd: рабочая папка сервера: от неё сервер считает относительные пути из вызовов инструментов.
         check_call: проверка вызова до отправки серверу; None — вызовы не проверяются.
+        excluded_tool_names: имена инструментов сервера, которые агент не получает.
     """
 
     name: str
@@ -45,6 +46,7 @@ class McpServer:
     args: tuple[str, ...]
     cwd: Path
     check_call: CallCheck | None
+    excluded_tool_names: tuple[str, ...]
 
 
 class McpTools:
@@ -113,7 +115,8 @@ class McpTools:
             async with AsyncExitStack() as stack:
                 for server in self._servers:
                     session = await stack.enter_async_context(client.session(server.name))
-                    self._tools.extend((server, tool) for tool in await load_mcp_tools(session))
+                    server_tools = offered_tools(server = server, tools = await load_mcp_tools(session))
+                    self._tools.extend((server, tool) for tool in server_tools)
                 self._ready.set()
                 await self._stop.wait()
         except BaseException as error:
@@ -155,3 +158,15 @@ class McpTools:
             args_schema = tool.args_schema,
             handle_tool_error = True,
         )
+
+
+def offered_tools(*, server: McpServer, tools: list[BaseTool]) -> list[BaseTool]:
+    """
+    Отбирает инструменты сервера, которые получает агент.
+
+        server: сервер MCP.
+        tools: все инструменты сервера.
+
+    Возвращает: Инструменты сервера без исключённых, в прежнем порядке.
+    """
+    return [tool for tool in tools if tool.name not in server.excluded_tool_names]

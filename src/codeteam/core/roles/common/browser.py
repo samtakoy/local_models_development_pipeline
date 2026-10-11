@@ -23,6 +23,10 @@ PLAYWRIGHT_ARGS = (PLAYWRIGHT_MCP_PACKAGE, "--isolated")
 # Предел ожидания скачивания Playwright MCP при прогреве, секунды.
 PLAYWRIGHT_DOWNLOAD_TIMEOUT_SECONDS = 600
 
+# Инструменты Playwright MCP, которые агент не получает: код Playwright на стороне сервера дублирует
+# отдельные инструменты действий на странице.
+PLAYWRIGHT_EXCLUDED_TOOL_NAMES = ("browser_run_code_unsafe",)
+
 # Инструмент Playwright MCP, которым прогрев открывает браузер, и адрес пустой страницы.
 PLAYWRIGHT_NAVIGATE_TOOL_NAME = "browser_navigate"
 BLANK_PAGE_URL = "about:blank"
@@ -55,6 +59,7 @@ def playwright_server(caller_context: CallerContext) -> McpServer:
         args = args,
         cwd = project_dir,
         check_call = partial(check_playwright_filename, project_dir = project_dir),
+        excluded_tool_names = PLAYWRIGHT_EXCLUDED_TOOL_NAMES,
     )
 
 
@@ -94,6 +99,7 @@ def warm_up_browser(*, work_dir: Path) -> None:
         args = (*PLAYWRIGHT_ARGS, "--output-dir", str(work_dir), "--headless"),
         cwd = work_dir,
         check_call = None,
+        excluded_tool_names = PLAYWRIGHT_EXCLUDED_TOOL_NAMES,
     )
     try:
         with McpTools(servers = (server,)) as tools:
