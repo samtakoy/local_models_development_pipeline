@@ -121,6 +121,8 @@ class AgentStatistics:
         self._draft_error_streak = 0
         self._draft_error_streak_max = 0
         self._error: str | None = None
+        # следующий запрос к модели — первый после старта или сброса истории: его вход — цена разогрева
+        self._awaits_warmup_response = False
 
     def record(self, *, event: dict[str, Any]) -> None:
         """
@@ -136,6 +138,9 @@ class AgentStatistics:
             elif node_name == REINIT_NODE_ID:
                 self._events[RESET_EVENT] += 1
                 self._stop_draft()
+
+            if node_name in (INIT_NODE_ID, REINIT_NODE_ID):
+                self._awaits_warmup_response = True
 
             phase = self._phase(node_name = node_name)
             for message in messages:
@@ -299,7 +304,10 @@ class AgentStatistics:
             "tokens_per_second": round(output_tokens / eval_seconds, ROUND_DIGITS) if eval_seconds else None,
             # инструменты, которые вызвал ответ
             "tool_calls": [call["name"] for call in message.tool_calls],
+            # первый запрос после старта или сброса истории: его вход — цена разогрева
+            "after_warmup": self._awaits_warmup_response,
         })
+        self._awaits_warmup_response = False
         if node_name == DRAFT_AGENT_NODE_ID and self._awaits_first_draft_response:
             self._first_draft_response_seconds.append(round(seconds, ROUND_DIGITS))
             self._awaits_first_draft_response = False

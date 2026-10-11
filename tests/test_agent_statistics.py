@@ -111,6 +111,34 @@ def test_statistics_of_agent_run() -> None:
     assert result["draft"]["error_streak_max"] == 2
 
 
+def test_first_requests_after_start_and_reset_are_marked() -> None:
+    """
+    Первый запрос после старта и первый запрос после сброса истории отмечены как запросы после разогрева.
+    """
+    statistics = AgentStatistics(
+        role_name = "developer",
+        journal_name = "05_s10_developer_r1",
+        model_name = "model",
+        reasoning_level = "low",
+        context_window = 1000,
+        tool_names = ["bash"],
+    )
+    answer = _model_answer(tool_names = ["bash"], input_tokens = 1000, output_tokens = 10)
+    events = [
+        {"init": {"messages": []}},
+        {"agent": {"messages": [answer]}},
+        {"tools": {"messages": [_tool_result(name = "bash", is_error = False)]}},
+        {"agent": {"messages": [answer]}},
+        {"reinit": {"messages": []}},
+        {"tools": {"messages": [_tool_result(name = "read", is_error = False)]}},
+        {"agent": {"messages": [answer]}},
+    ]
+    for event in events:
+        statistics.record(event = event)
+
+    assert [request["after_warmup"] for request in statistics.to_dict()["requests"]] == [True, False, True]
+
+
 def test_counters_error_and_file(tmp_path: Path) -> None:
     """
     Явные счётчики и ошибка запуска попадают в файл JSON.

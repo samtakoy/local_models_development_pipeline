@@ -1,5 +1,5 @@
 """Отчёт по статистике прогона из файлов статистики агентов: сводка, переполнение окна модели, роли,
-время и токены, контекст, инструменты, проблемы."""
+время и токены, контекст, разогрев, инструменты, проблемы."""
 
 import json
 from collections.abc import Callable
@@ -22,6 +22,9 @@ SMALL_NUMBER_LIMIT = 100
 
 # Сколько строк в списках «самые»: самые долгие агенты, самый большой контекст.
 TOP_COUNT = 5
+
+# Сколько самых дорогих по разогреву агентов показывает отчёт.
+WARMUP_TOP_COUNT = 10
 
 # Ширина интервала размера контекста в таблице скорости, токены.
 CONTEXT_BUCKET_TOKENS = 20_000
@@ -387,6 +390,47 @@ def unused_tools_by_role(*, run_statistics: list[dict[str, Any]]) -> dict[str, l
     return unused
 
 
+@dataclass(frozen = True)
+class WarmupCost:
+    """
+    Цена разогрева агента.
+
+        warmups: разогревов: старт и каждый сброс истории.
+        first_input: вход первого запроса после старта, токены.
+        total_input: вход всех первых запросов после разогрева вместе, токены.
+        warmup_calls: вызовов инструментов разогрева.
+    """
+
+    warmups: int
+    first_input: int
+    total_input: int
+    warmup_calls: int
+
+
+def warmup_cost(*, statistics: dict[str, Any]) -> WarmupCost:
+    """
+    Считает цену разогрева агента: вход первых запросов после старта и после каждого сброса истории.
+
+        statistics: статистика агента из файла.
+
+    Возвращает: Цену разогрева; в файлах без отметки разогрева в запросах учтён только первый запрос.
+    """
+    requests = statistics["requests"]
+    if requests and "after_warmup" in requests[0]:
+        inputs = [request["input_tokens"] for request in requests if request["after_warmup"]]
+    else:
+        # в файлах, записанных до появления отметки разогрева, её нет
+        inputs = [request["input_tokens"] for request in requests[:1]]
+    warmup_calls = sum(phases.get(WARMUP_PHASE, {}).get("calls", 0) for phases in statistics["tools"].values())
+
+    return WarmupCost(
+        warmups = len(inputs),
+        first_input = inputs[0] if inputs else 0,
+        total_input = sum(inputs),
+        warmup_calls = warmup_calls,
+    )
+
+
 def speed_by_context(*, run_statistics: list[dict[str, Any]]) -> dict[int, tuple[int, float | None]]:
     """
     Считает скорость генерации по интервалам размера контекста шириной CONTEXT_BUCKET_TOKENS.
@@ -479,6 +523,8 @@ def run_report(*, run_dir: Path) -> str:
         ),
         "## Контекст",
         _context_section(run_statistics = run_statistics),
+        "## Разогрев",
+        _warmup_section(run_statistics = run_statistics),
         "## Инструменты",
         "### По инструментам, весь прогон",
         _tool_table(run_statistics = run_statistics),
@@ -811,6 +857,60 @@ def _context_section(*, run_statistics: list[dict[str, Any]]) -> str:
         "### Скорость генерации по размеру контекста",
         "\n".join(speed_lines),
     ])
+
+
+def _warmup_section(*, run_statistics: list[dict[str, Any]]) -> str:
+    """
+    Собирает раздел разогрева: самые дорогие по разогреву агенты и среднее на агента по ролям.
+
+        run_statistics: статистика агентов прогона.
+
+    Возвращает: Раздел markdown.
+    """
+    costs = {statistics["journal"]: warmup_cost(statistics = statistics) for statistics in run_statistics}
+    header = ["разогревов", "вход первого запроса", "всего на разогревы", "вызовов разогрева"]
+    most_expensive = sorted(costs.items(), key = lambda item: item[1].total_input, reverse = True)[:WARMUP_TOP_COUNT]
+    agent_lines = [
+        _table_row(cells = ["", *header]),
+        _table_alignment(column_count = len(header) + 1),
+        *(
+            _table_row(cells = [journal, *(_number(value = value) for value in _warmup_values(cost = cost))])
+            for journal, cost in most_expensive
+        ),
+    ]
+    role_lines = [
+        _table_row(cells = ["", COLUMN_TITLES["agents"], *header]),
+        _table_alignment(column_count = len(header) + 2),
+    ]
+    for role, role_statistics in _statistics_by_role(run_statistics = run_statistics).items():
+        role_costs = [costs[statistics["journal"]] for statistics in role_statistics]
+        averages = [mean(values) for values in zip(*(_warmup_values(cost = cost) for cost in role_costs))]
+        role_lines.append(_table_row(cells = [
+            role,
+            str(len(role_costs)),
+            *(_number(value = value) for value in averages),
+        ]))
+
+    return "\n\n".join([
+        "Цена разогрева — вход первого запроса после старта и после каждого сброса истории: системный промпт, "
+        "описания инструментов и чтения разогрева. В файлах статистики без отметки разогрева учтён только "
+        "первый запрос агента.",
+        f"### Самые дорогие по разогреву агенты, {WARMUP_TOP_COUNT}",
+        "\n".join(agent_lines),
+        "### По ролям, среднее на агента",
+        "\n".join(role_lines),
+    ])
+
+
+def _warmup_values(*, cost: WarmupCost) -> tuple[int, int, int, int]:
+    """
+    Раскладывает цену разогрева по столбцам таблицы.
+
+        cost: цена разогрева агента.
+
+    Возвращает: Разогревов, вход первого запроса, всего на разогревы, вызовов разогрева.
+    """
+    return cost.warmups, cost.first_input, cost.total_input, cost.warmup_calls
 
 
 def _column_value(*, totals: list[RunTotals], column: str, aggregate: Aggregate) -> str:

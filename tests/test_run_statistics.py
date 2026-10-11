@@ -4,9 +4,9 @@ from pathlib import Path
 
 from langchain_core.messages import AIMessage, ToolMessage
 
-from codeteam.app.run_statistics import RUN_REPORT_FILE_NAME, agent_totals, load_run_statistics, max_context, \
+from codeteam.app.run_statistics import RUN_REPORT_FILE_NAME, WarmupCost, agent_totals, load_run_statistics, max_context, \
     run_report, run_seconds, speed_by_context, sum_totals, tokens_per_second, tool_error_percent, totals_by_role, \
-    tool_phase_counts, unknown_tool_calls, unused_tools_by_role, window_overflows, write_run_report
+    tool_phase_counts, unknown_tool_calls, unused_tools_by_role, warmup_cost, window_overflows, write_run_report
 from codeteam.core.agent.statistics import REPEATED_RESULT_STOP_COUNTER, SERVER_ERROR_RETRY_COUNTER, \
     STATISTICS_FILE_SUFFIX, WORK_PHASE, AgentStatistics
 
@@ -222,3 +222,18 @@ def test_unknown_and_unused_tools() -> None:
     assert list(tool_phase_counts(run_statistics = run_statistics)) == ["read", "bash"]
     assert unknown_tool_calls(run_statistics = run_statistics) == {"todo": (1, ["developer"])}
     assert unused_tools_by_role(run_statistics = run_statistics) == {"developer": ["get_advice"]}
+
+
+def test_warmup_cost_of_start_and_resets() -> None:
+    """
+    Цена разогрева — вход первых запросов после старта и после сбросов; без отметки — только первый запрос.
+    """
+    marked = {"tools": {"read": {"warmup": {"calls": 4}, "work": {"calls": 9}}}, "requests": [
+        {"input_tokens": 5_000, "after_warmup": True},
+        {"input_tokens": 9_000, "after_warmup": False},
+        {"input_tokens": 7_000, "after_warmup": True},
+    ]}
+    unmarked = {"tools": {}, "requests": [{"input_tokens": 5_000}, {"input_tokens": 9_000}]}
+
+    assert warmup_cost(statistics = marked) == WarmupCost(warmups = 2, first_input = 5_000, total_input = 12_000, warmup_calls = 4)
+    assert warmup_cost(statistics = unmarked) == WarmupCost(warmups = 1, first_input = 5_000, total_input = 5_000, warmup_calls = 0)
