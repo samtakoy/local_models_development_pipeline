@@ -194,29 +194,45 @@ class AgentStatistics:
             draft_seconds += now - self._draft_started
 
         return {
+            # роль агента: по ней отчёт собирает средние роли
             "role": self._role_name,
+            # имя журнала: экземпляр агента _rN
             "journal": self._journal_name,
+            # модель агента
             "model_name": self._model_name,
+            # уровень размышления модели
             "reasoning_level": self._reasoning_level,
+            # окно модели, токены: по нему отчёт находит переполнение
             "context_window": self._context_window,
+            # время старта агента
             "started_at": self._started_at.isoformat(timespec = "seconds"),
+            # время работы агента вместе с его помощниками, секунды
             "elapsed_seconds": round(now - self._started_monotonic, ROUND_DIGITS),
+            # ошибка, прервавшая агента; None — агент закончил работу сам
             "error": self._error,
+            # шаги по узлам графа: сколько раз отработал каждый узел
             "steps": dict(self._step_counts),
+            # запросы к модели: число, токены вход и выход, время ответов
             "model_requests": {
                 "count": len(self._requests),
                 "input_tokens": sum(request["input_tokens"] for request in self._requests),
                 "output_tokens": sum(request["output_tokens"] for request in self._requests),
                 "seconds": round(sum(request["seconds"] for request in self._requests), ROUND_DIGITS),
             },
+            # каждый запрос к модели по порядку: для скорости по размеру контекста и наибольшего контекста
             "requests": self._requests,
+            # инструменты: вызовы и ошибки по фазам — разогрев, работа, черновик
             "tools": {
                 tool_name: {phase: dict(counts) for phase, counts in phases.items()}
                 for tool_name, phases in self._tool_counts.items()
             },
+            # события из потока графа: переходы по лимиту, сбросы истории, подсказки после ответа без инструмента
             "events": dict(self._events),
+            # явные счётчики: повторы запроса к ollama, тихие повторы, хуки, проверки, опасные переходы
             "counters": dict(self._counters),
+            # явные счётчики по фазам: замечания и остановки петель
             "phase_counters": {name: dict(phases) for name, phases in self._phase_counters.items()},
+            # фаза черновика: время, время первого ответа после лимита, самая длинная серия ошибок подряд
             "draft": {
                 "seconds": round(draft_seconds, ROUND_DIGITS),
                 "first_response_seconds": self._first_draft_response_seconds,
@@ -266,11 +282,17 @@ class AgentStatistics:
         eval_seconds = metadata.get("eval_duration", 0) / NANOSECONDS_PER_SECOND
         output_tokens = message.usage_metadata["output_tokens"]
         self._requests.append({
+            # узел ответа: работа или черновик
             "node": node_name,
+            # вся история на входе запроса, токены
             "input_tokens": message.usage_metadata["input_tokens"],
+            # ответ модели, токены
             "output_tokens": output_tokens,
+            # время ответа целиком, секунды
             "seconds": round(seconds, ROUND_DIGITS),
+            # скорость генерации ответа; None — ollama не дала время генерации
             "tokens_per_second": round(output_tokens / eval_seconds, ROUND_DIGITS) if eval_seconds else None,
+            # инструменты, которые вызвал ответ
             "tool_calls": [call["name"] for call in message.tool_calls],
         })
         if node_name == DRAFT_AGENT_NODE_ID and self._awaits_first_draft_response:
