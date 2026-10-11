@@ -37,7 +37,7 @@ def file_tools(tmp_path: Path, seen_files: SeenFiles) -> dict[str, BaseTool]:
         input_dirs = (),
         readable_dirs = (tmp_path,),
         writable_dirs = (tmp_path,),
-        refusal_hint = None,
+        refusal_hints = (),
     )
 
     return {tool.name: tool for tool in build_file_tools(workspace = workspace, seen_files = seen_files)}

@@ -29,7 +29,7 @@ def workspace(tmp_path: Path) -> Workspace:
         input_dirs = (),
         readable_dirs = (tmp_path,),
         writable_dirs = (tmp_path,),
-        refusal_hint = None,
+        refusal_hints = (),
     )
 
 
@@ -175,7 +175,7 @@ def test_edit_outside_writable_dirs(workspace: Workspace) -> None:
         input_dirs = (),
         readable_dirs = (workspace.project_dir,),
         writable_dirs = (workspace.private_dir,),
-        refusal_hint = None,
+        refusal_hints = (),
     )
     tools = {
         tool.name: tool

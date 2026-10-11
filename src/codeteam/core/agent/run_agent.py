@@ -109,7 +109,7 @@ def run_agent(
         input_dirs = input_dirs,
         readable_dirs = (private_dir, helpers_dir(private_dir = private_dir), *input_dirs, *extra_readable_dirs),
         writable_dirs = (private_dir, *extra_writable_dirs),
-        refusal_hint = None
+        refusal_hints = role.work_refusal_hints,
     )
     # Рабочее место команд bash и start_service: папки записи фазы работы и папки, открытые только командам
     command_workspace = replace(workspace, writable_dirs = (*workspace.writable_dirs, *extra_command_writable_dirs))
@@ -139,9 +139,11 @@ def run_agent(
         input_dirs = (),
         readable_dirs = (private_dir, helpers_dir(private_dir = private_dir)),
         writable_dirs = (private_dir,),
-        refusal_hint = DRAFT_PHASE_HINT.format(
-            private_dir = relative_private_dir,
-            context_file_path = CONTEXT_FILE_NAME
+        refusal_hints = (
+            DRAFT_PHASE_HINT.format(
+                private_dir = relative_private_dir,
+                context_file_path = CONTEXT_FILE_NAME
+            ),
         ),
     )
     # тот же набор инструментов, но с другими ограничениями

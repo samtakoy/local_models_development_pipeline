@@ -17,6 +17,7 @@ RESEARCHER_ROLE = RoleSettings(
     answer_checks = (),
     answer_file_names = (),
     only_answer_files = False,
+    work_refusal_hints = (),
     helper_tools = (),
     mcp_servers = (),
 )

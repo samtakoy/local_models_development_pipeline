@@ -24,7 +24,7 @@ def read_tool(tmp_path: Path) -> BaseTool:
         input_dirs = (),
         readable_dirs = (tmp_path,),
         writable_dirs = (tmp_path,),
-        refusal_hint = None,
+        refusal_hints = (),
     )
     tools = build_file_tools(workspace = workspace, seen_files = SeenFiles())
 
