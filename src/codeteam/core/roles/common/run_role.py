@@ -52,6 +52,8 @@ def run_role(
         step_hooks = role.step_hooks,
         step_checks = role.step_checks,
         answer_checks = role.answer_checks,
+        answer_file_names = role.answer_file_names,
+        only_answer_files = role.only_answer_files,
     )
 
     # Фоновые процессы команд агента: общий учёт для его инструментов и помощников

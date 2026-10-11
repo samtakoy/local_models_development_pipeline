@@ -43,6 +43,8 @@ WEB_TESTER_ROLE = RoleSettings(
     step_hooks = (),
     step_checks = (),
     answer_checks = (check_verdict_file,),
+    answer_file_names = (VERDICT_FILE_NAME, REPORT_FILE_NAME),
+    only_answer_files = False,
     helper_tools = (),
     mcp_servers = (playwright_server,),
 )

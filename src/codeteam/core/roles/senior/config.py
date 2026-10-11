@@ -30,6 +30,8 @@ SENIOR_ROLE = RoleSettings(
     ),
     step_checks = (),
     answer_checks = (),
+    answer_file_names = (),
+    only_answer_files = False,
     helper_tools = (),
     mcp_servers = (),
 )

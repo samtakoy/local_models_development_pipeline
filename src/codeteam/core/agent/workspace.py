@@ -14,7 +14,7 @@ CHECK_DIR = Path("tmp_check")
 DRAFT_DIR_NAME = "draft"
 CONTEXT_FILE_NAME = "context.md"
 
-# Окончание имени папки помощников агента: рядом с личной папкой, <личная папка>.helpers.
+# Окончание имени папки помощников агента: рядом с личной папкой, <личная папка>_help.
 HELPERS_DIR_SUFFIX = "_help"
 
 # Имя раздела черновика: номер, тема буквами любого алфавита, .md. Группа 1 — номер раздела.
@@ -63,7 +63,7 @@ def helpers_dir(*, private_dir: Path) -> Path:
 
         private_dir: личная папка агента.
 
-    Возвращает: Папку рядом с личной папкой: <личная папка>.helpers.
+    Возвращает: Папку рядом с личной папкой: <личная папка>_help.
     """
     return private_dir.with_name(f"{private_dir.name}{HELPERS_DIR_SUFFIX}")
 

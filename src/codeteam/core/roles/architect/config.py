@@ -34,6 +34,8 @@ ARCHITECT_ROLE = RoleSettings(
     ),
     step_checks = (),
     answer_checks = (required_files_check(file_names = (ARCHITECTURE_FILE_NAME,)),),
+    answer_file_names = (ARCHITECTURE_FILE_NAME,),
+    only_answer_files = False,
     helper_tools = (),
     mcp_servers = (),
 )

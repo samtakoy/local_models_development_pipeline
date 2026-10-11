@@ -47,6 +47,8 @@ class RoleSettings:
         step_hooks: хуки после шага инструментов: замечания к изменённым файлам своих папок.
         step_checks: проверки после шага инструментов: замечания не к черновику, а, например, к проекту.
         answer_checks: проверки сдачи: замечания к черновику, когда агент отвечает DONE.
+        answer_file_names: заранее известные имена файлов ответа роли в черновике.
+        only_answer_files: в черновике роли разрешены только файлы ответа.
         helper_tools: сборщики инструментов вызова другого агента, например советника.
         mcp_servers: сборщики серверов MCP, чьи инструменты получает агент; сессии открыты, пока агент работает.
     """
@@ -60,5 +62,7 @@ class RoleSettings:
     step_hooks: tuple[FolderHook, ...]
     step_checks: tuple[StepCheck, ...]
     answer_checks: tuple[AnswerCheck, ...]
+    answer_file_names: tuple[str, ...]
+    only_answer_files: bool
     helper_tools: tuple[HelperToolBuilder, ...]
     mcp_servers: tuple[McpServerBuilder, ...]

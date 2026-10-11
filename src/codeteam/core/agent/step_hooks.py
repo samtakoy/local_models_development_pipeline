@@ -6,9 +6,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from codeteam.core.agent.prompts import CODE_BLOCK_LINES, DUPLICATE_SECTION_NUMBER_REMARK, \
-    LATIN_SECTION_NAME_REMARK, NOT_DRAFT_SECTION_REMARK, STRAY_PRIVATE_FILE_REMARK
-from codeteam.core.agent.workspace import CONTEXT_FILE_NAME, DRAFT_DIR_NAME, DRAFT_SECTION_PATTERN, \
-    LATIN_DRAFT_SECTION_PATTERN, context_path, draft_dir
+    LATIN_SECTION_NAME_REMARK, MISPLACED_ANSWER_FILE_REMARK, MISPLACED_CONTEXT_FILE_REMARK, MISPLACED_CONTEXT_REMARK, \
+    NOT_DRAFT_SECTION_REMARK, ONLY_ANSWER_FILES_REMARK, STRAY_PRIVATE_FILE_REMARK
+from codeteam.core.agent.workspace import CONTEXT_FILE_NAME, DRAFT_SECTION_PATTERN, LATIN_DRAFT_SECTION_PATTERN, \
+    context_path, draft_dir
 
 # Хук после шага: путь и текст изменённого файла → замечание агенту или None.
 StepHook = Callable[[Path, str], str | None]
@@ -51,14 +52,96 @@ LANGUAGE_BLOCK_START_PATTERN = re.compile(r"^```[A-Za-z0-9_+#.-]+$")
 # Граница блока: строка, начинающаяся с ```.
 BLOCK_FENCE = "```"
 
+# Имя, похожее на файл контекста: номер раздела и имя файла контекста.
+CONTEXT_LIKE_NAME_PATTERN = re.compile(rf"^\d+_{re.escape(CONTEXT_FILE_NAME)}$")
 
-def draft_section_hook(path: Path, text: str) -> str | None:
+
+def private_file_hook(
+    *,
+    project_dir: Path,
+    private_dir: Path,
+    answer_file_names: tuple[str, ...],
+    only_answer_files: bool,
+) -> StepHook:
+    """
+    Собирает хук личной папки: проверяет место и имя изменённого файла. Правила по порядку, срабатывает первое:
+    1. файл контекста на своём месте — замечания нет;
+    2. файл контекста лежит в другом месте личной папки — путь файла контекста;
+    3. имя похоже на файл контекста: номер и имя файла контекста — путь файла контекста;
+    4. файл ответа роли лежит не в черновике под своим именем — его путь в черновике;
+    5. в черновике роли, где разрешены только файлы ответа, другой файл — пути файлов ответа;
+    6. файл в черновике — проверки имени раздела;
+    7. остальные файлы — общее замечание о местах файлов личной папки.
+
+        project_dir: папка проекта: пути в замечаниях показываются от неё.
+        private_dir: личная папка агента.
+        answer_file_names: заранее известные имена файлов ответа роли в черновике.
+        only_answer_files: в черновике роли разрешены только файлы ответа.
+
+    Возвращает: Хук после шага для папки Path(".").
+    """
+    agent_draft_dir = draft_dir(private_dir = private_dir)
+    agent_context_file = context_path(private_dir = private_dir)
+
+    def shown(*, path: Path) -> str:
+        """Показывает путь агенту от папки проекта."""
+        return path.relative_to(project_dir).as_posix()
+
+    def hook(path: Path, text: str) -> str | None:
+        """Находит файл не на своём месте или с неверным именем и даёт замечание с правильным путём."""
+        if path == agent_context_file:
+            return None
+
+        # context.md не на своем месте
+        if path.name == agent_context_file.name:
+            return MISPLACED_CONTEXT_FILE_REMARK.format(
+                file_path = shown(path = path),
+                context_path = shown(path = agent_context_file),
+            )
+
+        # файл похожий на context.md не на своем месте
+        if CONTEXT_LIKE_NAME_PATTERN.match(path.name):
+            return MISPLACED_CONTEXT_REMARK.format(
+                file_path = shown(path = path),
+                context_path = shown(path = agent_context_file),
+            )
+
+        # имя черновика требуемое ответом не на своем месте
+        answer_path = agent_draft_dir / path.name
+        if path.name in answer_file_names and path != answer_path:
+            return MISPLACED_ANSWER_FILE_REMARK.format(
+                file_path = shown(path = path),
+                answer_path = shown(path = answer_path),
+            )
+
+        # в черновики упал файл, но там было ограничение на разрешенные имена
+        is_draft_file = path.is_relative_to(agent_draft_dir)
+        if is_draft_file and only_answer_files and path.name not in answer_file_names:
+            return ONLY_ANSWER_FILES_REMARK.format(
+                file_path = shown(path = path),
+                answer_paths = ", ".join(shown(path = agent_draft_dir / name) for name in answer_file_names),
+            )
+
+        # отдельные проверки на нейминг файлов черновика
+        if is_draft_file:
+            return _draft_section_remark(path = path)
+
+        return STRAY_PRIVATE_FILE_REMARK.format(
+            file_path = shown(path = path),
+            private_dir = shown(path = private_dir),
+            draft_dir = shown(path = agent_draft_dir),
+            context_path = shown(path = agent_context_file),
+        )
+
+    return hook
+
+
+def _draft_section_remark(*, path: Path) -> str | None:
     """
     Проверяет имя изменённого файла черновика: раздел ли это, латиница ли в теме, нет ли рядом
     разделов с тем же номером.
 
         path: путь изменённого файла черновика.
-        text: текст файла.
 
     Возвращает: Замечания агенту одной строкой или None, если имя раздела в порядке.
     """
@@ -77,31 +160,6 @@ def draft_section_hook(path: Path, text: str) -> str | None:
         )
 
     return "\n".join(remarks) if remarks else None
-
-
-def stray_private_file_hook(*, private_dir: Path) -> StepHook:
-    """
-    Собирает хук личной папки: замечание к файлу вне черновика, кроме файла контекста.
-
-        private_dir: личная папка агента.
-
-    Возвращает: Хук после шага для папки Path(".").
-    """
-    agent_draft_dir = draft_dir(private_dir = private_dir)
-    agent_context_file = context_path(private_dir = private_dir)
-
-    def hook(path: Path, text: str) -> str | None:
-        """Находит файл личной папки вне черновика и не файл контекста."""
-        if path.is_relative_to(agent_draft_dir) or path == agent_context_file:
-            return None
-
-        return STRAY_PRIVATE_FILE_REMARK.format(
-            file_name = path.relative_to(private_dir),
-            draft_dir_name = DRAFT_DIR_NAME,
-            context_file_name = CONTEXT_FILE_NAME,
-        )
-
-    return hook
 
 
 def code_block_hook(*, max_lines: int, remark: str, skip_file_names: tuple[str, ...]) -> StepHook:

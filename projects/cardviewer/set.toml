@@ -59,4 +59,4 @@ docs/screens/card_view_finish.png
 
 [pipeline]
 browser_check = true
-roles = ["pm", "researcher", "architect", "architect_review", "senior", "developer", "developer_review", "web_tester"]
+roles = ["pm", "researcher", "architect", "architect_review", "senior", "developer", "developer_review", "tester"]

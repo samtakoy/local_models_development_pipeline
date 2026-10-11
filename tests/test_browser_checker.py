@@ -23,7 +23,7 @@ from tests.shell_helpers import error_page_server_command, free_port, requires_s
 CALLER_DIR_NAME = Path("s10/developer_review_r1")
 
 # Папка помощников спрашивающего агента: рядом с его личной папкой.
-CALLER_HELPERS_DIR_NAME = Path("s10/developer_review_r1.helpers")
+CALLER_HELPERS_DIR_NAME = Path("s10/developer_review_r1_help")
 CALLER_JOURNAL_NAME = "12_s10_developer_review_r1"
 
 # Наблюдения, которые пишет заглушка помощника.

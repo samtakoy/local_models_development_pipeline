@@ -18,6 +18,8 @@ DEVELOPER_ROLE = RoleSettings(
     step_hooks = (),
     step_checks = (),
     answer_checks = (),
+    answer_file_names = (),
+    only_answer_files = False,
     helper_tools = (build_get_advice_tool, build_check_in_browser_tool),
     mcp_servers = (),
 )
