@@ -1,11 +1,11 @@
 import argparse
 import logging
 import sys
-from datetime import datetime
 from pathlib import Path
 
 from codeteam.app.config import load_project_config
 from codeteam.app.prompts_db import PROMPTS_ROOT, save_prompts
+from codeteam.app.run_dir import make_run_dir_name
 from codeteam.app.run_statistics import write_run_report
 from codeteam.app.sandbox_check import confirm_unprotected_run
 from codeteam.app.settings import load_settings
@@ -26,7 +26,7 @@ def main():
     confirm_unprotected_run()
     settings = load_settings()
     project = load_project_config(setup_dir = arguments.setup_dir)
-    run_dir = settings.runs_dir / datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    run_dir = settings.runs_dir / make_run_dir_name(model_name = settings.agent_model)
     logger.info(f"проект: {project.path}")
     logger.info(f"задача: {project.task}")
     logger.info(f"прогон: {run_dir}")

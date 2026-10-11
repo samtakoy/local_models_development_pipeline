@@ -10,12 +10,12 @@
 
 import argparse
 import logging
-from datetime import datetime
 from pathlib import Path
 
 from langchain_core.runnables import RunnableConfig
 
 from codeteam.app.config import load_project_config
+from codeteam.app.run_dir import make_run_dir_name
 from codeteam.app.sandbox_check import confirm_unprotected_run
 from codeteam.app.settings import load_settings
 from codeteam.common.git import list_uncommitted_changes
@@ -73,7 +73,7 @@ def main() -> None:
             f"в проекте {project_dir} есть незакоммиченные правки: {', '.join(path for _, path in changes)}"
         )
 
-    run_dir = settings.runs_dir / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_web_tester"
+    run_dir = settings.runs_dir / f"{make_run_dir_name(model_name = arguments.model)}_web_tester"
     run_dir.mkdir(parents = True, exist_ok = True)
     logger.info(f"проект: {project_dir}")
     logger.info(f"прогон: {run_dir}")
