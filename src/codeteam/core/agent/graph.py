@@ -2,6 +2,7 @@ import json
 import logging
 import re
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 from langchain_core.messages import SystemMessage, BaseMessage, HumanMessage, AIMessage, ToolMessage, RemoveMessage
@@ -270,10 +271,14 @@ def make_tools_node(*, tools: list[BaseTool], phase: str) -> Callable:
         """
         cfg: AgentConfig = config["configurable"][AGENT_CFG_NAME]
         is_answer_command = _is_answer_command(response = state["messages"][-1])
-        before = _private_dir_snapshot(cfg = cfg) if cfg.step_hooks else {}
+        private_dir = cfg.project_dir / cfg.relative_private_dir
+        before = _private_dir_snapshot(private_dir = private_dir) if cfg.step_hooks else frozenset()
         update = tool_node.invoke(state, config)
         hook_remarks = (
-            _step_hook_remarks(cfg = cfg, before = before, after = _private_dir_snapshot(cfg = cfg))
+            _step_hook_remarks(
+                cfg = cfg,
+                changed_files = _changed_files(before = before, after = _private_dir_snapshot(private_dir = private_dir)),
+            )
             if cfg.step_hooks else []
         )
         check_remarks = [remark for check in cfg.step_checks if (remark := check()) is not None]
@@ -606,24 +611,17 @@ def _is_unfinished(*, response: AIMessage) -> bool:
         and TODO_PATTERN.search(str(response.content)) is None
     )
 
-def _step_hook_remarks(
-    *,
-    cfg: AgentConfig,
-    before: dict[Path, tuple[int, int]],
-    after: dict[Path, tuple[int, int]],
-) -> list[str]:
+def _step_hook_remarks(*, cfg: AgentConfig, changed_files: tuple[Path, ...]) -> list[str]:
     """
     Запускает хуки после шага на файлах личной папки, которые появились или изменились за шаг: каждый
     файл получают хуки, в чьей папке он лежит.
 
         cfg: настройки агента.
-        before: состояние файлов личной папки до шага.
-        after: состояние файлов личной папки после шага.
+        changed_files: файлы личной папки, которые появились или изменились за шаг.
 
     Возвращает: Замечания хуков по порядку файлов и хуков; пустой список, если замечаний нет.
     """
     private_dir = cfg.project_dir / cfg.relative_private_dir
-    changed_files = sorted(path for path, state in after.items() if before.get(path) != state)
 
     remarks = []
     for path in changed_files:
@@ -641,14 +639,45 @@ def _step_hook_remarks(
 
     return remarks
 
-def _private_dir_snapshot(*, cfg: AgentConfig) -> dict[Path, tuple[int, int]]:
+@dataclass(frozen = True)
+class FileState:
+    """
+    Состояние файла в снимке личной папки.
+
+        path: путь файла.
+        modified_ns: время изменения, наносекунды.
+        size: размер, байты.
+    """
+
+    path: Path
+    modified_ns: int
+    size: int
+
+def _private_dir_snapshot(*, private_dir: Path) -> frozenset[FileState]:
     """
     Снимает состояние файлов личной папки агента со всеми подпапками.
 
-        cfg: настройки агента.
+        private_dir: личная папка агента.
 
-    Возвращает: Время изменения и размер каждого файла по пути.
+    Возвращает: Состояния файлов.
     """
-    private_dir = cfg.project_dir / cfg.relative_private_dir
+    states = []
+    for path in private_dir.glob("**/*"):
+        if not path.is_file():
+            continue
 
-    return {path: (path.stat().st_mtime_ns, path.stat().st_size) for path in private_dir.glob("**/*") if path.is_file()}
+        stat = path.stat()
+        states.append(FileState(path = path, modified_ns = stat.st_mtime_ns, size = stat.st_size))
+
+    return frozenset(states)
+
+def _changed_files(*, before: frozenset[FileState], after: frozenset[FileState]) -> tuple[Path, ...]:
+    """
+    Находит файлы, которые появились или изменились между снимками.
+
+        before: снимок до шага.
+        after: снимок после шага.
+
+    Возвращает: Пути файлов по порядку.
+    """
+    return tuple(sorted(state.path for state in after - before))
