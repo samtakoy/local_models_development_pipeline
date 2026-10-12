@@ -13,6 +13,7 @@ from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 
 from codeteam.core.agent.graph import AGENT_CFG_NAME, AgentState, agent_node, make_tools_node
+from codeteam.core.agent.repeat_check import INITIAL_REPEAT_STATE
 from codeteam.core.agent.statistics import WORK_PHASE, AgentStatistics
 from codeteam.core.tools.files import PathRefusals
 
@@ -232,7 +233,7 @@ def test_server_error_and_unfinished_answer_retries_are_counted(tmp_path: Path) 
 
     agent_node(
         {
-            "messages": [], "reset_count": 0, "answer_notices": 0, "repeated_results": 0, "recent_tool_steps": [],
+            "messages": [], "reset_count": 0, "answer_notices": 0, "repeats": INITIAL_REPEAT_STATE,
             "soft_limit_steps": 0,
         },
         _graph_config(statistics = statistics, model = model, tmp_path = tmp_path, step_hooks = ()),
@@ -263,7 +264,7 @@ def test_step_hook_remark_is_counted(tmp_path: Path) -> None:
 
     workflow.compile().invoke(
         {
-            "messages": [call], "reset_count": 0, "answer_notices": 0, "repeated_results": 0, "recent_tool_steps": [],
+            "messages": [call], "reset_count": 0, "answer_notices": 0, "repeats": INITIAL_REPEAT_STATE,
             "soft_limit_steps": 0,
         },
         _graph_config(

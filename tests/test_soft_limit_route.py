@@ -10,6 +10,7 @@ from langchain_core.messages import AIMessage, ToolMessage
 
 from codeteam.core.agent.graph import AGENT_CFG_NAME, _counts_against_soft_limit, route_after_tools
 from codeteam.core.agent.node_ids import AGENT_NODE_ID, LIMIT_NOTICE_NODE_ID
+from codeteam.core.agent.repeat_check import INITIAL_REPEAT_STATE
 from codeteam.core.tools.shell import BASH_TOOL_NAME, STOP_PROCESS_TOOL_NAME
 
 # Мягкий и жёсткий лимиты истории в тестах.
@@ -72,7 +73,7 @@ def _route(*, input_tokens: int, soft_limit_steps: int, tmp_path: Path) -> str:
     Возвращает: Имя следующего узла.
     """
     messages = _messages(calls = [(BASH_TOOL_NAME, {"command": "ls"})], input_tokens = input_tokens)
-    state = {"messages": messages, "repeated_results": 0, "soft_limit_steps": soft_limit_steps}
+    state = {"messages": messages, "repeats": INITIAL_REPEAT_STATE, "soft_limit_steps": soft_limit_steps}
 
     return route_after_tools(state, {"configurable": {AGENT_CFG_NAME: _settings(tmp_path = tmp_path)}})
 

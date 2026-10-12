@@ -13,6 +13,7 @@ from codeteam.core.agent.answer_files import build_draft_rules
 from codeteam.core.agent.config import AgentConfig
 from codeteam.core.agent.graph import create_agent_graph, AgentState, AGENT_CFG_NAME
 from codeteam.core.agent.journal import AgentJournal
+from codeteam.core.agent.repeat_check import INITIAL_REPEAT_STATE
 from codeteam.core.agent.statistics import STATISTICS_FILE_SUFFIX, AgentStatistics
 from codeteam.core.agent.role import AgentRole
 from codeteam.core.agent.prompts import DRAFT_PHASE_BASH_REFUSAL, AGENT_SYSTEM_INSTRUCTIONS, LIMIT_NOTICE, \
@@ -260,8 +261,7 @@ def run_agent(
         messages = [],
         reset_count = 0,
         answer_notices = 0,
-        repeated_results = 0,
-        recent_tool_steps = [],
+        repeats = INITIAL_REPEAT_STATE,
         soft_limit_steps = 0,
     )
     journal = AgentJournal(path = journal_path, agent_name = role.name, model_name = role.model_name)

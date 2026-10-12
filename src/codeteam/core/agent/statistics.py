@@ -61,6 +61,10 @@ ANSWER_COMMAND_REMARK_COUNTER = "answer_command_remarks"
 REPEATED_RESULT_REMARK_COUNTER = "repeated_result_remarks"
 REPEATED_RESULT_STOP_COUNTER = "repeated_result_stops"
 
+# Явные счётчики петель по фазам для повтора вызовов подряд с любым результатом: замечания и остановки.
+REPEATED_CALL_REMARK_COUNTER = "repeated_call_remarks"
+REPEATED_CALL_STOP_COUNTER = "repeated_call_stops"
+
 # Явные счётчики опасных переходов: переход в фазу черновика по жёсткому лимиту истории, сброс истории,
 # когда история дошла до края окна модели в фазе черновика, сброс после того, как кончились попытки сдать работу.
 HARD_LIMIT_COUNTER = "hard_limit_notices"

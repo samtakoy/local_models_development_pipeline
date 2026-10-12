@@ -13,6 +13,7 @@ from langgraph.graph import StateGraph
 
 from codeteam.common.git import UNTRACKED_STATUS, commit_all, init_repository, list_uncommitted_changes
 from codeteam.core.agent.graph import AGENT_CFG_NAME, AgentState, make_tools_node
+from codeteam.core.agent.repeat_check import INITIAL_REPEAT_STATE
 from codeteam.core.agent.statistics import WORK_PHASE, AgentStatistics
 from codeteam.core.agent.step_hooks import StepContext, join_remarks
 from codeteam.core.roles.common import tracked_changes_check
@@ -165,7 +166,7 @@ def _run_step(*, project_dir: Path, tools: list[BaseTool]) -> list[ToolMessage]:
 
     result = workflow.compile().invoke(
         {
-            "messages": [call], "reset_count": 0, "answer_notices": 0, "repeated_results": 0, "recent_tool_steps": [],
+            "messages": [call], "reset_count": 0, "answer_notices": 0, "repeats": INITIAL_REPEAT_STATE,
             "soft_limit_steps": 0,
         },
         {"configurable": {AGENT_CFG_NAME: settings}},

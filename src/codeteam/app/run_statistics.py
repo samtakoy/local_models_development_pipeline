@@ -10,7 +10,7 @@ from statistics import mean
 from typing import Any
 
 from codeteam.core.agent.statistics import ANSWER_NOTICE_RESET_COUNTER, DRAFT_PHASE, HARD_LIMIT_COUNTER, \
-    LIMIT_NOTICE_EVENT, REPEATED_RESULT_STOP_COUNTER, SERVER_ERROR_RETRY_COUNTER, STATISTICS_FILE_SUFFIX, \
+    LIMIT_NOTICE_EVENT, REPEATED_CALL_STOP_COUNTER, REPEATED_RESULT_STOP_COUNTER, SERVER_ERROR_RETRY_COUNTER, STATISTICS_FILE_SUFFIX, \
     STEP_HOOK_REMARK_COUNTER, UNFINISHED_ANSWER_HINT_EVENT, \
     UNFINISHED_ANSWER_RETRY_COUNTER, WARMUP_PHASE, WINDOW_FULL_RESET_COUNTER, WORK_PHASE
 
@@ -49,7 +49,8 @@ class RunTotals:
         draft_tool_errors: ошибок инструментов в фазе черновика.
         limit_notices: переходов в фазу черновика по лимиту истории.
         hard_limit_notices: из них по жёсткому лимиту истории.
-        loops_to_draft: переходов в фазу черновика из-за петли: одинаковый результат инструментов подряд.
+        loops_to_draft: переходов в фазу черновика из-за петли: одинаковый результат или одинаковые вызовы
+            инструментов подряд.
         loops_to_reset: пересборок истории из-за петли в фазе черновика.
         window_full_resets: сбросов истории, когда она дошла до края окна модели в фазе черновика.
         answer_notice_resets: сбросов истории, когда кончились попытки сдать работу.
@@ -152,8 +153,12 @@ def agent_totals(*, statistics: dict[str, Any]) -> RunTotals:
     events = statistics["events"]
     counters = statistics["counters"]
     # в файлах, записанных до появления счётчиков по фазам, их нет
-    loop_stops = statistics.get("phase_counters", {}).get(REPEATED_RESULT_STOP_COUNTER, {})
-    loops_to_draft = loop_stops.get(WORK_PHASE, 0)
+    phase_counters = statistics.get("phase_counters", {})
+    loop_stops = [
+        phase_counters.get(counter_name, {})
+        for counter_name in (REPEATED_RESULT_STOP_COUNTER, REPEATED_CALL_STOP_COUNTER)
+    ]
+    loops_to_draft = sum(stops.get(WORK_PHASE, 0) for stops in loop_stops)
     unfinished_answers = events.get(UNFINISHED_ANSWER_HINT_EVENT, 0) + counters.get(UNFINISHED_ANSWER_RETRY_COUNTER, 0)
 
     return RunTotals(
@@ -169,7 +174,7 @@ def agent_totals(*, statistics: dict[str, Any]) -> RunTotals:
         limit_notices = events.get(LIMIT_NOTICE_EVENT, 0) - loops_to_draft,
         hard_limit_notices = counters.get(HARD_LIMIT_COUNTER, 0),
         loops_to_draft = loops_to_draft,
-        loops_to_reset = loop_stops.get(DRAFT_PHASE, 0),
+        loops_to_reset = sum(stops.get(DRAFT_PHASE, 0) for stops in loop_stops),
         window_full_resets = counters.get(WINDOW_FULL_RESET_COUNTER, 0),
         answer_notice_resets = counters.get(ANSWER_NOTICE_RESET_COUNTER, 0),
         unfinished_answers = unfinished_answers,

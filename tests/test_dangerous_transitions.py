@@ -4,8 +4,8 @@ from types import SimpleNamespace
 
 from langchain_core.messages import AIMessage, ToolMessage
 
-from codeteam.core.agent.graph import AGENT_CFG_NAME, ANSWER_NOTICE_LIMIT, REPEATED_RESULTS_LIMIT, \
-    count_reset_reason, limit_notice_node
+from codeteam.core.agent.graph import AGENT_CFG_NAME, ANSWER_NOTICE_LIMIT, count_reset_reason, limit_notice_node
+from codeteam.core.agent.repeat_check import RESULT_REPEAT_CHECK, RepeatState
 from codeteam.core.agent.statistics import ANSWER_NOTICE_RESET_COUNTER, HARD_LIMIT_COUNTER, \
     WINDOW_FULL_RESET_COUNTER, AgentStatistics
 
@@ -63,7 +63,10 @@ def _hard_limit_count(*, input_tokens: int, repeated_results: int) -> int:
         limit_notice = "лимит",
         shell_processes = SimpleNamespace(kill_all = lambda: None),
     )}}
-    state = {"messages": _messages(input_tokens = input_tokens), "repeated_results": repeated_results}
+    state = {
+        "messages": _messages(input_tokens = input_tokens),
+        "repeats": RepeatState(repeated_results = repeated_results, recent_result_keys = ()),
+    }
     limit_notice_node(state, config)
 
     return statistics.to_dict()["counters"].get(HARD_LIMIT_COUNTER, 0)
@@ -91,7 +94,7 @@ def test_hard_limit_is_counted() -> None:
     """
     assert _hard_limit_count(input_tokens = HARD_LIMIT, repeated_results = 0) == 1
     assert _hard_limit_count(input_tokens = HARD_LIMIT - 1, repeated_results = 0) == 0
-    assert _hard_limit_count(input_tokens = HARD_LIMIT, repeated_results = REPEATED_RESULTS_LIMIT) == 0
+    assert _hard_limit_count(input_tokens = HARD_LIMIT, repeated_results = RESULT_REPEAT_CHECK.limit) == 0
 
 
 def test_reset_reasons_are_counted() -> None:

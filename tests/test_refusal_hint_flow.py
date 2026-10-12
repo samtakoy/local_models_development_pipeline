@@ -14,6 +14,7 @@ from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 
 from codeteam.core.agent.graph import AGENT_CFG_NAME, AgentState, make_tools_node
+from codeteam.core.agent.repeat_check import INITIAL_REPEAT_STATE
 from codeteam.core.agent.statistics import DRAFT_PHASE, STEP_HOOK_REMARK_COUNTER, WORK_PHASE, AgentStatistics
 from codeteam.core.agent.step_hooks import StepContext
 from codeteam.core.agent.workspace import Workspace
@@ -180,8 +181,7 @@ def _run_steps(*, project_dir: Path, phase: str, name: str, args: dict, step_cou
     graph = workflow.compile()
 
     texts = []
-    repeated_results = 0
-    recent_tool_steps = []
+    repeats = INITIAL_REPEAT_STATE
     for step in range(step_count):
         call = AIMessage(content = "", tool_calls = [{"id": f"call_{step}", "name": name, "args": args}])
         result = graph.invoke(
@@ -189,21 +189,19 @@ def _run_steps(*, project_dir: Path, phase: str, name: str, args: dict, step_cou
                 "messages": [call],
                 "reset_count": 0,
                 "answer_notices": 0,
-                "repeated_results": repeated_results,
-                "recent_tool_steps": recent_tool_steps,
+                "repeats": repeats,
                 "soft_limit_steps": 0,
             },
             {"configurable": {AGENT_CFG_NAME: settings}},
         )
         tool_message = next(message for message in result["messages"] if isinstance(message, ToolMessage))
         texts.append(tool_message.text)
-        repeated_results = result["repeated_results"]
-        recent_tool_steps = result["recent_tool_steps"]
+        repeats = result["repeats"]
 
     return _StepsResult(
         texts = texts,
         counters = statistics.to_dict()["counters"],
-        repeated_results = repeated_results,
+        repeated_results = repeats.repeated_results,
     )
 
 
