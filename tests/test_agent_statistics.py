@@ -206,6 +206,7 @@ def _graph_config(*, statistics: AgentStatistics, model: FlakyModel, tmp_path: P
         project_dir = tmp_path,
         relative_private_dir = Path(".ct-work") / "developer_r1",
         path_refusals = PathRefusals(),
+        history_token_limit = 60000,
     )
 
     return {"configurable": {AGENT_CFG_NAME: settings}}
@@ -230,7 +231,10 @@ def test_server_error_and_unfinished_answer_retries_are_counted(tmp_path: Path) 
     ])
 
     agent_node(
-        {"messages": [], "reset_count": 0, "answer_notices": 0, "repeated_results": 0, "recent_tool_steps": []},
+        {
+            "messages": [], "reset_count": 0, "answer_notices": 0, "repeated_results": 0, "recent_tool_steps": [],
+            "soft_limit_steps": 0,
+        },
         _graph_config(statistics = statistics, model = model, tmp_path = tmp_path, step_hooks = ()),
     )
 
@@ -258,7 +262,10 @@ def test_step_hook_remark_is_counted(tmp_path: Path) -> None:
     call = AIMessage(content = "", tool_calls = [{"id": "call_1", "name": "noop", "args": {}}])
 
     workflow.compile().invoke(
-        {"messages": [call], "reset_count": 0, "answer_notices": 0, "repeated_results": 0, "recent_tool_steps": []},
+        {
+            "messages": [call], "reset_count": 0, "answer_notices": 0, "repeated_results": 0, "recent_tool_steps": [],
+            "soft_limit_steps": 0,
+        },
         _graph_config(
             statistics = statistics,
             model = FlakyModel(answers = []),

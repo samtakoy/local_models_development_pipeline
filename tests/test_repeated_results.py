@@ -48,6 +48,7 @@ def _run_steps(*, tool_func, targets: list[str], phase: str, tmp_path: Path) -> 
         project_dir = tmp_path,
         relative_private_dir = Path(".ct-work") / "bro_check_r1",
         path_refusals = PathRefusals(),
+        history_token_limit = 60000,
     )}}
     tool = StructuredTool.from_function(func = tool_func, name = "browser_click", description = "нажать")
     # узел инструментов langgraph работает только внутри графа
@@ -57,7 +58,10 @@ def _run_steps(*, tool_func, targets: list[str], phase: str, tmp_path: Path) -> 
     workflow.add_edge("tools", END)
     graph = workflow.compile()
 
-    state = {"messages": [], "reset_count": 0, "answer_notices": 0, "repeated_results": 0, "recent_tool_steps": []}
+    state = {
+            "messages": [], "reset_count": 0, "answer_notices": 0, "repeated_results": 0, "recent_tool_steps": [],
+            "soft_limit_steps": 0,
+        }
     states = []
     for step, target in enumerate(targets):
         call = AIMessage(content = "", tool_calls = [{"id": f"call_{step}", "name": "browser_click", "args": {"target": target}}])
@@ -165,7 +169,7 @@ def test_loop_in_draft_ends_draft_phase() -> None:
     def state(*, repeated_results: int) -> dict:
         """Состояние после ответа агента в фазе черновика с вызовом инструмента."""
         return {"messages": [call], "reset_count": 0, "answer_notices": 0, "repeated_results": repeated_results,
-                "recent_tool_steps": []}
+                "recent_tool_steps": [], "soft_limit_steps": 0}
 
     assert route_after_draft(state(repeated_results = REPEATED_RESULTS_LIMIT - 1), config) == DRAFT_TOOL_NODE_ID
     assert route_after_draft(state(repeated_results = REPEATED_RESULTS_LIMIT), config) == REINIT_NODE_ID

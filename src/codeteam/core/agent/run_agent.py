@@ -237,6 +237,7 @@ def run_agent(
                     *_input_reads(project_dir = project_dir, input_dirs = input_dirs),
                 ],
                 history_token_limit = 60000,
+                soft_limit_extra_steps = 2,
                 history_token_hard_limit = 90000,
                 context_window_limit = settings.agent_ctx_window - RESPONSE_TOKEN_RESERVE,
                 max_resets = 10,
@@ -261,6 +262,7 @@ def run_agent(
         answer_notices = 0,
         repeated_results = 0,
         recent_tool_steps = [],
+        soft_limit_steps = 0,
     )
     journal = AgentJournal(path = journal_path, agent_name = role.name, model_name = role.model_name)
     journal.write_tools(tools = bound_chat_model.kwargs["tools"])

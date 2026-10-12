@@ -170,6 +170,7 @@ def _run_steps(*, project_dir: Path, phase: str, name: str, args: dict, step_cou
         project_dir = project_dir,
         relative_private_dir = RELATIVE_PRIVATE_DIR,
         path_refusals = refusals,
+        history_token_limit = 60000,
     )
     # узел инструментов langgraph работает только внутри графа
     workflow = StateGraph(AgentState)
@@ -190,6 +191,7 @@ def _run_steps(*, project_dir: Path, phase: str, name: str, args: dict, step_cou
                 "answer_notices": 0,
                 "repeated_results": repeated_results,
                 "recent_tool_steps": recent_tool_steps,
+                "soft_limit_steps": 0,
             },
             {"configurable": {AGENT_CFG_NAME: settings}},
         )

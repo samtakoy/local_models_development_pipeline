@@ -20,6 +20,8 @@ class AgentConfig:
     warmup_calls: list[tuple[str, dict]]
     # лимит входных токенов
     history_token_limit: int
+    # сколько шагов сверх history_token_limit разрешено до фазы черновика
+    soft_limit_extra_steps: int
     # потолок входных токенов, после которого фаза черновика включается и во время записи ответа
     history_token_hard_limit: int
     # потолок входных токенов фазы черновика: дальше история не помещается в окно модели

@@ -151,6 +151,7 @@ def _run_step(*, project_dir: Path, tools: list[BaseTool]) -> list[ToolMessage]:
         project_dir = project_dir,
         relative_private_dir = RELATIVE_PRIVATE_DIR,
         path_refusals = PathRefusals(),
+        history_token_limit = 60000,
     )
     # узел инструментов langgraph работает только внутри графа
     workflow = StateGraph(AgentState)
@@ -163,7 +164,10 @@ def _run_step(*, project_dir: Path, tools: list[BaseTool]) -> list[ToolMessage]:
     )
 
     result = workflow.compile().invoke(
-        {"messages": [call], "reset_count": 0, "answer_notices": 0, "repeated_results": 0, "recent_tool_steps": []},
+        {
+            "messages": [call], "reset_count": 0, "answer_notices": 0, "repeated_results": 0, "recent_tool_steps": [],
+            "soft_limit_steps": 0,
+        },
         {"configurable": {AGENT_CFG_NAME: settings}},
     )
 

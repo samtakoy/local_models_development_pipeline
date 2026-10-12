@@ -43,6 +43,8 @@ class AgentState(TypedDict):
     repeated_results: int
     # вызовы и результаты без замечаний последних REPEAT_WINDOW шагов инструментов: с ними сравнивается следующий шаг
     recent_tool_steps: list[str]
+    # сколько шагов инструментов сделано сверх мягкого лимита истории, когда он на них действует
+    soft_limit_steps: int
 
 AGENT_CFG_NAME = "agent"
 
@@ -111,6 +113,7 @@ def reinit_node(state: AgentState, config: RunnableConfig):
         "answer_notices": 0,
         "repeated_results": 0,
         "recent_tool_steps": [],
+        "soft_limit_steps": 0,
     }
 
 def count_reset_reason(*, cfg: AgentConfig, state: AgentState) -> None:
@@ -303,6 +306,11 @@ def make_tools_node(*, tools: list[BaseTool], phase: str) -> Callable:
             **update,
             "repeated_results": repeated_results,
             "recent_tool_steps": [*state["recent_tool_steps"], tool_step][-REPEAT_WINDOW:],
+            "soft_limit_steps": (
+                state["soft_limit_steps"] + 1
+                if _counts_against_soft_limit(cfg = cfg, messages = state["messages"])
+                else state["soft_limit_steps"]
+            ),
         }
         if not remarks:
             return update
@@ -322,8 +330,8 @@ def route_after_tools(state: AgentState, config: RunnableConfig) -> str:
     Выбирает узел после выполнения инструментов: продолжение работы или фаза черновика. Фаза черновика
     включается и после REPEATED_RESULTS_LIMIT повторов шага инструментов подряд.
 
-    Мягкий лимит history_token_limit не действует на шаге, где агент работал со своим ответом,
-    пытался сдать работу командой или только останавливал свои процессы; жёсткий лимит
+    Мягкий лимит history_token_limit переводит к фазе черновика, когда сверх него сделано больше
+    soft_limit_extra_steps шагов, на которые он действует (их считает узел инструментов); жёсткий лимит
     history_token_hard_limit действует всегда.
 
         state: состояние агента.
@@ -339,17 +347,32 @@ def route_after_tools(state: AgentState, config: RunnableConfig) -> str:
     if input_tokens >= cfg.history_token_hard_limit:
         return LIMIT_NOTICE_NODE_ID
 
-    last_response = _last_response(messages = state["messages"])
-    # шаги, на которые мягкий лимит не действует
-    ignores_soft_limit = (
-        _works_with_answer(cfg = cfg, messages = state["messages"])
-        or _is_answer_command(response = last_response)
-        or _is_stop_process_step(response = last_response)
-    )
-    if input_tokens >= cfg.history_token_limit and not ignores_soft_limit:
+    if state["soft_limit_steps"] > cfg.soft_limit_extra_steps:
         return LIMIT_NOTICE_NODE_ID
 
     return AGENT_NODE_ID
+
+
+def _counts_against_soft_limit(*, cfg: AgentConfig, messages: Sequence[BaseMessage]) -> bool:
+    """
+    Проверяет, что шаг инструментов идёт сверх мягкого лимита истории и лимит на него действует. Лимит не действует
+    на шаг, где агент работал со своим ответом, пытался сдать работу командой или только останавливал свои процессы.
+
+        cfg: настройки агента.
+        messages: история агента: последний ответ модели с вызовами шага.
+
+    Возвращает: True, если шаг считается в soft_limit_steps.
+    """
+    if _last_input_tokens(messages = messages) < cfg.history_token_limit:
+        return False
+
+    last_response = _last_response(messages = messages)
+
+    return not (
+        _works_with_answer(cfg = cfg, messages = messages)
+        or _is_answer_command(response = last_response)
+        or _is_stop_process_step(response = last_response)
+    )
 
 
 def _is_answer_command(*, response: BaseMessage | None) -> bool:
