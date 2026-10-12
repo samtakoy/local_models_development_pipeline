@@ -1,12 +1,12 @@
 """Роль советника по документации: ответ на вопрос агента по документации библиотек; вызывается инструментом
-look_at_documentation."""
+query_library_docs."""
 
 from codeteam.core.roles.advisor.config import ADVICE_FILE_NAME, ADVISOR_ROLE
-from codeteam.core.roles.advisor.tool import LOOK_AT_DOCUMENTATION_TOOL_NAME, build_look_at_documentation_tool
+from codeteam.core.roles.advisor.tool import QUERY_LIBRARY_DOCS_TOOL_NAME, build_query_library_docs_tool
 
 __all__ = [
     "ADVICE_FILE_NAME",
     "ADVISOR_ROLE",
-    "LOOK_AT_DOCUMENTATION_TOOL_NAME",
-    "build_look_at_documentation_tool",
+    "QUERY_LIBRARY_DOCS_TOOL_NAME",
+    "build_query_library_docs_tool",
 ]

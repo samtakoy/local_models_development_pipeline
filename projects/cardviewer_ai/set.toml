@@ -58,3 +58,4 @@ question = """В проекте уже есть локальное веб-при
 
 [pipeline]
 browser_check = true
+library_docs = true

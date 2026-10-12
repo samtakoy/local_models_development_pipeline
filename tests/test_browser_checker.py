@@ -116,6 +116,7 @@ def _caller_context(*, project_dir: Path, browser_check: bool, processes: ShellP
             model_name = "model",
             roles = (),
             browser_check = browser_check,
+            library_docs = False,
             settings = None,
         ),
         caller_name = "developer_review",

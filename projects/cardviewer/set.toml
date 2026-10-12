@@ -59,4 +59,5 @@ docs/screens/card_view_finish.png
 
 [pipeline]
 browser_check = true
+library_docs = true
 roles = ["pm", "researcher", "architect", "architect_review", "senior", "developer", "developer_review", "tester"]

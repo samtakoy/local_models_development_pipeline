@@ -1,4 +1,4 @@
-"""Описание роли сеньора: промпт, модель, инструменты, хуки."""
+"""Описание роли сеньора: промпт, модель, инструменты, хуки, помощник: советник по документации."""
 
 from pathlib import Path
 
@@ -7,6 +7,7 @@ from codeteam.core.agent.answer_files import AnswerFiles
 from codeteam.core.agent.step_hooks import code_block_hook, draft_phase_hint_hook, private_file_hook, \
     readonly_work_phase_hint_hook
 from codeteam.core.agent.workspace import DRAFT_DIR_NAME
+from codeteam.core.roles.advisor import QUERY_LIBRARY_DOCS_TOOL_NAME, build_query_library_docs_tool
 from codeteam.core.roles.common import PROJECT_TOOL_NAMES, RoleSettings
 from codeteam.core.roles.senior.prompts import SENIOR_CODE_BLOCK_REMARK
 
@@ -19,7 +20,7 @@ SENIOR_ANSWER_FILES = AnswerFiles(names = (), only_these = False)
 SENIOR_ROLE = RoleSettings(
     name = "senior",
     system_prompt_path = Path(__file__).parent / "system_prompt.md",
-    prompt_fields = {},
+    prompt_fields = {"query_library_docs_tool": QUERY_LIBRARY_DOCS_TOOL_NAME},
     model_name = None,
     reasoning_level = ReasoningLevel.MEDIUM,
     tool_names = PROJECT_TOOL_NAMES,
@@ -36,6 +37,6 @@ SENIOR_ROLE = RoleSettings(
         ),
     ),
     answer_checks = (),
-    helper_tools = (),
+    helper_tools = (build_query_library_docs_tool,),
     mcp_servers = (),
 )

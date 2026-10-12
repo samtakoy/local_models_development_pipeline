@@ -37,6 +37,7 @@ class McpServer:
         command: программа запуска.
         args: аргументы программы.
         cwd: рабочая папка сервера: от неё сервер считает относительные пути из вызовов инструментов.
+        env: переменные окружения сервера сверх набора, который MCP передаёт любому серверу (PATH, HOME и другие).
         check_call: проверка вызова до отправки серверу; None — вызовы не проверяются.
         excluded_tool_names: имена инструментов сервера, которые агент не получает.
     """
@@ -45,6 +46,7 @@ class McpServer:
     command: str
     args: tuple[str, ...]
     cwd: Path
+    env: dict[str, str]
     check_call: CallCheck | None
     excluded_tool_names: tuple[str, ...]
 
@@ -107,6 +109,7 @@ class McpTools:
                 "command": server.command,
                 "args": list(server.args),
                 "cwd": str(server.cwd),
+                "env": dict(server.env),
                 "transport": "stdio",
             }
             for server in self._servers

@@ -6,6 +6,9 @@ from pathlib import Path
 
 from dotenv import find_dotenv, load_dotenv
 
+# Папка своего кэша npm рядом с файлом .env: в неё npx скачивает пакеты серверов MCP.
+NPM_CACHE_DIR_NAME = ".npm-cache"
+
 
 @dataclass(frozen = True)
 class Settings:
@@ -22,6 +25,12 @@ class Settings:
             не задана — инструмента нет.
         vision_ctx_window: окно контекста смотрящей модели в токенах; VISION_CTX_WINDOW, не задана — окно агентов.
         browser_headless: браузер агентов без окна; BROWSER_HEADLESS, не задана — без окна.
+        context7_api_key: ключ Context7 для советника по документации; CONTEXT7_API_KEY, не задан — Context7
+            без ключа, с меньшими лимитами.
+        context7_check_key_at_start: перед первой ролью проверить ключ Context7 пробным поиском библиотеки;
+            CONTEXT7_CHECK_KEY_AT_START, не задана — без проверки.
+        npm_cache_dir: свой кэш npm, куда npx скачивает пакеты серверов MCP: папка NPM_CACHE_DIR_NAME рядом
+            с файлом .env.
     """
 
     ollama_base_url: str
@@ -32,6 +41,9 @@ class Settings:
     vision_model: str | None
     vision_ctx_window: int
     browser_headless: bool
+    context7_api_key: str | None
+    context7_check_key_at_start: bool
+    npm_cache_dir: Path
 
 
 def load_settings() -> Settings:
@@ -54,6 +66,9 @@ def load_settings() -> Settings:
         vision_model = os.getenv("VISION_MODEL", "").strip() or None,
         vision_ctx_window = int(os.getenv("VISION_CTX_WINDOW", agent_ctx_window)),
         browser_headless = os.getenv("BROWSER_HEADLESS", "true").strip().lower() != "false",
+        context7_api_key = os.getenv("CONTEXT7_API_KEY", "").strip() or None,
+        context7_check_key_at_start = os.getenv("CONTEXT7_CHECK_KEY_AT_START", "false").strip().lower() == "true",
+        npm_cache_dir = dotenv_path.parent / NPM_CACHE_DIR_NAME,
     )
 
 

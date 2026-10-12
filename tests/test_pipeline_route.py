@@ -251,19 +251,31 @@ def test_config_roles(tmp_path: Path) -> None:
     """
     with_roles = _write_set_file(
         setup_dir = tmp_path / "with_roles",
-        pipeline = 'browser_check = true\nroles = ["pm", "researcher"]\n',
+        pipeline = 'browser_check = true\nlibrary_docs = true\nroles = ["pm", "researcher"]\n',
     )
-    without_roles = _write_set_file(setup_dir = tmp_path / "without_roles", pipeline = "browser_check = true\n")
+    without_roles = _write_set_file(
+        setup_dir = tmp_path / "without_roles",
+        pipeline = "browser_check = true\nlibrary_docs = true\n",
+    )
 
     assert load_project_config(setup_dir = with_roles).roles == ("pm", "researcher")
     assert load_project_config(setup_dir = without_roles).roles == DEFAULT_ROLES
 
 
-@pytest.mark.parametrize("pipeline", ["", 'browser_check = "yes"\n', "browser_check = false\n"])
+@pytest.mark.parametrize(
+    "pipeline",
+    [
+        "library_docs = true\n",
+        'browser_check = "yes"\nlibrary_docs = true\n',
+        "browser_check = false\nlibrary_docs = true\n",
+        "browser_check = true\n",
+        'browser_check = true\nlibrary_docs = "yes"\n',
+    ],
+)
 def test_config_browser_check_error(tmp_path: Path, pipeline: str) -> None:
     """
-    Без browser_check, с не логическим значением или с false при веб-тестировщике в списке ролей файл состава
-    не читается.
+    Без browser_check или library_docs, с не логическим значением или с browser_check = false при веб-тестировщике
+    в списке ролей файл состава не читается.
     """
     with pytest.raises(ConfigError):
         load_project_config(setup_dir = _write_set_file(setup_dir = tmp_path / "setup", pipeline = pipeline))
@@ -276,7 +288,7 @@ def test_config_browser_check_off(tmp_path: Path, roles: str) -> None:
     """
     setup_dir = _write_set_file(
         setup_dir = tmp_path / "setup",
-        pipeline = f"browser_check = false\nroles = {roles}\n",
+        pipeline = f"browser_check = false\nlibrary_docs = true\nroles = {roles}\n",
     )
 
     assert load_project_config(setup_dir = setup_dir).browser_check is False
@@ -372,6 +384,7 @@ def _config(*, project_dir: Path, run_dir: Path) -> RunnableConfig:
         model_name = "model",
         roles = DEFAULT_ROLES,
         browser_check = True,
+        library_docs = False,
         settings = None,
     )})
 

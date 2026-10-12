@@ -5,3 +5,4 @@ question = "Опиши архитектуру проекта верхнеуро�
 
 [pipeline]
 browser_check = true
+library_docs = true

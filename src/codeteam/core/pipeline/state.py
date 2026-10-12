@@ -113,6 +113,7 @@ class PipelineConfig:
         model_name: модель агентов.
         roles: последовательность ролей пайплайна.
         browser_check: проверка приложения в браузере: веб-тестировщик и инструмент check_in_browser.
+        library_docs: советник по документации библиотек: инструмент query_library_docs.
         settings: настройки приложения.
     """
 
@@ -121,4 +122,5 @@ class PipelineConfig:
     model_name: str
     roles: tuple[str, ...]
     browser_check: bool
+    library_docs: bool
     settings: Settings

@@ -6,3 +6,4 @@ question = """Добавить команду stats: по каждой коло�
 
 [pipeline]
 browser_check = true
+library_docs = true

@@ -31,6 +31,7 @@ def _server(*, excluded_tool_names: tuple[str, ...]) -> McpServer:
         command = "test",
         args = (),
         cwd = Path("."),
+        env = {},
         check_call = None,
         excluded_tool_names = excluded_tool_names,
     )

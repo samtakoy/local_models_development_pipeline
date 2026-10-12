@@ -23,3 +23,6 @@ wheels/
 
 # Снимки и журналы Playwright MCP
 /.playwright-mcp/
+
+# Свой кэш npm: пакеты серверов MCP
+/.npm-cache/

@@ -60,6 +60,9 @@ def _caller_context(*, project_dir: Path, vision_model: str | None) -> CallerCon
         vision_model = vision_model,
         vision_ctx_window = 16000,
         browser_headless = True,
+        context7_api_key = None,
+        context7_check_key_at_start = False,
+        npm_cache_dir = project_dir / ".npm-cache",
     )
 
     return CallerContext(
@@ -69,6 +72,7 @@ def _caller_context(*, project_dir: Path, vision_model: str | None) -> CallerCon
             model_name = "model",
             roles = (),
             browser_check = False,
+            library_docs = False,
             settings = settings,
         ),
         caller_name = "pm",
