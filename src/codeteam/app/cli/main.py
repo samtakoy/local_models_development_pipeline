@@ -53,7 +53,12 @@ def main():
 
     logger.info(f"отчёт исследователя: {result['research_dir']}")
     logger.info(f"этапы архитектора: {result['plan_dir']}")
-    for role_name, report_dir in (("тестировщик", result["tester_dir"]), ("веб-тестировщик", result["web_tester_dir"])):
+    tester_dirs = (
+        ("тестировщик", result["tester_dir"]),
+        ("веб-тестировщик", result["web_tester_dir"]),
+        ("проверка по сценариям", result["web_scenarios_tester_dir"]),
+    )
+    for role_name, report_dir in tester_dirs:
         if report_dir is not None:
             verdict = "принято" if read_verdict(remarks_dir = report_dir) else "не принято"
             logger.info(f"{role_name}: приложение {verdict}, вердикт и отчёт: {report_dir}")

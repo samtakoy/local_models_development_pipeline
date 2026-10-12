@@ -112,7 +112,7 @@ def _state(*, project_dir: Path, with_reports: bool, fix_rounds: int) -> Pipelin
         tester_dir = project_dir / "tester" if with_reports else None,
         web_scenarios_dir = None,
         web_tester_dir = project_dir / "web_tester" if with_reports else None,
-        web_scenarios_tester_dir = None,
+        web_scenarios_tester_dir = project_dir / "web_scenarios_tester" if with_reports else None,
         acceptance_dir = None,
         next_role = "acceptance",
         journal_name = None,
@@ -134,14 +134,19 @@ def test_no_reports_skips_acceptance(tmp_path: Path, monkeypatch: pytest.MonkeyP
 
 
 def test_acceptance_reads_reports_without_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Приёмка получает чеклист и отчёты обоих тестировщиков входными папками, проект ей закрыт."""
+    """Приёмка получает чеклист и отчёты всех тестировщиков входными папками, проект ей закрыт."""
     fake = _fake(monkeypatch = monkeypatch, project_dir = tmp_path, verdict = ACCEPTED_VERDICT)
     state = _state(project_dir = tmp_path, with_reports = True, fix_rounds = 0)
 
     acceptance_node(state, _config(project_dir = tmp_path, roles = STAGE_ROLES))
 
     call = fake.calls[0]
-    assert call["input_dirs"] == (state["requirements_dir"], state["tester_dir"], state["web_tester_dir"])
+    assert call["input_dirs"] == (
+        state["requirements_dir"],
+        state["tester_dir"],
+        state["web_tester_dir"],
+        state["web_scenarios_tester_dir"],
+    )
     assert call["extra_readable_dirs"] == ()
     assert call["extra_writable_dirs"] == ()
 

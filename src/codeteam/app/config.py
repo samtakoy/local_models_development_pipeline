@@ -4,6 +4,7 @@ from typing import Any
 
 from codeteam.core.pipeline.graph import DEFAULT_ROLES
 from codeteam.core.pipeline.project import ProjectSettings
+from codeteam.core.roles.web_scenarios_tester import WEB_SCENARIOS_TESTER_ROLE
 from codeteam.core.roles.web_tester import WEB_TESTER_ROLE
 
 
@@ -16,10 +17,11 @@ def load_project_config(setup_dir: str) -> ProjectSettings:
     roles = _parse_roles(pipeline_data = pipeline_data)
     browser_check = _parse_required_flag(pipeline_data = pipeline_data, name = "browser_check")
     library_docs = _parse_required_flag(pipeline_data = pipeline_data, name = "library_docs")
-    if not browser_check and WEB_TESTER_ROLE.name in roles:
+    browser_roles = [name for name in (WEB_TESTER_ROLE.name, WEB_SCENARIOS_TESTER_ROLE.name) if name in roles]
+    if not browser_check and browser_roles:
         raise ConfigError(
-            f"[pipeline] browser_check = false, а роль {WEB_TESTER_ROLE.name} в списке ролей: "
-            f"веб-тестировщику нужен браузер; уберите роль из roles или включите browser_check"
+            f"[pipeline] browser_check = false, а роли {', '.join(browser_roles)} в списке ролей: "
+            f"им нужен браузер; уберите роли из roles или включите browser_check"
         )
 
     return ProjectSettings(

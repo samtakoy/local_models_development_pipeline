@@ -23,6 +23,8 @@ from codeteam.core.roles.pm import PM_ROLE, pm_node
 from codeteam.core.roles.researcher import RESEARCHER_ROLE, researcher_node
 from codeteam.core.roles.senior import SENIOR_ROLE, senior_node
 from codeteam.core.roles.tester import TESTER_ROLE, tester_node
+from codeteam.core.roles.web_scenarios import WEB_SCENARIOS_ROLE, web_scenarios_node
+from codeteam.core.roles.web_scenarios_tester import WEB_SCENARIOS_TESTER_ROLE, web_scenarios_tester_node
 from codeteam.core.roles.web_tester import WEB_TESTER_ROLE, web_tester_node
 
 logger = logging.getLogger(__name__)
@@ -41,6 +43,8 @@ ROLE_NODES: dict[str, Callable[[PipelineState, RunnableConfig], dict]] = {
     DEVELOPER_REVIEW_ROLE.name: developer_review_node,
     WEB_TESTER_ROLE.name: web_tester_node,
     TESTER_ROLE.name: tester_node,
+    WEB_SCENARIOS_ROLE.name: web_scenarios_node,
+    WEB_SCENARIOS_TESTER_ROLE.name: web_scenarios_tester_node,
     ACCEPTANCE_ROLE.name: acceptance_node,
 }
 
@@ -88,7 +92,8 @@ def create_pipeline_graph(*, roles: tuple[str, ...]) -> CompiledStateGraph:
 def check_roles(*, roles: tuple[str, ...]) -> None:
     """
     Проверяет последовательность ролей: список не пуст, имена известны и не повторяются, роли этапа идут подряд,
-    итоговая приёмка — последняя. Ошибку поднимает PipelineError.
+    составитель сценариев стоит раньше проверки по сценариям, итоговая приёмка — последняя.
+    Ошибку поднимает PipelineError.
 
         roles: последовательность ролей пайплайна.
     """
@@ -106,6 +111,15 @@ def check_roles(*, roles: tuple[str, ...]) -> None:
     stage_positions = _stage_positions(roles = roles)
     if stage_positions and stage_positions != list(range(stage_positions[0], stage_positions[-1] + 1)):
         raise PipelineError(f"роли этапа {', '.join(STAGE_ROLE_NAMES)} должны идти в списке подряд")
+
+    if WEB_SCENARIOS_TESTER_ROLE.name in roles and (
+        WEB_SCENARIOS_ROLE.name not in roles
+        or roles.index(WEB_SCENARIOS_ROLE.name) > roles.index(WEB_SCENARIOS_TESTER_ROLE.name)
+    ):
+        raise PipelineError(
+            f"роль {WEB_SCENARIOS_TESTER_ROLE.name} проверяет сценарии роли {WEB_SCENARIOS_ROLE.name}: "
+            f"она должна стоять в списке раньше"
+        )
 
     if ACCEPTANCE_ROLE.name in roles and roles[-1] != ACCEPTANCE_ROLE.name:
         raise PipelineError(f"роль {ACCEPTANCE_ROLE.name} должна быть последней в списке")

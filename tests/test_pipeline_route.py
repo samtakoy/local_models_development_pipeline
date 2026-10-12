@@ -24,6 +24,9 @@ NO_REVIEW_ROLES = ("pm", "researcher", "architect", "senior", "developer")
 # Полный список ролей с тестировщиком вместо веб-тестировщика.
 TESTER_ROLES = (*DEFAULT_ROLES[:-2], "tester", "acceptance")
 
+# Полный список ролей с проверкой по сценариям вместо веб-тестировщика.
+SCENARIO_ROLES = (*DEFAULT_ROLES[:-2], "web_scenarios", "web_scenarios_tester", "acceptance")
+
 
 def _state(*, started: int, total: int, rework: Rework | None) -> PipelineState:
     """
@@ -216,6 +219,8 @@ def test_acceptance_fix_stage_loops() -> None:
         ("pm", "pm"),
         ("senior", "architect", "developer"),
         ("senior", "developer", "acceptance", "tester"),
+        ("web_scenarios_tester", "acceptance"),
+        ("web_scenarios_tester", "web_scenarios", "acceptance"),
     ],
 )
 def test_bad_roles_fail(roles: tuple[str, ...]) -> None:
@@ -226,7 +231,7 @@ def test_bad_roles_fail(roles: tuple[str, ...]) -> None:
         check_roles(roles = roles)
 
 
-@pytest.mark.parametrize("roles", [FULL_ROLES, NO_REVIEW_ROLES, TESTER_ROLES])
+@pytest.mark.parametrize("roles", [FULL_ROLES, NO_REVIEW_ROLES, TESTER_ROLES, SCENARIO_ROLES])
 def test_graph_builds(roles: tuple[str, ...]) -> None:
     """
     Граф собирается для полного списка, для списка без ревьюеров и для списка с тестировщиком.
@@ -277,18 +282,22 @@ def test_config_roles(tmp_path: Path) -> None:
         "browser_check = false\nlibrary_docs = true\n",
         "browser_check = true\n",
         'browser_check = true\nlibrary_docs = "yes"\n',
+        'browser_check = false\nlibrary_docs = true\nroles = ["web_scenarios", "web_scenarios_tester"]\n',
     ],
 )
 def test_config_browser_check_error(tmp_path: Path, pipeline: str) -> None:
     """
     Без browser_check или library_docs, с не логическим значением или с browser_check = false при веб-тестировщике
-    в списке ролей файл состава не читается.
+    или проверке по сценариям в списке ролей файл состава не читается.
     """
     with pytest.raises(ConfigError):
         load_project_config(setup_dir = _write_set_file(setup_dir = tmp_path / "setup", pipeline = pipeline))
 
 
-@pytest.mark.parametrize("roles", ['["pm", "researcher"]', '["pm", "researcher", "tester"]'])
+@pytest.mark.parametrize(
+    "roles",
+    ['["pm", "researcher"]', '["pm", "researcher", "tester"]', '["pm", "web_scenarios"]'],
+)
 def test_config_browser_check_off(tmp_path: Path, roles: str) -> None:
     """
     browser_check = false читается, если веб-тестировщика нет в списке ролей; тестировщик работает и без браузера.

@@ -35,7 +35,11 @@ def acceptance_node(state: PipelineState, config: RunnableConfig) -> dict:
     Возвращает: Обновление состояния: папка вердикта и плана, а если добавлен этап исправлений — этапы;
         пустое, если отчётов тестировщиков нет.
     """
-    report_dirs = tuple(folder for folder in (state["tester_dir"], state["web_tester_dir"]) if folder is not None)
+    report_dirs = tuple(
+        folder
+        for folder in (state["tester_dir"], state["web_tester_dir"], state["web_scenarios_tester_dir"])
+        if folder is not None
+    )
     if not report_dirs:
         logger.info(f"[{ACCEPTANCE_ROLE.name}] отчётов тестировщиков нет, приёмка пропущена")
         return {}
