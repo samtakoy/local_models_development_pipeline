@@ -12,6 +12,7 @@ from langgraph.graph.state import CompiledStateGraph
 from codeteam.common.git import head_commit
 from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState
 from codeteam.core.pipeline.state_file import save_state, state_file_path
+from codeteam.core.roles.acceptance import ACCEPTANCE_ROLE, acceptance_node
 from codeteam.core.roles.architect import ARCHITECT_ROLE, architect_node
 from codeteam.core.roles.architect_review import ARCHITECT_REVIEW_ROLE, architect_review_node
 from codeteam.core.roles.common import PipelineError
@@ -40,6 +41,7 @@ ROLE_NODES: dict[str, Callable[[PipelineState, RunnableConfig], dict]] = {
     DEVELOPER_REVIEW_ROLE.name: developer_review_node,
     WEB_TESTER_ROLE.name: web_tester_node,
     TESTER_ROLE.name: tester_node,
+    ACCEPTANCE_ROLE.name: acceptance_node,
 }
 
 # Ревьюеры и роли, чью работу они проверяют.
@@ -61,6 +63,7 @@ DEFAULT_ROLES = (
     DEVELOPER_ROLE.name,
     DEVELOPER_REVIEW_ROLE.name,
     WEB_TESTER_ROLE.name,
+    ACCEPTANCE_ROLE.name,
 )
 
 
@@ -84,8 +87,8 @@ def create_pipeline_graph(*, roles: tuple[str, ...]) -> CompiledStateGraph:
 
 def check_roles(*, roles: tuple[str, ...]) -> None:
     """
-    Проверяет последовательность ролей: список не пуст, имена известны и не повторяются, роли этапа идут подряд.
-    Ошибку поднимает PipelineError.
+    Проверяет последовательность ролей: список не пуст, имена известны и не повторяются, роли этапа идут подряд,
+    итоговая приёмка — последняя. Ошибку поднимает PipelineError.
 
         roles: последовательность ролей пайплайна.
     """
@@ -103,6 +106,9 @@ def check_roles(*, roles: tuple[str, ...]) -> None:
     stage_positions = _stage_positions(roles = roles)
     if stage_positions and stage_positions != list(range(stage_positions[0], stage_positions[-1] + 1)):
         raise PipelineError(f"роли этапа {', '.join(STAGE_ROLE_NAMES)} должны идти в списке подряд")
+
+    if ACCEPTANCE_ROLE.name in roles and roles[-1] != ACCEPTANCE_ROLE.name:
+        raise PipelineError(f"роль {ACCEPTANCE_ROLE.name} должна быть последней в списке")
 
 
 def role_node(state: PipelineState, config: RunnableConfig) -> dict:

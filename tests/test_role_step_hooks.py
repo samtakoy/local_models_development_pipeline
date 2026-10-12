@@ -10,6 +10,7 @@ from codeteam.core.agent.answer_files import AnswerFiles
 from codeteam.core.agent.statistics import DRAFT_PHASE, WORK_PHASE
 from codeteam.core.agent.step_hooks import StepContext, draft_phase_hint_hook, private_file_hook, \
     readonly_work_phase_hint_hook
+from codeteam.core.roles.acceptance.config import ACCEPTANCE_ROLE
 from codeteam.core.roles.advisor.config import ADVISOR_ROLE
 from codeteam.core.roles.architect.config import ARCHITECT_ROLE
 from codeteam.core.roles.architect_review.config import ARCHITECT_REVIEW_ROLE
@@ -26,6 +27,7 @@ from codeteam.core.tools.files import PathRefusal
 
 # Все роли команды.
 ROLES = (
+    ACCEPTANCE_ROLE,
     ADVISOR_ROLE,
     ARCHITECT_ROLE,
     ARCHITECT_REVIEW_ROLE,

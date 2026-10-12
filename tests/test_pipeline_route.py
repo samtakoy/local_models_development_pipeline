@@ -22,7 +22,7 @@ FULL_ROLES = DEFAULT_ROLES
 NO_REVIEW_ROLES = ("pm", "researcher", "architect", "senior", "developer")
 
 # Полный список ролей с тестировщиком вместо веб-тестировщика.
-TESTER_ROLES = (*DEFAULT_ROLES[:-1], "tester")
+TESTER_ROLES = (*DEFAULT_ROLES[:-2], "tester", "acceptance")
 
 
 def _state(*, started: int, total: int, rework: Rework | None) -> PipelineState:
@@ -54,6 +54,7 @@ def _state(*, started: int, total: int, rework: Rework | None) -> PipelineState:
         rework = rework,
         tester_dir = None,
         web_tester_dir = None,
+        acceptance_dir = None,
         next_role = None,
         journal_name = None,
         journal_count = 0,
@@ -192,15 +193,17 @@ def test_reviewer_skipped_after_last_rework() -> None:
     assert choose_next_role(roles = FULL_ROLES, current = "architect", state = architect_state) == "senior"
 
 
-def test_web_tester_fix_stage_loops() -> None:
+def test_acceptance_fix_stage_loops() -> None:
     """
-    После веб-тестировщика: добавлен этап исправлений - сеньор, нет - конец пайплайна.
+    После итоговой приёмки: добавлен этап исправлений - сеньор, нет - конец пайплайна.
+    После веб-тестировщика - итоговая приёмка.
     """
     with_fix_stage = _state(started = 3, total = 4, rework = None)
     accepted = _state(started = 3, total = 3, rework = None)
 
-    assert choose_next_role(roles = FULL_ROLES, current = "web_tester", state = with_fix_stage) == "senior"
-    assert choose_next_role(roles = FULL_ROLES, current = "web_tester", state = accepted) is None
+    assert choose_next_role(roles = FULL_ROLES, current = "acceptance", state = with_fix_stage) == "senior"
+    assert choose_next_role(roles = FULL_ROLES, current = "acceptance", state = accepted) is None
+    assert choose_next_role(roles = FULL_ROLES, current = "web_tester", state = accepted) == "acceptance"
 
 
 @pytest.mark.parametrize(
@@ -210,6 +213,7 @@ def test_web_tester_fix_stage_loops() -> None:
         ("pm", "translator"),
         ("pm", "pm"),
         ("senior", "architect", "developer"),
+        ("senior", "developer", "acceptance", "tester"),
     ],
 )
 def test_bad_roles_fail(roles: tuple[str, ...]) -> None:
@@ -407,10 +411,10 @@ def test_graph_runs_roles_in_order(fake_roles: FakeRoles, project_dir: Path, tmp
         "pm", "researcher", "architect", "architect_review",
         "senior", "developer", "developer_review", "developer", "developer_review",
         "senior", "developer", "developer_review",
-        "web_tester",
+        "web_tester", "acceptance",
     ]
     assert len(list(run_dir.glob("*.state.json"))) == len(fake_roles.order)
-    last_snapshot = state_file_path(run_dir = run_dir, journal_name = "13_web_tester")
+    last_snapshot = state_file_path(run_dir = run_dir, journal_name = "14_acceptance")
     saved = load_state(path = last_snapshot)
     assert saved["next_role"] is None
     assert saved["stages"].started == 2
@@ -434,4 +438,6 @@ def test_graph_resumes_from_saved_state(fake_roles: FakeRoles, project_dir: Path
         config = _config(project_dir = project_dir, run_dir = tmp_path / "second"),
     )
 
-    assert fake_roles.order == ["developer", "developer_review", "senior", "developer", "developer_review", "web_tester"]
+    assert fake_roles.order == [
+        "developer", "developer_review", "senior", "developer", "developer_review", "web_tester", "acceptance",
+    ]

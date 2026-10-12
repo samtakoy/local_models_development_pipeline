@@ -4,6 +4,7 @@ import pytest
 
 from codeteam.core.agent.answer_files import AnswerFiles, build_draft_rules
 from codeteam.core.agent.prompts import DRAFT_SECTION_RULES
+from codeteam.core.roles.acceptance.config import ACCEPTANCE_ROLE
 from codeteam.core.roles.advisor.config import ADVISOR_ROLE
 from codeteam.core.roles.architect.config import ARCHITECT_ROLE
 from codeteam.core.roles.architect_review.config import ARCHITECT_REVIEW_ROLE
@@ -22,6 +23,7 @@ SHOWN_DRAFT_DIR = ".ct-work/tester_r1/draft"
 
 # Все роли пайплайна и помощники.
 ALL_ROLES = (
+    ACCEPTANCE_ROLE,
     ADVISOR_ROLE,
     ARCHITECT_ROLE,
     ARCHITECT_REVIEW_ROLE,

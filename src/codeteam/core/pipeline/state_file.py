@@ -64,6 +64,7 @@ def load_state(*, path: Path) -> PipelineState:
         # в снимках, записанных до появления полей, их нет
         tester_dir = _path_or_none(value = data.get("tester_dir")),
         web_tester_dir = _path_or_none(value = data.get("web_tester_dir")),
+        acceptance_dir = _path_or_none(value = data.get("acceptance_dir")),
         next_role = data["next_role"],
         journal_name = data["journal_name"],
         journal_count = data["journal_count"],

@@ -75,6 +75,7 @@ def test_tester_writes_own_field_without_fix_stage(
         rework = None,
         tester_dir = None,
         web_tester_dir = None,
+        acceptance_dir = None,
         next_role = "tester",
         journal_name = None,
         journal_count = 0,
