@@ -281,13 +281,15 @@ def _folded(*, summary: str, body: str) -> str:
 
 def _quote(*, text: str) -> str:
     """
-    Оформляет текст цитатой.
+    Оформляет текст цитатой, «<» заменяет на «&lt;»: теги из текста предпросмотр показывает текстом.
 
         text: текст.
 
     Возвращает: Текст, где каждая строка начинается с «> ».
     """
-    return "\n".join(f"> {line}" if line else ">" for line in text.splitlines())
+    escaped_text = text.replace("<", "&lt;")
+
+    return "\n".join(f"> {line}" if line else ">" for line in escaped_text.splitlines())
 
 
 def _code_block(*, text: str) -> str:
