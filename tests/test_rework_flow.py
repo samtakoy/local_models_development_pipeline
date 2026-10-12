@@ -92,6 +92,7 @@ def test_architect_rework_flow(tmp_path: Path, fake_run_role: FakeRunRole) -> No
         review = None,
         rework = None,
         tester_dir = None,
+        web_scenarios_dir = None,
         web_tester_dir = None,
         acceptance_dir = None,
         next_role = "architect",

@@ -94,6 +94,7 @@ def run_pipeline(
         review = None,
         rework = None,
         tester_dir = None,
+        web_scenarios_dir = None,
         web_tester_dir = None,
         acceptance_dir = None,
         next_role = project.roles[0],

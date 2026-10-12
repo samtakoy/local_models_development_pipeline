@@ -53,6 +53,7 @@ def _state(*, started: int, total: int, rework: Rework | None) -> PipelineState:
         review = None,
         rework = rework,
         tester_dir = None,
+        web_scenarios_dir = None,
         web_tester_dir = None,
         acceptance_dir = None,
         next_role = None,

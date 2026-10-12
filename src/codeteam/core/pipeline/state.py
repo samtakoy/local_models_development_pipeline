@@ -83,6 +83,8 @@ class PipelineState(TypedDict):
         review: последнее ревью; None, пока ревьюеры не работали.
         rework: возврат работы роли; None, если возврата нет.
         tester_dir: папка черновика последней проверки тестировщика: вердикт и отчёт; None, пока он не работал.
+        web_scenarios_dir: папка черновика последнего составителя сценариев: файл запуска и сценарии проверки
+            в браузере; None, пока он не работал.
         web_tester_dir: папка черновика последней проверки веб-тестировщика: вердикт и отчёт; None, пока он
             не работал.
         acceptance_dir: папка черновика последней итоговой приёмки: вердикт и план доработки; None, пока она
@@ -102,6 +104,7 @@ class PipelineState(TypedDict):
     review: Review | None
     rework: Rework | None
     tester_dir: Path | None
+    web_scenarios_dir: Path | None
     web_tester_dir: Path | None
     acceptance_dir: Path | None
     next_role: str | None

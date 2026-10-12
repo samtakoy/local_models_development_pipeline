@@ -22,6 +22,7 @@ from codeteam.core.roles.pm.config import PM_ROLE
 from codeteam.core.roles.researcher.config import RESEARCHER_ROLE
 from codeteam.core.roles.senior.config import SENIOR_ROLE
 from codeteam.core.roles.tester.config import TESTER_ROLE
+from codeteam.core.roles.web_scenarios.config import WEB_SCENARIOS_ROLE
 from codeteam.core.roles.web_tester.config import WEB_TESTER_ROLE
 from codeteam.core.tools.files import PathRefusal
 
@@ -38,11 +39,12 @@ ROLES = (
     RESEARCHER_ROLE,
     SENIOR_ROLE,
     TESTER_ROLE,
+    WEB_SCENARIOS_ROLE,
     WEB_TESTER_ROLE,
 )
 
 # Роли, которым проект только для чтения: запись только в личную папку.
-READONLY_ROLES = (ARCHITECT_ROLE, ARCHITECT_REVIEW_ROLE, PM_ROLE, RESEARCHER_ROLE, SENIOR_ROLE)
+READONLY_ROLES = (ARCHITECT_ROLE, ARCHITECT_REVIEW_ROLE, PM_ROLE, RESEARCHER_ROLE, SENIOR_ROLE, WEB_SCENARIOS_ROLE)
 
 # Личная папка агента относительно папки проекта.
 RELATIVE_PRIVATE_DIR = Path(".ct-work") / "agent_r1"
