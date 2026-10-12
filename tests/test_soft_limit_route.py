@@ -1,7 +1,10 @@
-"""Тесты мягкого лимита истории: какие шаги считаются сверх него и когда агент переходит к фиксации работы."""
+"""Тесты мягкого лимита истории: какие шаги считаются сверх него, когда он снимается после записи ответа
+и когда агент переходит к фиксации работы."""
 
 from pathlib import Path
 from types import SimpleNamespace
+
+import pytest
 
 from langchain_core.messages import AIMessage, ToolMessage
 
@@ -45,7 +48,9 @@ def _messages(*, calls: list[tuple[str, dict]], input_tokens: int) -> list:
     """
     response = AIMessage(
         content = "",
-        tool_calls = [{"id": f"call_{number}", "name": name, "args": args} for number, (name, args) in enumerate(calls)],
+        tool_calls = [
+            {"id": f"call_{number}", "name": name, "args": args} for number, (name, args) in enumerate(calls)
+        ],
         usage_metadata = {"input_tokens": input_tokens, "output_tokens": 1, "total_tokens": input_tokens + 1},
     )
     results = [
@@ -109,3 +114,48 @@ def test_extra_steps_before_limit_notice(tmp_path: Path) -> None:
 def test_hard_limit_stops_at_once(tmp_path: Path) -> None:
     """Жёсткий лимит переводит к фиксации работы сразу, без запаса шагов."""
     assert _route(input_tokens = HARD_LIMIT, soft_limit_steps = 0, tmp_path = tmp_path) == LIMIT_NOTICE_NODE_ID
+
+
+# Пути записи ответа: файл контекста и раздел черновика личной папки тестов.
+CONTEXT_FILE = (Path(".ct-work") / "tester_r1" / "context.md").as_posix()
+DRAFT_FILE = (Path(".ct-work") / "tester_r1" / "draft" / "100_report.md").as_posix()
+
+
+def _written(*, writes: list[tuple[str, str, str]]) -> list:
+    """
+    Собирает историю с записями ответа и последним шагом команды bash сверх мягкого лимита.
+
+        writes: имя инструмента, путь и статус результата каждой записи: success или error.
+
+    Возвращает: Сообщения истории.
+    """
+    history = []
+    for number, (name, path, status) in enumerate(writes):
+        call_id = f"write_{number}"
+        call = {"id": call_id, "name": name, "args": {"file_path": path}}
+        history.append(AIMessage(content = "", tool_calls = [call]))
+        history.append(ToolMessage(content = "готово", tool_call_id = call_id, name = name, status = status))
+
+    return [*history, *_messages(calls = [(BASH_TOOL_NAME, {"command": "ls"})], input_tokens = SOFT_LIMIT)]
+
+
+def test_written_context_and_draft_lift_soft_limit(tmp_path: Path) -> None:
+    """Записаны и файл контекста, и черновик — шаг сверх мягкого лимита не считается."""
+    messages = _written(writes = [("write", DRAFT_FILE, "success"), ("edit", CONTEXT_FILE, "success")])
+
+    assert not _counts_against_soft_limit(cfg = _settings(tmp_path = tmp_path), messages = messages)
+
+
+@pytest.mark.parametrize(
+    "writes",
+    [
+        [("write", DRAFT_FILE, "success")],
+        [("edit", CONTEXT_FILE, "success")],
+        [("write", DRAFT_FILE, "success"), ("write", CONTEXT_FILE, "error")],
+        [("write", "src/app.py", "success"), ("write", CONTEXT_FILE, "success")],
+        [("read", DRAFT_FILE, "success"), ("read", CONTEXT_FILE, "success")],
+    ],
+)
+def test_partial_or_failed_writes_keep_soft_limit(tmp_path: Path, writes: list[tuple[str, str, str]]) -> None:
+    """Только контекст или только черновик, запись с ошибкой, запись в чужое место или чтение — шаг считается."""
+    assert _counts_against_soft_limit(cfg = _settings(tmp_path = tmp_path), messages = _written(writes = writes))

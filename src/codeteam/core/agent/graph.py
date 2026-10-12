@@ -28,7 +28,7 @@ from codeteam.core.agent.prompts import ANSWER_CHECK_NOTICE, ANSWER_COMMAND_REMA
     REPEATED_RESULT_REMARKS, REPEATED_RESULT_STOP_REMARK, UNFINISHED_ANSWER_NOTICE
 from codeteam.core.agent.step_hooks import StepContext
 from codeteam.core.agent.workspace import context_path, draft_dir
-from codeteam.core.tools.files import READ_TOOL_NAME
+from codeteam.core.tools.files import EDIT_TOOL_NAME, READ_TOOL_NAME, WRITE_TOOL_NAME
 from codeteam.core.tools.shell import BASH_TOOL_NAME, STOP_PROCESS_TOOL_NAME
 
 logger = logging.getLogger(__name__)
@@ -356,7 +356,8 @@ def route_after_tools(state: AgentState, config: RunnableConfig) -> str:
 def _counts_against_soft_limit(*, cfg: AgentConfig, messages: Sequence[BaseMessage]) -> bool:
     """
     Проверяет, что шаг инструментов идёт сверх мягкого лимита истории и лимит на него действует. Лимит не действует
-    на шаг, где агент работал со своим ответом, пытался сдать работу командой или только останавливал свои процессы.
+    после записи ответа в истории (_has_written_answer) и на шаг, где агент работал со своим ответом, пытался
+    сдать работу командой или только останавливал свои процессы.
 
         cfg: настройки агента.
         messages: история агента: последний ответ модели с вызовами шага.
@@ -366,6 +367,9 @@ def _counts_against_soft_limit(*, cfg: AgentConfig, messages: Sequence[BaseMessa
     if _last_input_tokens(messages = messages) < cfg.history_token_limit:
         return False
 
+    if _has_written_answer(cfg = cfg, messages = messages):
+        return False
+
     last_response = _last_response(messages = messages)
 
     return not (
@@ -373,6 +377,44 @@ def _counts_against_soft_limit(*, cfg: AgentConfig, messages: Sequence[BaseMessa
         or _is_answer_command(response = last_response)
         or _is_stop_process_step(response = last_response)
     )
+
+
+def _has_written_answer(*, cfg: AgentConfig, messages: Sequence[BaseMessage]) -> bool:
+    """
+    Проверяет, что в истории есть успешные записи ответа инструментами write и edit: хотя бы одна в файл
+    контекста и хотя бы одна в папку черновика личной папки агента. Вызов успешен, если его результат
+    есть в истории и он не с ошибкой.
+
+    Просматривает всю историю на каждом шаге сверх мягкого лимита: пока это дёшево по сравнению с запросом
+    к модели; при росте истории признак можно хранить в состоянии агента.
+
+        cfg: настройки агента.
+        messages: история агента.
+
+    Возвращает: True, если записаны и файл контекста, и черновик.
+    """
+    private_dir = (cfg.project_dir / cfg.relative_private_dir).resolve()
+    context_file = context_path(private_dir = private_dir)
+    answer_dir = draft_dir(private_dir = private_dir)
+    successful_call_ids = {
+        message.tool_call_id for message in messages if isinstance(message, ToolMessage) and message.status != "error"
+    }
+    wrote_context = False
+    wrote_draft = False
+    for message in messages:
+        if not isinstance(message, AIMessage):
+            continue
+
+        for call in message.tool_calls:
+            if call["name"] not in (WRITE_TOOL_NAME, EDIT_TOOL_NAME) or call["id"] not in successful_call_ids:
+                continue
+
+            path = Path(str(call["args"].get("file_path", "")))
+            path = (path if path.is_absolute() else cfg.project_dir / path).resolve()
+            wrote_context = wrote_context or path == context_file
+            wrote_draft = wrote_draft or path.is_relative_to(answer_dir)
+
+    return wrote_context and wrote_draft
 
 
 def _is_answer_command(*, response: BaseMessage | None) -> bool:
