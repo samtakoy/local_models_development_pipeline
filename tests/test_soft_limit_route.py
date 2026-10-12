@@ -9,7 +9,7 @@ import pytest
 from langchain_core.messages import AIMessage, ToolMessage
 
 from codeteam.core.agent.graph import AGENT_CFG_NAME, _counts_against_soft_limit, route_after_tools
-from codeteam.core.agent.node_ids import AGENT_NODE_ID, LIMIT_NOTICE_NODE_ID
+from codeteam.core.agent.node_ids import AgentNode
 from codeteam.core.agent.repeat_check import INITIAL_REPEAT_STATE
 from codeteam.core.tools.shell import BASH_TOOL_NAME, STOP_PROCESS_TOOL_NAME
 
@@ -104,17 +104,17 @@ def test_other_calls_count_only_over_soft_limit(tmp_path: Path) -> None:
 
 def test_extra_steps_before_limit_notice(tmp_path: Path) -> None:
     """Сверх мягкого лимита разрешено EXTRA_STEPS шагов, следующий переводит к фиксации работы."""
-    assert _route(input_tokens = SOFT_LIMIT, soft_limit_steps = EXTRA_STEPS, tmp_path = tmp_path) == AGENT_NODE_ID
+    assert _route(input_tokens = SOFT_LIMIT, soft_limit_steps = EXTRA_STEPS, tmp_path = tmp_path) == AgentNode.AGENT
     assert _route(
         input_tokens = SOFT_LIMIT,
         soft_limit_steps = EXTRA_STEPS + 1,
         tmp_path = tmp_path,
-    ) == LIMIT_NOTICE_NODE_ID
+    ) == AgentNode.LIMIT_NOTICE
 
 
 def test_hard_limit_stops_at_once(tmp_path: Path) -> None:
     """Жёсткий лимит переводит к фиксации работы сразу, без запаса шагов."""
-    assert _route(input_tokens = HARD_LIMIT, soft_limit_steps = 0, tmp_path = tmp_path) == LIMIT_NOTICE_NODE_ID
+    assert _route(input_tokens = HARD_LIMIT, soft_limit_steps = 0, tmp_path = tmp_path) == AgentNode.LIMIT_NOTICE
 
 
 # Пути записи ответа: файл контекста и раздел черновика личной папки тестов.

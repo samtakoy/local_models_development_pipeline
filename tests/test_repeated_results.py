@@ -18,7 +18,7 @@ from codeteam.core.agent.graph import AGENT_CFG_NAME, AgentState, limit_notice_n
     route_after_draft, route_after_tools
 from codeteam.core.agent.repeat_check import CALL_REPEAT_CHECK, INITIAL_REPEAT_STATE, RESULT_REPEAT_CHECK, \
     RepeatState, count_repeated_calls
-from codeteam.core.agent.node_ids import AGENT_NODE_ID, DRAFT_TOOL_NODE_ID, LIMIT_NOTICE_NODE_ID, REINIT_NODE_ID
+from codeteam.core.agent.node_ids import AgentNode
 from codeteam.core.agent.statistics import DRAFT_PHASE, WORK_PHASE, AgentStatistics
 from codeteam.core.tools.files import PathRefusals
 
@@ -101,7 +101,7 @@ def test_same_result_gets_ladder_of_remarks_and_stops(tmp_path: Path) -> None:
     assert results[0] == SAME_RESULT
     assert all(result.startswith(SAME_RESULT) and result != SAME_RESULT for result in results[1:])
     assert len(set(results[1:])) == len(results) - 1
-    assert route_after_tools(states[-1], config) == LIMIT_NOTICE_NODE_ID
+    assert route_after_tools(states[-1], config) == AgentNode.LIMIT_NOTICE
     assert statistics.to_dict()["phase_counters"] == {
         "repeated_result_remarks": {WORK_PHASE: REPEATED_RESULTS_LIMIT - 1},
         "repeated_result_stops": {WORK_PHASE: 1},
@@ -184,8 +184,8 @@ def test_loop_in_draft_ends_draft_phase() -> None:
         repeats = RepeatState(repeated_results = repeated_results, recent_result_keys = ())
         return {"messages": [call], "reset_count": 0, "answer_notices": 0, "repeats": repeats, "soft_limit_steps": 0}
 
-    assert route_after_draft(state(repeated_results = REPEATED_RESULTS_LIMIT - 1), config) == DRAFT_TOOL_NODE_ID
-    assert route_after_draft(state(repeated_results = REPEATED_RESULTS_LIMIT), config) == REINIT_NODE_ID
+    assert route_after_draft(state(repeated_results = REPEATED_RESULTS_LIMIT - 1), config) == AgentNode.DRAFT_TOOLS
+    assert route_after_draft(state(repeated_results = REPEATED_RESULTS_LIMIT), config) == AgentNode.REINIT
 
 
 def _counter_from(*, start: int, after: str):
@@ -248,8 +248,8 @@ def test_same_call_with_changing_result_gets_call_remarks_and_stops(tmp_path: Pa
     assert all(result != f"шаг {number + silent_steps}" for number, result in enumerate(results[silent_steps:]))
     assert len({result.removeprefix(f"шаг {number}") for number, result in enumerate(results)}) == \
         len(CALL_REPEAT_CHECK.remarks) + 2
-    assert route_after_tools(states[-2], config) == AGENT_NODE_ID
-    assert route_after_tools(states[-1], config) == LIMIT_NOTICE_NODE_ID
+    assert route_after_tools(states[-2], config) == AgentNode.AGENT
+    assert route_after_tools(states[-1], config) == AgentNode.LIMIT_NOTICE
     assert statistics.to_dict()["phase_counters"] == {
         "repeated_call_remarks": {WORK_PHASE: len(CALL_REPEAT_CHECK.remarks)},
         "repeated_call_stops": {WORK_PHASE: 1},
@@ -317,9 +317,9 @@ def test_draft_after_loop_runs_new_call(tmp_path: Path, same_result: bool) -> No
     loop_call = AIMessage(content = "", tool_calls = [{"id": "draft", "name": "browser_click", "args": {"target": "e13"}}])
     write_state = _draft_state(loop_state = loop_state, config = config, draft_call = write_call)
 
-    assert route_after_tools(loop_state, config) == LIMIT_NOTICE_NODE_ID
+    assert route_after_tools(loop_state, config) == AgentNode.LIMIT_NOTICE
     assert write_state["repeats"] == INITIAL_REPEAT_STATE
-    assert route_after_draft(write_state, config) == DRAFT_TOOL_NODE_ID
+    assert route_after_draft(write_state, config) == AgentNode.DRAFT_TOOLS
     if not same_result:
         loop_call_state = _draft_state(loop_state = loop_state, config = config, draft_call = loop_call)
-        assert route_after_draft(loop_call_state, config) == REINIT_NODE_ID
+        assert route_after_draft(loop_call_state, config) == AgentNode.REINIT

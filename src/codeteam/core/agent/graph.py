@@ -13,12 +13,11 @@ from langgraph.constants import START, END
 from langgraph.graph import StateGraph, add_messages
 from langgraph.graph.state import CompiledStateGraph
 from ollama import ResponseError
-from typing import TypedDict, Annotated
+from typing import Annotated, Literal, TypedDict
 
 from codeteam.core.agent.answer_checks import AnswerContext
 from codeteam.core.agent.config import AgentConfig
-from codeteam.core.agent.node_ids import AGENT_NODE_ID, ANSWER_NOTICE_NODE_ID, DRAFT_AGENT_NODE_ID, \
-    DRAFT_TOOL_NODE_ID, INIT_NODE_ID, LIMIT_NOTICE_NODE_ID, REINIT_NODE_ID, TOOL_NODE_ID
+from codeteam.core.agent.node_ids import AgentNode
 from codeteam.core.agent.statistics import ANSWER_COMMAND_REMARK_COUNTER, ANSWER_NOTICE_RESET_COUNTER, DRAFT_PHASE, \
     HARD_LIMIT_COUNTER, SERVER_ERROR_RETRY_COUNTER, STEP_HOOK_REMARK_COUNTER, UNFINISHED_ANSWER_RETRY_COUNTER, \
     WINDOW_FULL_RESET_COUNTER, WORK_PHASE
@@ -215,7 +214,10 @@ def answer_notice_node(state: AgentState, config: RunnableConfig) -> AgentState:
         "answer_notices": state["answer_notices"] + 1,
     }
 
-def route_after_agent(state: AgentState, config: RunnableConfig) -> str:
+def route_after_agent(
+    state: AgentState,
+    config: RunnableConfig,
+) -> Literal[AgentNode.TOOLS, AgentNode.ANSWER_NOTICE, AgentNode.REINIT, "__end__"]:
     """
     Выбирает узел после ответа агента: инструменты, отказ в приёме работы, передача работы новому
     агенту или конец работы.
@@ -228,8 +230,8 @@ def route_after_agent(state: AgentState, config: RunnableConfig) -> str:
 
     Возвращает: Имя следующего узла.
     """
-    if tools_condition(state) == TOOL_NODE_ID:
-        return TOOL_NODE_ID
+    if tools_condition(state) == AgentNode.TOOLS:
+        return AgentNode.TOOLS
 
     cfg: AgentConfig = config["configurable"][AGENT_CFG_NAME]
     response = state["messages"][-1]
@@ -238,11 +240,11 @@ def route_after_agent(state: AgentState, config: RunnableConfig) -> str:
         return END
 
     if state["answer_notices"] < ANSWER_NOTICE_LIMIT:
-        return ANSWER_NOTICE_NODE_ID
+        return AgentNode.ANSWER_NOTICE
 
     # попытки сдачи кончились: работу доделывает новый агент
     if state["reset_count"] < cfg.max_resets:
-        return REINIT_NODE_ID
+        return AgentNode.REINIT
 
     return END
 
@@ -314,7 +316,7 @@ def make_tools_node(*, tools: list[BaseTool], phase: str) -> Callable:
 
     return tools_node
 
-def route_after_tools(state: AgentState, config: RunnableConfig) -> str:
+def route_after_tools(state: AgentState, config: RunnableConfig) -> Literal[AgentNode.AGENT, AgentNode.LIMIT_NOTICE]:
     """
     Выбирает узел после выполнения инструментов: продолжение работы или фаза черновика. Фаза черновика
     включается и когда проверка повторов дошла до остановки (is_looped).
@@ -330,16 +332,16 @@ def route_after_tools(state: AgentState, config: RunnableConfig) -> str:
     """
     cfg: AgentConfig = config["configurable"][AGENT_CFG_NAME]
     if is_looped(repeats = state["repeats"], messages = state["messages"]):
-        return LIMIT_NOTICE_NODE_ID
+        return AgentNode.LIMIT_NOTICE
 
     input_tokens = _last_input_tokens(messages = state["messages"])
     if input_tokens >= cfg.history_token_hard_limit:
-        return LIMIT_NOTICE_NODE_ID
+        return AgentNode.LIMIT_NOTICE
 
     if state["soft_limit_steps"] > cfg.soft_limit_extra_steps:
-        return LIMIT_NOTICE_NODE_ID
+        return AgentNode.LIMIT_NOTICE
 
-    return AGENT_NODE_ID
+    return AgentNode.AGENT
 
 
 def _counts_against_soft_limit(*, cfg: AgentConfig, messages: Sequence[BaseMessage]) -> bool:
@@ -489,7 +491,10 @@ def _works_with_answer(*, cfg: AgentConfig, messages: Sequence[BaseMessage]) -> 
         for private_path in private_paths
     )
 
-def route_after_draft(state: AgentState, config: RunnableConfig) -> str:
+def route_after_draft(
+    state: AgentState,
+    config: RunnableConfig,
+) -> Literal[AgentNode.DRAFT_TOOLS, AgentNode.REINIT, "__end__"]:
     """
     Выбирает узел после ответа агента в фазе черновика.
 
@@ -503,13 +508,13 @@ def route_after_draft(state: AgentState, config: RunnableConfig) -> str:
     cfg: AgentConfig = config["configurable"][AGENT_CFG_NAME]
     is_window_full = _last_input_tokens(messages = state["messages"]) >= cfg.context_window_limit
     is_loop = is_looped(repeats = state["repeats"], messages = state["messages"])
-    if tools_condition(state) == TOOL_NODE_ID and not is_window_full and not is_loop:
-        return DRAFT_TOOL_NODE_ID
+    if tools_condition(state) == AgentNode.TOOLS and not is_window_full and not is_loop:
+        return AgentNode.DRAFT_TOOLS
 
     if state["reset_count"] >= cfg.max_resets:
         return END
 
-    return REINIT_NODE_ID
+    return AgentNode.REINIT
 
 
 def create_agent_graph(
@@ -533,38 +538,38 @@ def create_agent_graph(
 
     workflow: StateGraph = StateGraph(AgentState) # noqa
 
-    workflow.add_node(INIT_NODE_ID, init_node)
-    workflow.add_node(AGENT_NODE_ID, agent_node)
-    workflow.add_node(TOOL_NODE_ID, make_tools_node(tools = tools, phase = WORK_PHASE))
-    workflow.add_node(LIMIT_NOTICE_NODE_ID, limit_notice_node)
-    workflow.add_node(ANSWER_NOTICE_NODE_ID, answer_notice_node)
-    workflow.add_node(DRAFT_AGENT_NODE_ID, agent_node)
-    workflow.add_node(DRAFT_TOOL_NODE_ID, make_tools_node(tools = draft_tools, phase = DRAFT_PHASE))
-    workflow.add_node(REINIT_NODE_ID, reinit_node)
+    workflow.add_node(AgentNode.INIT, init_node)
+    workflow.add_node(AgentNode.AGENT, agent_node)
+    workflow.add_node(AgentNode.TOOLS, make_tools_node(tools = tools, phase = WORK_PHASE))
+    workflow.add_node(AgentNode.LIMIT_NOTICE, limit_notice_node)
+    workflow.add_node(AgentNode.ANSWER_NOTICE, answer_notice_node)
+    workflow.add_node(AgentNode.DRAFT_AGENT, agent_node)
+    workflow.add_node(AgentNode.DRAFT_TOOLS, make_tools_node(tools = draft_tools, phase = DRAFT_PHASE))
+    workflow.add_node(AgentNode.REINIT, reinit_node)
 
-    workflow.add_edge(START, INIT_NODE_ID)
+    workflow.add_edge(START, AgentNode.INIT)
 
     workflow.add_conditional_edges(
-        INIT_NODE_ID,
+        AgentNode.INIT,
         tools_condition,
-        {TOOL_NODE_ID: TOOL_NODE_ID, END: AGENT_NODE_ID}
+        {AgentNode.TOOLS: AgentNode.TOOLS, END: AgentNode.AGENT}
     )
 
-    workflow.add_conditional_edges(AGENT_NODE_ID, route_after_agent)
+    workflow.add_conditional_edges(AgentNode.AGENT, route_after_agent)
     # после отказа в приёме работы агент продолжает работу
-    workflow.add_edge(ANSWER_NOTICE_NODE_ID, AGENT_NODE_ID)
+    workflow.add_edge(AgentNode.ANSWER_NOTICE, AgentNode.AGENT)
     # после вызова тулов основного агента - проверка на лимит по токенам
-    workflow.add_conditional_edges(TOOL_NODE_ID, route_after_tools)
+    workflow.add_conditional_edges(AgentNode.TOOLS, route_after_tools)
 
     # переходим в режим draft
-    workflow.add_edge(LIMIT_NOTICE_NODE_ID, DRAFT_AGENT_NODE_ID)
+    workflow.add_edge(AgentNode.LIMIT_NOTICE, AgentNode.DRAFT_AGENT)
 
-    workflow.add_conditional_edges(DRAFT_AGENT_NODE_ID, route_after_draft)
-    workflow.add_edge(DRAFT_TOOL_NODE_ID, DRAFT_AGENT_NODE_ID)
+    workflow.add_conditional_edges(AgentNode.DRAFT_AGENT, route_after_draft)
+    workflow.add_edge(AgentNode.DRAFT_TOOLS, AgentNode.DRAFT_AGENT)
     workflow.add_conditional_edges(
-        REINIT_NODE_ID,
+        AgentNode.REINIT,
         tools_condition,
-        {TOOL_NODE_ID: TOOL_NODE_ID, END: AGENT_NODE_ID}
+        {AgentNode.TOOLS: AgentNode.TOOLS, END: AgentNode.AGENT}
     )
 
 

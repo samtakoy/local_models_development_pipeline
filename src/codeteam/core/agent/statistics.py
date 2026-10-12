@@ -15,8 +15,7 @@ from typing import Any
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from codeteam.core.agent.journal import NANOSECONDS_PER_SECOND
-from codeteam.core.agent.node_ids import AGENT_NODE_ID, ANSWER_NOTICE_NODE_ID, DRAFT_AGENT_NODE_ID, \
-    DRAFT_TOOL_NODE_ID, INIT_NODE_ID, LIMIT_NOTICE_NODE_ID, REINIT_NODE_ID, TOOL_NODE_ID
+from codeteam.core.agent.node_ids import AgentNode
 
 # Окончание имени файла статистики: <журнал агента>.stats.json рядом с журналом.
 STATISTICS_FILE_SUFFIX = ".stats.json"
@@ -28,19 +27,19 @@ DRAFT_PHASE = "draft"
 
 # Фаза по узлу графа.
 NODE_PHASES = {
-    INIT_NODE_ID: WARMUP_PHASE,
-    REINIT_NODE_ID: WARMUP_PHASE,
-    AGENT_NODE_ID: WORK_PHASE,
-    TOOL_NODE_ID: WORK_PHASE,
-    ANSWER_NOTICE_NODE_ID: WORK_PHASE,
-    LIMIT_NOTICE_NODE_ID: DRAFT_PHASE,
-    DRAFT_AGENT_NODE_ID: DRAFT_PHASE,
-    DRAFT_TOOL_NODE_ID: DRAFT_PHASE,
+    AgentNode.INIT: WARMUP_PHASE,
+    AgentNode.REINIT: WARMUP_PHASE,
+    AgentNode.AGENT: WORK_PHASE,
+    AgentNode.TOOLS: WORK_PHASE,
+    AgentNode.ANSWER_NOTICE: WORK_PHASE,
+    AgentNode.LIMIT_NOTICE: DRAFT_PHASE,
+    AgentNode.DRAFT_AGENT: DRAFT_PHASE,
+    AgentNode.DRAFT_TOOLS: DRAFT_PHASE,
 }
 
 # Узлы ответа модели и узлы инструментов.
-AGENT_NODE_IDS = (AGENT_NODE_ID, DRAFT_AGENT_NODE_ID)
-TOOL_NODE_IDS = (TOOL_NODE_ID, DRAFT_TOOL_NODE_ID)
+AGENT_NODE_IDS = (AgentNode.AGENT, AgentNode.DRAFT_AGENT)
+TOOL_NODE_IDS = (AgentNode.TOOLS, AgentNode.DRAFT_TOOLS)
 
 # События, которые статистика выводит из потока: замечание о лимите, сброс истории,
 # подсказка после ответа без инструмента и без DONE.
@@ -136,13 +135,13 @@ class AgentStatistics:
         for node_name, update in event.items():
             messages = update.get("messages", []) if isinstance(update, dict) else []
             self._step_counts[node_name] += 1
-            if node_name == LIMIT_NOTICE_NODE_ID:
+            if node_name == AgentNode.LIMIT_NOTICE:
                 self._start_draft()
-            elif node_name == REINIT_NODE_ID:
+            elif node_name == AgentNode.REINIT:
                 self._events[RESET_EVENT] += 1
                 self._stop_draft()
 
-            if node_name in (INIT_NODE_ID, REINIT_NODE_ID):
+            if node_name in (AgentNode.INIT, AgentNode.REINIT):
                 self._awaits_warmup_response = True
 
             phase = self._phase(node_name = node_name)
@@ -261,7 +260,7 @@ class AgentStatistics:
 
         Возвращает: Фазу шага.
         """
-        if node_name == TOOL_NODE_ID and self._previous_node in (INIT_NODE_ID, REINIT_NODE_ID):
+        if node_name == AgentNode.TOOLS and self._previous_node in (AgentNode.INIT, AgentNode.REINIT):
             return WARMUP_PHASE
 
         return NODE_PHASES.get(node_name, WORK_PHASE)
@@ -311,7 +310,7 @@ class AgentStatistics:
             "after_warmup": self._awaits_warmup_response,
         })
         self._awaits_warmup_response = False
-        if node_name == DRAFT_AGENT_NODE_ID and self._awaits_first_draft_response:
+        if node_name == AgentNode.DRAFT_AGENT and self._awaits_first_draft_response:
             self._first_draft_response_seconds.append(round(seconds, ROUND_DIGITS))
             self._awaits_first_draft_response = False
 

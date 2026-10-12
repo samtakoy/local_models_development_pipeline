@@ -1,10 +1,18 @@
 """Имена узлов графа агента."""
 
-INIT_NODE_ID = "init"
-AGENT_NODE_ID = "agent"
-TOOL_NODE_ID = "tools"
-LIMIT_NOTICE_NODE_ID = "limit_notice"
-ANSWER_NOTICE_NODE_ID = "answer_notice"
-DRAFT_AGENT_NODE_ID = "draft_agent"
-DRAFT_TOOL_NODE_ID = "draft_tools"
-REINIT_NODE_ID = "reinit"
+from enum import StrEnum
+
+
+class AgentNode(StrEnum):
+    """
+    Имена узлов графа агента.
+    """
+
+    INIT = "init"
+    AGENT = "agent"
+    TOOLS = "tools"
+    LIMIT_NOTICE = "limit_notice"
+    ANSWER_NOTICE = "answer_notice"
+    DRAFT_AGENT = "draft_agent"
+    DRAFT_TOOLS = "draft_tools"
+    REINIT = "reinit"
