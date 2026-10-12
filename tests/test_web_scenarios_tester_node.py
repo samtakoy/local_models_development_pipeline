@@ -54,6 +54,18 @@ def _state(*, project_dir: Path, launch: str | None) -> PipelineState:
     )
 
 
+def project_dir_not_readable(*, readable_dirs: tuple[Path, ...], project_dir: Path) -> bool:
+    """
+    Проверяет, что среди папок чтения нет самой папки проекта.
+
+        readable_dirs: папки чтения агента.
+        project_dir: папка проекта.
+
+    Возвращает: True, если папки проекта среди них нет.
+    """
+    return project_dir.resolve() not in (folder.resolve() for folder in readable_dirs)
+
+
 def _config(*, project_dir: Path) -> RunnableConfig:
     """
     Собирает настройки запуска графа.
@@ -74,8 +86,8 @@ def _config(*, project_dir: Path) -> RunnableConfig:
 
 
 def test_scenarios_run_then_evaluator_without_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Сценарии прогоняются с командой из файла запуска, оценщик получает чеклист, сценарии и наблюдения,
-    проект ему закрыт; папка его ответа — в своём поле состояния."""
+    """Сценарии прогоняются с командой из файла запуска, оценщик получает при разогреве только чеклист,
+    сценарии и наблюдения ему открыты для чтения, проект закрыт; папка его ответа — в своём поле состояния."""
     runs = []
     roles = []
 
@@ -104,9 +116,10 @@ def test_scenarios_run_then_evaluator_without_project(tmp_path: Path, monkeypatc
     assert runs[0]["launch"].command == "uv run app"
     assert [path.name for path in runs[0]["scenario_paths"]] == ["100_add.md"]
     evaluator = roles[0]
-    assert evaluator["input_dirs"][:2] == (state["requirements_dir"], state["web_scenarios_dir"])
-    assert evaluator["input_dirs"][2].name == "observations"
-    assert evaluator["extra_readable_dirs"] == ()
+    assert evaluator["input_dirs"] == (state["requirements_dir"],)
+    assert evaluator["extra_readable_dirs"][0] == state["web_scenarios_dir"]
+    assert evaluator["extra_readable_dirs"][1].name == "observations"
+    assert project_dir_not_readable(readable_dirs = evaluator["extra_readable_dirs"], project_dir = tmp_path)
     expected_dir = draft_dir(private_dir = tmp_path / PRIVATE_ROOT / "web_scenarios_tester_r1")
     assert update["web_scenarios_tester_dir"] == expected_dir
 

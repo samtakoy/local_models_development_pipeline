@@ -16,7 +16,7 @@ def web_scenarios_tester_node(state: PipelineState, config: RunnableConfig) -> d
     """
     Прогоняет сценарии составителя в браузере: запускает приложение, отдаёт каждый сценарий отдельному
     помощнику с браузером, затем оценщик без доступа к проекту сравнивает наблюдения со сценариями
-    и пишет вердикт с отчётом. Ошибку поднимает PipelineError, если сценариев нет или файл запуска не читается.
+    и пишет вердикт с отчётом. Чеклист оценщик получает при разогреве, сценарии и наблюдения читает сам. Ошибку поднимает PipelineError, если сценариев нет или файл запуска не читается.
 
         state: состояние пайплайна.
         config: конфигурация запуска с настройками пайплайна.
@@ -59,9 +59,9 @@ def web_scenarios_tester_node(state: PipelineState, config: RunnableConfig) -> d
             scenarios_dir = scenarios_dir.relative_to(project_dir),
             observations_dir = observations_dir.relative_to(project_dir),
         ),
-        input_dirs = (state["requirements_dir"], scenarios_dir, observations_dir),
+        input_dirs = (state["requirements_dir"],),
         private_dir_name = private_dir_name,
-        extra_readable_dirs = (),
+        extra_readable_dirs = (scenarios_dir, observations_dir),
         extra_writable_dirs = (),
         extra_command_writable_dirs = (),
     )
