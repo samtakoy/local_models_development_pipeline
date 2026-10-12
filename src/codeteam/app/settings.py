@@ -20,6 +20,7 @@ class Settings:
             от папки файла .env.
         vision_model: модель, которая смотрит картинки для инструмента describe_picture; VISION_MODEL,
             не задана — инструмента нет.
+        vision_ctx_window: окно контекста смотрящей модели в токенах; VISION_CTX_WINDOW, не задана — окно агентов.
         browser_headless: браузер агентов без окна; BROWSER_HEADLESS, не задана — без окна.
     """
 
@@ -29,6 +30,7 @@ class Settings:
     runs_dir: Path
     prompts_db_dir: Path
     vision_model: str | None
+    vision_ctx_window: int
     browser_headless: bool
 
 
@@ -41,14 +43,16 @@ def load_settings() -> Settings:
     """
     dotenv_path = Path(find_dotenv(usecwd = True))
     load_dotenv(dotenv_path)
+    agent_ctx_window = int(os.getenv("AGENT_CTX_WINDOW", 120000))
 
     return Settings(
         ollama_base_url = _require(name = "OLLAMA_BASE_URL"),
         agent_model = _require(name = "AGENT_MODEL"),
-        agent_ctx_window = int(os.getenv("AGENT_CTX_WINDOW", 120000)),
+        agent_ctx_window = agent_ctx_window,
         runs_dir = dotenv_path.parent / _require(name = "CODETEAM_RUNS_DIR"),
         prompts_db_dir = dotenv_path.parent / _require(name = "CODETEAM_PROMPTS_DB_DIR"),
         vision_model = os.getenv("VISION_MODEL", "").strip() or None,
+        vision_ctx_window = int(os.getenv("VISION_CTX_WINDOW", agent_ctx_window)),
         browser_headless = os.getenv("BROWSER_HEADLESS", "true").strip().lower() != "false",
     )
 

@@ -1,6 +1,8 @@
 """Инструмент describe_picture: смотрящая модель описывает картинку из проекта для разработчиков."""
 
 import base64
+import logging
+import time
 from pathlib import Path
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -21,6 +23,8 @@ from codeteam.core.roles.picture_viewer.prompts import (
     PICTURE_OUTSIDE_PROJECT_ERROR,
     PICTURE_REQUEST,
 )
+
+logger = logging.getLogger(__name__)
 
 # Имя инструмента описания картинки.
 DESCRIBE_PICTURE_TOOL_NAME = "describe_picture"
@@ -60,10 +64,10 @@ def build_describe_picture_tool(caller_context: CallerContext) -> BaseTool | Non
         config = OllamaConfig(
             base_url = settings.ollama_base_url,
             model = settings.vision_model,
-            context_window = settings.agent_ctx_window,
+            context_window = settings.vision_ctx_window,
         ),
         generation_mode = GenerationMode.THINKING,
-        reasoning_level = ReasoningLevel.MEDIUM,
+        reasoning_level = ReasoningLevel.NONE,
     )
 
     def describe_picture(*, file_path: str, focus: str | None = None) -> str:
@@ -78,6 +82,7 @@ def build_describe_picture_tool(caller_context: CallerContext) -> BaseTool | Non
         picture_path = find_picture(project_dir = project_dir, file_path = file_path)
         encoded = base64.b64encode(picture_path.read_bytes()).decode("ascii")
         media_type = PICTURE_MEDIA_TYPES[picture_path.suffix.lower()]
+        started = time.monotonic()
         response = chat_model.invoke([
             SystemMessage(content = PICTURE_DESCRIPTION_PROMPT),
             HumanMessage(content = [
@@ -85,6 +90,7 @@ def build_describe_picture_tool(caller_context: CallerContext) -> BaseTool | Non
                 create_image_block(base64 = encoded, mime_type = media_type),
             ]),
         ])
+        logger.info(f"[{DESCRIBE_PICTURE_TOOL_NAME}] {file_path}: {time.monotonic() - started:.1f} с")
 
         return str(response.content)
 

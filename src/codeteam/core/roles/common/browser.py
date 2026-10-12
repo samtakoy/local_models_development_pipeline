@@ -23,9 +23,9 @@ PLAYWRIGHT_ARGS = (PLAYWRIGHT_MCP_PACKAGE, "--isolated")
 # Предел ожидания скачивания Playwright MCP при прогреве, секунды.
 PLAYWRIGHT_DOWNLOAD_TIMEOUT_SECONDS = 600
 
-# Инструменты Playwright MCP, которые агент не получает: код Playwright на стороне сервера дублирует
-# отдельные инструменты действий на странице.
-PLAYWRIGHT_EXCLUDED_TOOL_NAMES = ("browser_run_code_unsafe",)
+# Инструменты Playwright MCP, которые агент не получает: код Playwright на стороне сервера
+# и скрипты на странице.
+PLAYWRIGHT_EXCLUDED_TOOL_NAMES = ("browser_run_code_unsafe", "browser_evaluate")
 
 # Инструмент Playwright MCP, которым прогрев открывает браузер, и адрес пустой страницы.
 PLAYWRIGHT_NAVIGATE_TOOL_NAME = "browser_navigate"

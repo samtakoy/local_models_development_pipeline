@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 CHECK_IN_BROWSER_TOOL_NAME = "check_in_browser"
 
 # Наибольшее число вызовов помощника за одну работу агента: защита от зацикливания.
-BROWSER_CHECK_CALL_LIMIT = 20
+BROWSER_CHECK_CALL_LIMIT = 50
 
 # Наибольшая длина ответа помощника, которая возвращается в историю агента, знаков.
 OBSERVATIONS_LENGTH_LIMIT = 10000

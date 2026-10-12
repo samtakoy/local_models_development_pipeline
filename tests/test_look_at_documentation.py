@@ -1,4 +1,4 @@
-"""Тесты инструмента get_advice: падение советника не прерывает спросившего."""
+"""Тесты инструмента look_at_documentation: падение советника не прерывает спросившего."""
 
 from pathlib import Path
 
@@ -7,7 +7,7 @@ from langgraph.errors import GraphRecursionError
 
 from codeteam.common.shell import ShellProcesses
 from codeteam.core.pipeline.state import PipelineConfig
-from codeteam.core.roles.advisor import build_get_advice_tool
+from codeteam.core.roles.advisor import build_look_at_documentation_tool
 from codeteam.core.roles.advisor import tool as tool_module
 from codeteam.core.roles.common import CallerContext
 
@@ -36,6 +36,6 @@ def test_advisor_failure_returns_error_to_caller(tmp_path: Path, monkeypatch: py
         shell_processes = ShellProcesses(),
     )
 
-    answer = build_get_advice_tool(caller_context).invoke({"question": "почему падает тест?"})
+    answer = build_look_at_documentation_tool(caller_context).invoke({"question": "почему падает тест?"})
 
     assert "GraphRecursionError" in answer

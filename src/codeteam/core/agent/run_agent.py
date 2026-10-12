@@ -8,7 +8,7 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
 
 from codeteam.app.settings import Settings
-from codeteam.common.llm import build_chat_model, OllamaConfig, GenerationMode
+from codeteam.common.llm import build_chat_model, OllamaConfig, GenerationMode, ReasoningLevel
 from codeteam.core.agent.config import AgentConfig
 from codeteam.core.agent.graph import create_agent_graph, AgentState, AGENT_CFG_NAME
 from codeteam.core.agent.journal import AgentJournal
@@ -85,7 +85,10 @@ def run_agent(
             model = role.model_name,
             context_window = settings.agent_ctx_window
         ),
-        generation_mode = GenerationMode.THINKING,
+        # выключенное размышление — параметры выборки режима без размышления
+        generation_mode = (
+            GenerationMode.NON_THINKING if role.reasoning_level is ReasoningLevel.NONE else GenerationMode.THINKING
+        ),
         reasoning_level = role.reasoning_level,
     )
 

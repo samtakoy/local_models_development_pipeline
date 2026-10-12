@@ -1,4 +1,5 @@
-"""Инструмент get_advice: агент спрашивает совета у советника — отдельного агента со свежей памятью."""
+"""Инструмент look_at_documentation: агент спрашивает советника по документации — отдельного агента со свежей
+памятью, который ищет ответ в документации библиотек."""
 
 import itertools
 import logging
@@ -16,10 +17,10 @@ from codeteam.core.roles.advisor.prompts import (
     ADVICE_TRUNCATED_NOTE,
     ADVISOR_TASK,
     CONTEXT_NOT_GIVEN,
-    GET_ADVICE_CONTEXT_DESCRIPTION,
-    GET_ADVICE_DESCRIPTION,
-    GET_ADVICE_QUESTION_DESCRIPTION,
-    GET_ADVICE_RELATED_FILES_DESCRIPTION,
+    LOOK_AT_DOCUMENTATION_CONTEXT_DESCRIPTION,
+    LOOK_AT_DOCUMENTATION_DESCRIPTION,
+    LOOK_AT_DOCUMENTATION_QUESTION_DESCRIPTION,
+    LOOK_AT_DOCUMENTATION_RELATED_FILES_DESCRIPTION,
     NO_ADVICE_ERROR,
     RELATED_FILE_LINE,
     RELATED_FILES_NOT_GIVEN,
@@ -28,8 +29,8 @@ from codeteam.core.roles.common import CallerContext, reserve_private_dir_name, 
 
 logger = logging.getLogger(__name__)
 
-# Имя инструмента вызова советника.
-GET_ADVICE_TOOL_NAME = "get_advice"
+# Имя инструмента вызова советника по документации.
+LOOK_AT_DOCUMENTATION_TOOL_NAME = "look_at_documentation"
 
 # Наибольшее число вызовов советника за одну работу агента: защита от зацикливания.
 ADVICE_CALL_LIMIT = 30
@@ -41,19 +42,19 @@ ADVICE_LENGTH_LIMIT = 10000
 RELATED_DIR_NAME = "related"
 
 
-class GetAdviceArguments(BaseModel):
+class LookAtDocumentationArguments(BaseModel):
     """
-    Аргументы get_advice.
+    Аргументы look_at_documentation.
     """
 
-    question: str = Field(description = GET_ADVICE_QUESTION_DESCRIPTION)
-    context: str | None = Field(default = None, description = GET_ADVICE_CONTEXT_DESCRIPTION)
-    related_files: list[str] | None = Field(default = None, description = GET_ADVICE_RELATED_FILES_DESCRIPTION)
+    question: str = Field(description = LOOK_AT_DOCUMENTATION_QUESTION_DESCRIPTION)
+    context: str | None = Field(default = None, description = LOOK_AT_DOCUMENTATION_CONTEXT_DESCRIPTION)
+    related_files: list[str] | None = Field(default = None, description = LOOK_AT_DOCUMENTATION_RELATED_FILES_DESCRIPTION)
 
 
-def build_get_advice_tool(caller_context: CallerContext) -> BaseTool:
+def build_look_at_documentation_tool(caller_context: CallerContext) -> BaseTool:
     """
-    Собирает инструмент get_advice для вызывающего агента.
+    Собирает инструмент look_at_documentation для вызывающего агента.
 
     Каждый вызов запускает советника в своей личной папке внутри папки помощников вызывающего агента:
     <папка вызывающего>_help/advisor_r<номер>; журнал советника — <журнал вызывающего>.advisor_r<номер>.
@@ -62,13 +63,13 @@ def build_get_advice_tool(caller_context: CallerContext) -> BaseTool:
 
         caller_context: агент, который будет спрашивать совета.
 
-    Возвращает: Инструмент get_advice.
+    Возвращает: Инструмент look_at_documentation.
     """
     project_dir = Path(caller_context.cfg.project_path).resolve()
     # номера вызовов для предела ADVICE_CALL_LIMIT: next() выдаёт номер атомарно
     call_numbers = itertools.count(1)
 
-    def get_advice(*, question: str, context: str | None = None, related_files: list[str] | None = None) -> str:
+    def look_at_documentation(*, question: str, context: str | None = None, related_files: list[str] | None = None) -> str:
         """
         Запускает советника на вопросе и возвращает его ответ.
 
@@ -114,7 +115,7 @@ def build_get_advice_tool(caller_context: CallerContext) -> BaseTool:
             )
         except Exception as error:
             # падение советника не прерывает спросившего: он получает ошибку и продолжает работу
-            logger.error(f"[{GET_ADVICE_TOOL_NAME}] советник прервал работу: {type(error).__name__}: {error}")
+            logger.error(f"[{LOOK_AT_DOCUMENTATION_TOOL_NAME}] советник прервал работу: {type(error).__name__}: {error}")
             raise ToolException(ADVISOR_FAILED_ERROR.format(error = type(error).__name__)) from error
         advice_path = advice_dir / ADVICE_FILE_NAME
         if not advice_path.is_file():
@@ -131,10 +132,10 @@ def build_get_advice_tool(caller_context: CallerContext) -> BaseTool:
         )
 
     return StructuredTool.from_function(
-        func = get_advice,
-        name = GET_ADVICE_TOOL_NAME,
-        description = GET_ADVICE_DESCRIPTION,
-        args_schema = GetAdviceArguments,
+        func = look_at_documentation,
+        name = LOOK_AT_DOCUMENTATION_TOOL_NAME,
+        description = LOOK_AT_DOCUMENTATION_DESCRIPTION,
+        args_schema = LookAtDocumentationArguments,
         handle_tool_error = True,
     )
 
