@@ -2,7 +2,9 @@
 
 import logging
 from collections.abc import Callable
+from enum import StrEnum
 from pathlib import Path
+from typing import Literal
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.constants import END, START
@@ -29,8 +31,15 @@ from codeteam.core.roles.web_tester import WEB_TESTER_ROLE, web_tester_node
 
 logger = logging.getLogger(__name__)
 
-# Узел графа, который запускает роль из next_role.
-ROLE_NODE_ID = "role"
+
+class PipelineNode(StrEnum):
+    """
+    Имена узлов графа пайплайна.
+    """
+
+    # узел, который запускает роль из next_role
+    ROLE = "role"
+
 
 # Узлы ролей по именам ролей: узел запускает агента роли и возвращает обновление состояния.
 ROLE_NODES: dict[str, Callable[[PipelineState, RunnableConfig], dict]] = {
@@ -82,9 +91,9 @@ def create_pipeline_graph(*, roles: tuple[str, ...]) -> CompiledStateGraph:
     """
     check_roles(roles = roles)
     workflow: StateGraph = StateGraph(PipelineState) # noqa
-    workflow.add_node(ROLE_NODE_ID, role_node)
-    workflow.add_edge(START, ROLE_NODE_ID)
-    workflow.add_conditional_edges(ROLE_NODE_ID, route_after_role)
+    workflow.add_node(PipelineNode.ROLE, role_node)
+    workflow.add_edge(START, PipelineNode.ROLE)
+    workflow.add_conditional_edges(PipelineNode.ROLE, route_after_role)
 
     return workflow.compile()
 
@@ -152,7 +161,7 @@ def role_node(state: PipelineState, config: RunnableConfig) -> dict:
     return {**update, "next_role": next_role}
 
 
-def route_after_role(state: PipelineState) -> str:
+def route_after_role(state: PipelineState) -> Literal[PipelineNode.ROLE, "__end__"]:
     """
     Ведёт к следующей роли или к концу пайплайна.
 
@@ -163,7 +172,7 @@ def route_after_role(state: PipelineState) -> str:
     if state["next_role"] is None:
         return END
 
-    return ROLE_NODE_ID
+    return PipelineNode.ROLE
 
 
 def choose_next_role(*, roles: tuple[str, ...], current: str, state: PipelineState) -> str | None:
