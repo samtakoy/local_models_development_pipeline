@@ -4,6 +4,7 @@ from pathlib import Path
 
 from codeteam.common.llm import ReasoningLevel
 from codeteam.core.agent.answer_checks import required_files_check
+from codeteam.core.agent.answer_files import AnswerFiles
 from codeteam.core.agent.step_hooks import code_block_hook, draft_phase_hint_hook, private_file_hook, \
     readonly_work_phase_hint_hook
 from codeteam.core.agent.workspace import DRAFT_DIR_NAME
@@ -16,6 +17,9 @@ ARCHITECTURE_FILE_NAME = "000_architecture.md"
 # Наибольшее число строк в одном блоке кода с указанным языком в черновике архитектора.
 ARCHITECT_CODE_BLOCK_LINE_LIMIT = 10
 
+# Файлы ответа роли в черновике.
+ARCHITECT_ANSWER_FILES = AnswerFiles(names = (ARCHITECTURE_FILE_NAME,), only_these = False)
+
 ARCHITECT_ROLE = RoleSettings(
     name = "architect",
     system_prompt_path = Path(__file__).parent / "system_prompt.md",
@@ -23,8 +27,9 @@ ARCHITECT_ROLE = RoleSettings(
     model_name = None,
     reasoning_level = ReasoningLevel.MEDIUM,
     tool_names = PROJECT_TOOL_NAMES,
+    answer_files = ARCHITECT_ANSWER_FILES,
     step_hooks = (
-        private_file_hook(answer_file_names = (ARCHITECTURE_FILE_NAME,), only_answer_files = False),
+        private_file_hook(answer_files = ARCHITECT_ANSWER_FILES),
         draft_phase_hint_hook,
         readonly_work_phase_hint_hook,
         code_block_hook(
@@ -34,7 +39,7 @@ ARCHITECT_ROLE = RoleSettings(
             skip_file_names = (ARCHITECTURE_FILE_NAME,),
         ),
     ),
-    answer_checks = (required_files_check(file_names = (ARCHITECTURE_FILE_NAME,)),),
+    answer_checks = (required_files_check(file_names = ARCHITECT_ANSWER_FILES.names),),
     helper_tools = (),
     mcp_servers = (),
 )

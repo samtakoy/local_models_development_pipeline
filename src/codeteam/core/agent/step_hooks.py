@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from codeteam.core.agent.answer_files import AnswerFiles
 from codeteam.core.agent.prompts import ANSWER_LIKE_FILE_REMARK, CODE_BLOCK_LINES, CONTEXT_FILE_PATH_LINE, \
     DRAFT_PHASE_HINT, DRAFT_PHASE_RULE, DRAFT_SECTION_PATH_LINE, DUPLICATE_SECTION_NUMBER_REMARK, \
     LATIN_SECTION_NAME_REMARK, MISPLACED_ANSWER_FILE_REMARK, MISPLACED_CONTEXT_FILE_REMARK, MISPLACED_CONTEXT_REMARK, \
@@ -181,7 +182,7 @@ def _write_refusal_path_lines(*, context: StepContext) -> list[str]:
     return path_lines
 
 
-def private_file_hook(*, answer_file_names: tuple[str, ...], only_answer_files: bool) -> StepHook:
+def private_file_hook(*, answer_files: AnswerFiles) -> StepHook:
     """
     Собирает хук личной папки: проверяет место и имя каждого изменённого файла. Правила по порядку,
     срабатывает первое:
@@ -194,8 +195,7 @@ def private_file_hook(*, answer_file_names: tuple[str, ...], only_answer_files: 
     6. файл в черновике — проверки имени раздела;
     7. остальные файлы — общее замечание о местах файлов личной папки.
 
-        answer_file_names: заранее известные имена файлов ответа роли в черновике.
-        only_answer_files: в черновике роли разрешены только файлы ответа.
+        answer_files: файлы ответа роли в черновике.
 
     Возвращает: Хук шага: замечания к изменённым файлам всей личной папки.
     """
@@ -208,8 +208,8 @@ def private_file_hook(*, answer_file_names: tuple[str, ...], only_answer_files: 
             if (remark := _private_file_remark(
                 context = context,
                 path = path,
-                answer_file_names = answer_file_names,
-                only_answer_files = only_answer_files,
+                answer_file_names = answer_files.names,
+                only_answer_files = answer_files.only_these,
             )) is not None
         ]
 

@@ -5,6 +5,7 @@ from pathlib import Path
 
 from codeteam.common.llm import ReasoningLevel
 from codeteam.core.agent.answer_checks import AnswerCheck
+from codeteam.core.agent.answer_files import AnswerFiles
 from codeteam.core.agent.step_hooks import StepHook
 from codeteam.core.roles.common.external_tools import HelperToolBuilder, McpServerBuilder
 from codeteam.core.tools.files import DELETE_TOOL_NAME, EDIT_TOOL_NAME, GLOB_TOOL_NAME, GREP_TOOL_NAME, \
@@ -44,6 +45,8 @@ class RoleSettings:
         model_name: модель агента; None — модель пайплайна.
         reasoning_level: уровень размышления модели агента.
         tool_names: имена инструментов агента.
+        answer_files: файлы ответа роли в черновике: по ним собираются хук личной папки, проверка сдачи
+            и правила черновика в общих инструкциях агента.
         step_hooks: все хуки шага инструментов роли, включая общие: места и имена файлов личной папки,
             подсказка фазы черновика.
         answer_checks: проверки сдачи: замечания к черновику, когда агент отвечает DONE.
@@ -57,6 +60,7 @@ class RoleSettings:
     model_name: str | None
     reasoning_level: ReasoningLevel
     tool_names: tuple[str, ...]
+    answer_files: AnswerFiles
     step_hooks: tuple[StepHook, ...]
     answer_checks: tuple[AnswerCheck, ...]
     helper_tools: tuple[HelperToolBuilder, ...]

@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from codeteam.common.git import commit_all, init_repository
+from codeteam.core.agent.answer_files import AnswerFiles
 from codeteam.core.agent.statistics import DRAFT_PHASE, WORK_PHASE
 from codeteam.core.agent.step_hooks import StepContext, draft_phase_hint_hook, private_file_hook, \
     readonly_work_phase_hint_hook
@@ -110,7 +111,7 @@ def test_role_gets_stray_private_file_remark(project_dir: Path, role: RoleSettin
         changed_files = (stray_file,),
         refusals = (),
     )
-    stray_remark = private_file_hook(answer_file_names = (), only_answer_files = False)(context)
+    stray_remark = private_file_hook(answer_files = AnswerFiles(names = (), only_these = False))(context)
 
     assert stray_remark is not None
     assert stray_remark in _remarks(role = role, context = context)

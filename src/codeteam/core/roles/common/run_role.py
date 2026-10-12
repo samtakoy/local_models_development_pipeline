@@ -49,6 +49,7 @@ def run_role(
         model_name = role.model_name if role.model_name is not None else cfg.model_name,
         reasoning_level = role.reasoning_level,
         tool_names = role.tool_names,
+        answer_files = role.answer_files,
         step_hooks = role.step_hooks,
         answer_checks = role.answer_checks,
     )

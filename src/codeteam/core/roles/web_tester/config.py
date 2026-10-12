@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from codeteam.common.llm import ReasoningLevel
+from codeteam.core.agent.answer_files import AnswerFiles
 from codeteam.core.agent.step_hooks import draft_phase_hint_hook, private_file_hook
 from codeteam.core.agent.workspace import CHECK_DIR, CONTEXT_FILE_NAME
 from codeteam.core.roles.common import ACCEPTED_VERDICT, REWORK_VERDICT, VERDICT_FILE_NAME, RoleSettings, \
@@ -26,6 +27,9 @@ WEB_TESTER_TOOL_NAMES = (
     STOP_PROCESS_TOOL_NAME,
 )
 
+# Файлы ответа роли в черновике.
+WEB_TESTER_ANSWER_FILES = AnswerFiles(names = (VERDICT_FILE_NAME, REPORT_FILE_NAME), only_these = False)
+
 WEB_TESTER_ROLE = RoleSettings(
     name = "web_tester",
     system_prompt_path = Path(__file__).parent / "system_prompt.md",
@@ -42,8 +46,9 @@ WEB_TESTER_ROLE = RoleSettings(
     model_name = None,
     reasoning_level = ReasoningLevel.MEDIUM,
     tool_names = WEB_TESTER_TOOL_NAMES,
+    answer_files = WEB_TESTER_ANSWER_FILES,
     step_hooks = (
-        private_file_hook(answer_file_names = (VERDICT_FILE_NAME, REPORT_FILE_NAME), only_answer_files = False),
+        private_file_hook(answer_files = WEB_TESTER_ANSWER_FILES),
         draft_phase_hint_hook,
         verdict_line_hook,
         tracked_changes_check(remark = TRACKED_CHANGES_REMARK),

@@ -9,6 +9,7 @@ from langchain_core.tools import BaseTool
 
 from codeteam.app.settings import Settings
 from codeteam.common.llm import build_chat_model, OllamaConfig, GenerationMode, ReasoningLevel
+from codeteam.core.agent.answer_files import build_draft_rules
 from codeteam.core.agent.config import AgentConfig
 from codeteam.core.agent.graph import create_agent_graph, AgentState, AGENT_CFG_NAME
 from codeteam.core.agent.journal import AgentJournal
@@ -167,6 +168,10 @@ def run_agent(
 
     system_instructions = AGENT_SYSTEM_INSTRUCTIONS.format(
         draft_dir = draft_dir(private_dir = relative_private_dir),
+        draft_rules = build_draft_rules(
+            answer_files = role.answer_files,
+            shown_draft_dir = draft_dir(private_dir = relative_private_dir).as_posix(),
+        ),
         context_file_path = context_path(private_dir = relative_private_dir),
         context_file_name = CONTEXT_FILE_NAME,
     )

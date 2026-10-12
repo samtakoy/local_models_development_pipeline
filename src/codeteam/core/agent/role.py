@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from codeteam.common.llm import ReasoningLevel
 from codeteam.core.agent.answer_checks import AnswerCheck
+from codeteam.core.agent.answer_files import AnswerFiles
 from codeteam.core.agent.step_hooks import StepHook
 
 
@@ -17,6 +18,7 @@ class AgentRole:
         model_name: модель агента.
         reasoning_level: уровень размышления модели агента.
         tool_names: имена инструментов агента, одни и те же в фазе работы и в фазе черновика.
+        answer_files: файлы ответа роли в черновике: по ним собираются правила черновика в общих инструкциях.
         step_hooks: все хуки шага инструментов роли, включая общие: места и имена файлов личной папки,
             подсказка фазы черновика.
         answer_checks: проверки сдачи: замечания к черновику, когда агент отвечает DONE.
@@ -27,5 +29,6 @@ class AgentRole:
     model_name: str
     reasoning_level: ReasoningLevel
     tool_names: tuple[str, ...]
+    answer_files: AnswerFiles
     step_hooks: tuple[StepHook, ...]
     answer_checks: tuple[AnswerCheck, ...]

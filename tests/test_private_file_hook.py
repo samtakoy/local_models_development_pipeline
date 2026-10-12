@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from codeteam.core.agent.answer_files import AnswerFiles
 from codeteam.core.agent.statistics import WORK_PHASE
 from codeteam.core.agent.step_hooks import StepContext, private_file_hook
 
@@ -28,7 +29,7 @@ def _remark(*, project_dir: Path, only_answer_files: bool, file_path: str) -> st
 
     Возвращает: Замечание хука или None.
     """
-    hook = private_file_hook(answer_file_names = (ANSWER_FILE_NAME,), only_answer_files = only_answer_files)
+    hook = private_file_hook(answer_files = AnswerFiles(names = (ANSWER_FILE_NAME,), only_these = only_answer_files))
     context = StepContext(
         project_dir = project_dir,
         private_dir = project_dir / PRIVATE_DIR,

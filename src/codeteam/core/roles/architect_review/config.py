@@ -3,9 +3,13 @@
 from pathlib import Path
 
 from codeteam.common.llm import ReasoningLevel
+from codeteam.core.agent.answer_files import AnswerFiles
 from codeteam.core.agent.step_hooks import draft_phase_hint_hook, private_file_hook, readonly_work_phase_hint_hook
 from codeteam.core.roles.common import ACCEPTED_VERDICT, PROJECT_TOOL_NAMES, REWORK_VERDICT, VERDICT_FILE_NAME, \
     RoleSettings, check_verdict_file, verdict_line_hook
+
+# Файлы ответа роли в черновике.
+ARCHITECT_REVIEW_ANSWER_FILES = AnswerFiles(names = (VERDICT_FILE_NAME,), only_these = False)
 
 ARCHITECT_REVIEW_ROLE = RoleSettings(
     name = "architect_review",
@@ -18,8 +22,9 @@ ARCHITECT_REVIEW_ROLE = RoleSettings(
     model_name = None,
     reasoning_level = ReasoningLevel.MEDIUM,
     tool_names = PROJECT_TOOL_NAMES,
+    answer_files = ARCHITECT_REVIEW_ANSWER_FILES,
     step_hooks = (
-        private_file_hook(answer_file_names = (VERDICT_FILE_NAME,), only_answer_files = False),
+        private_file_hook(answer_files = ARCHITECT_REVIEW_ANSWER_FILES),
         draft_phase_hint_hook,
         readonly_work_phase_hint_hook,
         verdict_line_hook,

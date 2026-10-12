@@ -5,6 +5,7 @@ from pathlib import Path
 
 from codeteam.common.llm import ReasoningLevel
 from codeteam.core.agent.answer_checks import required_files_check
+from codeteam.core.agent.answer_files import AnswerFiles
 from codeteam.core.agent.step_hooks import draft_phase_hint_hook, private_file_hook
 from codeteam.core.agent.workspace import CHECK_DIR
 from codeteam.core.roles.advisor.documentation import QUERY_DOCS_TOOL_NAME, RESOLVE_LIBRARY_TOOL_NAME, \
@@ -13,6 +14,9 @@ from codeteam.core.roles.common import PROJECT_TOOL_NAMES, RoleSettings
 
 # Файл ответа советника в его черновике: целиком возвращается спросившему агенту.
 ADVICE_FILE_NAME = "000_advice.md"
+
+# Файлы ответа роли в черновике.
+ADVISOR_ANSWER_FILES = AnswerFiles(names = (ADVICE_FILE_NAME,), only_these = True)
 
 ADVISOR_ROLE = RoleSettings(
     name = "advisor",
@@ -26,11 +30,12 @@ ADVISOR_ROLE = RoleSettings(
     model_name = None,
     reasoning_level = ReasoningLevel.LOW,
     tool_names = PROJECT_TOOL_NAMES,
+    answer_files = ADVISOR_ANSWER_FILES,
     step_hooks = (
-        private_file_hook(answer_file_names = (ADVICE_FILE_NAME,), only_answer_files = True),
+        private_file_hook(answer_files = ADVISOR_ANSWER_FILES),
         draft_phase_hint_hook,
     ),
-    answer_checks = (required_files_check(file_names = (ADVICE_FILE_NAME,)),),
+    answer_checks = (required_files_check(file_names = ADVISOR_ANSWER_FILES.names),),
     helper_tools = (),
     mcp_servers = (context7_server,),
 )
