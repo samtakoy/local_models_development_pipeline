@@ -1,4 +1,5 @@
-"""Описание роли веб-тестировщика: промпт, модель, инструменты, сервер браузера, проверки сдачи."""
+"""Описание роли веб-тестировщика: промпт, модель, инструменты, сервер браузера, инструмент смотреть скриншоты,
+проверки сдачи."""
 
 from pathlib import Path
 
@@ -6,9 +7,10 @@ from codeteam.common.llm import ReasoningLevel
 from codeteam.core.agent.answer_files import AnswerFiles
 from codeteam.core.agent.step_hooks import draft_phase_hint_hook, private_file_hook
 from codeteam.core.agent.workspace import CHECK_DIR, CONTEXT_FILE_NAME
-from codeteam.core.roles.common import ACCEPTED_VERDICT, REPORT_FILE_NAME, REWORK_VERDICT, VERDICT_FILE_NAME, RoleSettings, \
-    check_verdict_file, clean_project_check, tracked_changes_check, verdict_line_hook
+from codeteam.core.roles.common import ACCEPTED_VERDICT, REPORT_FILE_NAME, REWORK_VERDICT, VERDICT_FILE_NAME, \
+    RoleSettings, check_verdict_file, clean_project_check, tracked_changes_check, verdict_line_hook
 from codeteam.core.roles.common.browser import playwright_server
+from codeteam.core.roles.picture_viewer import DESCRIBE_PICTURE_TOOL_NAME, build_describe_picture_tool
 from codeteam.core.roles.web_tester.prompts import TRACKED_CHANGES_REMARK
 from codeteam.core.tools.files import DELETE_TOOL_NAME, EDIT_TOOL_NAME, GLOB_TOOL_NAME, GREP_TOOL_NAME, \
     READ_TOOL_NAME, WRITE_TOOL_NAME
@@ -41,6 +43,7 @@ WEB_TESTER_ROLE = RoleSettings(
         "report_file": REPORT_FILE_NAME,
         "start_service_tool": START_SERVICE_TOOL_NAME,
         "stop_process_tool": STOP_PROCESS_TOOL_NAME,
+        "describe_picture_tool": DESCRIBE_PICTURE_TOOL_NAME,
     },
     model_name = None,
     reasoning_level = ReasoningLevel.MEDIUM,
@@ -53,6 +56,6 @@ WEB_TESTER_ROLE = RoleSettings(
         tracked_changes_check(remark = TRACKED_CHANGES_REMARK),
     ),
     answer_checks = (check_verdict_file, clean_project_check),
-    helper_tools = (),
+    helper_tools = (build_describe_picture_tool,),
     mcp_servers = (playwright_server,),
 )
