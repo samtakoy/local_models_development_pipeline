@@ -1,9 +1,11 @@
 """Инструмент агента write: запись файла целиком."""
 
+import json
 from pathlib import Path
+from typing import Any
 
 from langchain_core.tools import BaseTool, StructuredTool, ToolException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from codeteam.common.files import IgnoreRules, split_lines
 from codeteam.core.agent.workspace import PathOutsideWorkspace, Workspace
@@ -26,6 +28,21 @@ class WriteArguments(BaseModel):
 
     file_path: str = Field(description = FILE_PATH_DESCRIPTION)
     content: str = Field(description = WRITE_CONTENT_DESCRIPTION)
+
+    @field_validator("content", mode = "before")
+    @classmethod
+    def json_content_to_text(cls, value: Any) -> Any:
+        """
+        Переводит содержимое-объект или содержимое-список в текст JSON.
+
+            value: содержимое файла из вызова модели.
+
+        Возвращает: Текст JSON для объекта и списка, остальное как есть.
+        """
+        if isinstance(value, (dict, list)):
+            return json.dumps(value, ensure_ascii = False, indent = 2)
+
+        return value
 
 
 def build_write_tool(
