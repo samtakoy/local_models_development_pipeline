@@ -117,7 +117,7 @@ def build_check_in_browser_tool(caller_context: CallerContext) -> BaseTool | Non
 
 def _run_helper(*, caller_context: CallerContext, project_dir: Path, url: str, scenarios: str) -> str:
     """
-    Запускает помощника в новой личной папке внутри папки помощников вызывающего и читает его наблюдения.
+    Запускает помощника и читает его наблюдения.
 
         caller_context: агент, который просит проверку.
         project_dir: папка проекта.
@@ -126,6 +126,38 @@ def _run_helper(*, caller_context: CallerContext, project_dir: Path, url: str, s
 
     Возвращает: Наблюдения помощника; длиннее OBSERVATIONS_LENGTH_LIMIT — начало ответа и путь к файлу.
         Ошибку для агента поднимает ToolException.
+    """
+    observations_path = run_browser_checker(
+        caller_context = caller_context,
+        project_dir = project_dir,
+        url = url,
+        scenarios = scenarios,
+    )
+    observations = observations_path.read_text(encoding = "utf-8", errors = "replace")
+    if len(observations) <= OBSERVATIONS_LENGTH_LIMIT:
+        return observations
+
+    return (
+        observations[:OBSERVATIONS_LENGTH_LIMIT]
+        + "\n\n"
+        + OBSERVATIONS_TRUNCATED_NOTE.format(
+            length = len(observations),
+            observations_file = observations_path.relative_to(project_dir),
+        )
+    )
+
+
+def run_browser_checker(*, caller_context: CallerContext, project_dir: Path, url: str, scenarios: str) -> Path:
+    """
+    Запускает помощника в новой личной папке внутри папки помощников вызывающего.
+
+        caller_context: агент или узел, который просит проверку.
+        project_dir: папка проекта.
+        url: адрес запущенного приложения.
+        scenarios: сценарии проверки по шагам.
+
+    Возвращает: Файл наблюдений помощника. Ошибку поднимает ToolException: помощник упал
+        или не записал наблюдения.
     """
     private_dir_name = reserve_private_dir_name(
         project_dir = project_dir,
@@ -154,18 +186,7 @@ def _run_helper(*, caller_context: CallerContext, project_dir: Path, url: str, s
     if not observations_path.is_file():
         raise ToolException(NO_OBSERVATIONS_ERROR.format(draft_dir = observations_dir.relative_to(project_dir)))
 
-    observations = observations_path.read_text(encoding = "utf-8", errors = "replace")
-    if len(observations) <= OBSERVATIONS_LENGTH_LIMIT:
-        return observations
-
-    return (
-        observations[:OBSERVATIONS_LENGTH_LIMIT]
-        + "\n\n"
-        + OBSERVATIONS_TRUNCATED_NOTE.format(
-            length = len(observations),
-            observations_file = observations_path.relative_to(project_dir),
-        )
-    )
+    return observations_path
 
 
 def check_app_url(*, url: str, processes: ShellProcesses) -> None:
