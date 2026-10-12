@@ -61,8 +61,9 @@ def load_state(*, path: Path) -> PipelineState:
         stages = _stages_or_none(value = data["stages"]),
         review = None if data["review"] is None else Review(**data["review"]),
         rework = _rework_or_none(value = data["rework"]),
-        # в снимках, записанных до появления поля, его нет
-        web_test_dir = _path_or_none(value = data.get("web_test_dir")),
+        # в снимках, записанных до появления полей, их нет
+        tester_dir = _path_or_none(value = data.get("tester_dir")),
+        web_tester_dir = _path_or_none(value = data.get("web_tester_dir")),
         next_role = data["next_role"],
         journal_name = data["journal_name"],
         journal_count = data["journal_count"],

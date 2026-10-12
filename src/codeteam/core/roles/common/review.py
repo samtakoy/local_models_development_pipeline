@@ -21,6 +21,9 @@ REVIEWED_DIR_NAME = "reviewed"
 # Файл вердикта в черновике ревьюера: первая непустая строка содержит вердикт.
 VERDICT_FILE_NAME = "000_verdict.md"
 
+# Файл отчёта по требованиям в черновике тестировщика.
+REPORT_FILE_NAME = "100_report.md"
+
 # Вердикт: работа принята.
 ACCEPTED_VERDICT = "PASS"
 

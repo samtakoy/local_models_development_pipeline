@@ -6,10 +6,9 @@ from codeteam.common.llm import ReasoningLevel
 from codeteam.core.agent.answer_files import AnswerFiles
 from codeteam.core.agent.step_hooks import draft_phase_hint_hook, private_file_hook
 from codeteam.core.agent.workspace import CHECK_DIR, CONTEXT_FILE_NAME
-from codeteam.core.roles.common import ACCEPTED_VERDICT, REWORK_VERDICT, VERDICT_FILE_NAME, RoleSettings, \
+from codeteam.core.roles.common import ACCEPTED_VERDICT, REPORT_FILE_NAME, REWORK_VERDICT, VERDICT_FILE_NAME, RoleSettings, \
     check_verdict_file, clean_project_check, tracked_changes_check, verdict_line_hook
 from codeteam.core.roles.common.browser import playwright_server
-from codeteam.core.roles.common.final_check import REPORT_FILE_NAME
 from codeteam.core.roles.web_tester.prompts import TRACKED_CHANGES_REMARK
 from codeteam.core.tools.files import DELETE_TOOL_NAME, EDIT_TOOL_NAME, GLOB_TOOL_NAME, GREP_TOOL_NAME, \
     READ_TOOL_NAME, WRITE_TOOL_NAME

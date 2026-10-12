@@ -7,8 +7,8 @@ from codeteam.core.roles.common.external_tools import CallerContext, HelperToolB
 from codeteam.core.roles.common.private_dirs import last_private_dir_name, reserve_private_dir_name, \
     role_private_dir_name
 from codeteam.core.roles.common.project_guard import clean_project_check, tracked_changes_check
-from codeteam.core.roles.common.review import ACCEPTED_VERDICT, REWORK_VERDICT, VERDICT_FILE_NAME, \
-    check_verdict_file, copy_reviewed_draft, make_rework, next_review_round, read_verdict, \
+from codeteam.core.roles.common.review import ACCEPTED_VERDICT, REPORT_FILE_NAME, REWORK_VERDICT, \
+    VERDICT_FILE_NAME, check_verdict_file, copy_reviewed_draft, make_rework, next_review_round, read_verdict, \
     rework_for, verdict_line_hook
 from codeteam.core.roles.common.role_settings import DRAFT_TOOL_NAMES, PROJECT_TOOL_NAMES, RoleSettings
 from codeteam.core.roles.common.run_role import make_journal_name, run_role
@@ -22,6 +22,7 @@ __all__ = [
     "REWORK_VERDICT",
     "STAGE_FILE_PATTERN",
     "STAGE_TASK_DIR_NAME",
+    "REPORT_FILE_NAME",
     "VERDICT_FILE_NAME",
     "CallerContext",
     "HelperToolBuilder",

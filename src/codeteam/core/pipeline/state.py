@@ -82,7 +82,9 @@ class PipelineState(TypedDict):
         stages: этапы плана архитектора и ход по ним; None, пока архитектор не отработал.
         review: последнее ревью; None, пока ревьюеры не работали.
         rework: возврат работы роли; None, если возврата нет.
-        web_test_dir: папка черновика последней проверки веб-тестировщика: вердикт и отчёт; None, пока он не работал.
+        tester_dir: папка черновика последней проверки тестировщика: вердикт и отчёт; None, пока он не работал.
+        web_tester_dir: папка черновика последней проверки веб-тестировщика: вердикт и отчёт; None, пока он
+            не работал.
         next_role: роль, которую пайплайн запустит следующей; None - пайплайн закончен.
         journal_name: имя журнала последней отработавшей роли без расширения; None, пока роли не работали.
         journal_count: число журналов агентов, уже начатых в прогоне.
@@ -97,7 +99,8 @@ class PipelineState(TypedDict):
     stages: Stages | None
     review: Review | None
     rework: Rework | None
-    web_test_dir: Path | None
+    tester_dir: Path | None
+    web_tester_dir: Path | None
     next_role: str | None
     journal_name: str | None
     journal_count: int
