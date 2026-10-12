@@ -112,6 +112,7 @@ def _state(*, project_dir: Path, with_reports: bool, fix_rounds: int) -> Pipelin
         tester_dir = project_dir / "tester" if with_reports else None,
         web_scenarios_dir = None,
         web_tester_dir = project_dir / "web_tester" if with_reports else None,
+        web_scenarios_tester_dir = None,
         acceptance_dir = None,
         next_role = "acceptance",
         journal_name = None,

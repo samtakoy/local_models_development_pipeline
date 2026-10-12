@@ -87,6 +87,8 @@ class PipelineState(TypedDict):
             в браузере; None, пока он не работал.
         web_tester_dir: папка черновика последней проверки веб-тестировщика: вердикт и отчёт; None, пока он
             не работал.
+        web_scenarios_tester_dir: папка черновика последней проверки по сценариям в браузере: вердикт и отчёт;
+            None, пока она не работала.
         acceptance_dir: папка черновика последней итоговой приёмки: вердикт и план доработки; None, пока она
             не работала.
         next_role: роль, которую пайплайн запустит следующей; None - пайплайн закончен.
@@ -106,6 +108,7 @@ class PipelineState(TypedDict):
     tester_dir: Path | None
     web_scenarios_dir: Path | None
     web_tester_dir: Path | None
+    web_scenarios_tester_dir: Path | None
     acceptance_dir: Path | None
     next_role: str | None
     journal_name: str | None

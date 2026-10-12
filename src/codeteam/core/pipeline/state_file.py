@@ -65,6 +65,7 @@ def load_state(*, path: Path) -> PipelineState:
         tester_dir = _path_or_none(value = data.get("tester_dir")),
         web_scenarios_dir = _path_or_none(value = data.get("web_scenarios_dir")),
         web_tester_dir = _path_or_none(value = data.get("web_tester_dir")),
+        web_scenarios_tester_dir = _path_or_none(value = data.get("web_scenarios_tester_dir")),
         acceptance_dir = _path_or_none(value = data.get("acceptance_dir")),
         next_role = data["next_role"],
         journal_name = data["journal_name"],

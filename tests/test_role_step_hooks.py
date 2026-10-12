@@ -23,6 +23,7 @@ from codeteam.core.roles.researcher.config import RESEARCHER_ROLE
 from codeteam.core.roles.senior.config import SENIOR_ROLE
 from codeteam.core.roles.tester.config import TESTER_ROLE
 from codeteam.core.roles.web_scenarios.config import WEB_SCENARIOS_ROLE
+from codeteam.core.roles.web_scenarios_tester.config import WEB_SCENARIOS_TESTER_ROLE
 from codeteam.core.roles.web_tester.config import WEB_TESTER_ROLE
 from codeteam.core.tools.files import PathRefusal
 
@@ -40,6 +41,7 @@ ROLES = (
     SENIOR_ROLE,
     TESTER_ROLE,
     WEB_SCENARIOS_ROLE,
+    WEB_SCENARIOS_TESTER_ROLE,
     WEB_TESTER_ROLE,
 )
 
