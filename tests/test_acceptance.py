@@ -8,7 +8,7 @@ from langchain_core.runnables import RunnableConfig
 from codeteam.core.agent.answer_checks import AnswerContext
 from codeteam.core.agent.workspace import PRIVATE_ROOT, draft_dir
 from codeteam.core.pipeline.state import PIPELINE_CFG_NAME, PipelineConfig, PipelineState, Stages
-from codeteam.core.roles.acceptance import acceptance_node
+from codeteam.core.roles.acceptance import acceptance_node, write_acceptance_report
 from codeteam.core.roles.acceptance import node as acceptance_node_module
 from codeteam.core.roles.acceptance.checks import FIX_PLAN_FILE_NAME, fix_plan_check
 from codeteam.core.roles.common import ACCEPTED_VERDICT, REWORK_VERDICT, VERDICT_FILE_NAME
@@ -220,3 +220,20 @@ def test_next_stage_number(names: tuple[str, ...], expected: str) -> None:
     stage_files = tuple(Path(name) for name in names)
 
     assert acceptance_node_module._next_stage_number(stage_files = stage_files) == expected
+
+
+def test_acceptance_report_joins_verdict_and_plan(tmp_path: Path) -> None:
+    """Отчёт приёмки в папке прогона — вердикт и план доработки одним файлом."""
+    acceptance_dir = tmp_path / "acceptance"
+    acceptance_dir.mkdir()
+    (acceptance_dir / VERDICT_FILE_NAME).write_text(f"{REWORK_VERDICT}\nитог\n", encoding = "utf-8")
+    (acceptance_dir / FIX_PLAN_FILE_NAME).write_text(FIX_PLAN, encoding = "utf-8")
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+
+    report_file = write_acceptance_report(run_dir = run_dir, acceptance_dir = acceptance_dir)
+
+    report = report_file.read_text(encoding = "utf-8")
+    assert report_file.parent == run_dir
+    assert report.startswith(REWORK_VERDICT)
+    assert FIX_PLAN in report

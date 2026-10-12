@@ -11,6 +11,7 @@ from codeteam.app.sandbox_check import confirm_unprotected_run
 from codeteam.app.settings import load_settings
 from codeteam.core.pipeline.run_pipeline import run_pipeline
 from codeteam.core.pipeline.state_file import load_state
+from codeteam.core.roles.acceptance import write_acceptance_report
 from codeteam.core.roles.common import PipelineError, read_verdict
 
 logger = logging.getLogger(__name__)
@@ -56,6 +57,10 @@ def main():
         if report_dir is not None:
             verdict = "принято" if read_verdict(remarks_dir = report_dir) else "не принято"
             logger.info(f"{role_name}: приложение {verdict}, вердикт и отчёт: {report_dir}")
+    if result["acceptance_dir"] is not None:
+        verdict = "принята" if read_verdict(remarks_dir = result["acceptance_dir"]) else "не принята"
+        acceptance_report = write_acceptance_report(run_dir = run_dir, acceptance_dir = result["acceptance_dir"])
+        logger.info(f"итоговая приёмка: задача {verdict}, вердикт и план доработки: {acceptance_report}")
 
 
 def _parse_arguments() -> argparse.Namespace:
