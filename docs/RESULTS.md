@@ -158,6 +158,8 @@ docs/screens/card_view_finish.png
 
 ## Скриншоты
 
+Сам результат: [cardviewer](result_project_exmples/cardviewer)
+
 ![Библиотека](screens/main_screen.png)
 
 ![Просмотр карточки](screens/card_view.png)
