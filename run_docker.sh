@@ -9,6 +9,10 @@ set -e
 cd "$(dirname "$0")"
 
 setup_dir="$1"
+if [ -z "$setup_dir" ]; then
+    echo "запуск: ./run_docker.sh <папка задачи> [аргументы codeteam], например ./run_docker.sh projects/docker_check_simple"
+    exit 1
+fi
 
 # Собирает образ codeteam: при первом запуске — целиком, дальше — только изменённые шаги
 echo "сборка образа codeteam: первый раз — несколько минут"
@@ -17,9 +21,13 @@ docker build -q -t codeteam . > /dev/null
 # Путь проекта, который видит codeteam в контейнере: считает сам codeteam по set.toml и настройкам
 PROJECT_CONTAINER_DIR=$(docker run --rm -v "$PWD":/app --entrypoint python codeteam -c "
 import sys
-from codeteam.app.config import load_project_config
+from codeteam.app.config import ConfigError, load_project_config
 from codeteam.app.settings import load_settings
-print(load_project_config(setup_dir = sys.argv[1], workspaces_dir = load_settings().workspaces_dir).path)
+try:
+    project = load_project_config(setup_dir = sys.argv[1], workspaces_dir = load_settings().workspaces_dir)
+except ConfigError as error:
+    sys.exit(f'задача не читается: {error}')
+print(project.path)
 " "$setup_dir")
 
 # Тот же проект на Mac: папка codeteam в контейнере — /app; полный путь вне неё одинаков в обоих местах

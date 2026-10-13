@@ -3,7 +3,7 @@ import logging
 import sys
 from pathlib import Path
 
-from codeteam.app.config import load_project_config
+from codeteam.app.config import ConfigError, load_project_config
 from codeteam.app.prompts_db import PROMPTS_ROOT, save_prompts
 from codeteam.app.run_dir import make_run_dir_name
 from codeteam.app.run_statistics import write_run_report
@@ -25,7 +25,11 @@ def main():
     arguments = _parse_arguments()
     confirm_unprotected_run()
     settings = load_settings()
-    project = load_project_config(setup_dir = arguments.setup_dir, workspaces_dir = settings.workspaces_dir)
+    try:
+        project = load_project_config(setup_dir = arguments.setup_dir, workspaces_dir = settings.workspaces_dir)
+    except ConfigError as error:
+        logger.error(f"задача не читается: {error}")
+        sys.exit(1)
     run_dir = settings.runs_dir / make_run_dir_name(model_name = settings.agent_model)
     logger.info(f"проект: {project.path}")
     logger.info(f"задача: {project.task}")
