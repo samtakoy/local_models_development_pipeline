@@ -1,0 +1,20 @@
+services:
+  codeteam:
+    # Собирает образ по Dockerfile из этой папки и называет его codeteam
+    build: .
+    image: codeteam
+
+    # Процесс номер 1 — уборщик tini: забирает завершившиеся фоновые процессы агентов
+    init: true
+
+    environment:
+      # Ollama на Mac, адрес из контейнера
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+
+    volumes:
+      # Папка codeteam: код, .env, прогоны
+      - .:/app
+      # Проект агентов по тому же пути, что на Mac: путь из переменной PROJECT
+      - ${PROJECT:?задайте PROJECT - путь к проекту агентов}:${PROJECT}
+      # Окружение python проекта агентов в безымянном томе: .venv на Mac не трогается
+      - ${PROJECT}/.venv
