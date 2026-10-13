@@ -1,6 +1,12 @@
 # Базовый образ: Linux (Debian) с готовым python 3.13.9
 FROM python:3.13.9-slim
 
+# Ставит программы, которыми пользуются агенты и codeteam
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        curl procps lsof git net-tools file psmisc jq sqlite3 unzip \
+    && rm -rf /var/lib/apt/lists/*
+
 # Берёт программу uv из официального образа uv
 COPY --from=ghcr.io/astral-sh/uv:0.11.26 /uv /uvx /bin/
 
