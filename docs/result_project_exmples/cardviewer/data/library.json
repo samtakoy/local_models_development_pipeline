@@ -1,0 +1,61 @@
+{
+  "topics": [
+    {
+      "id": "60d41fed-7665-4e6e-bfcf-daf76157056a",
+      "name": "По умолчанию",
+      "is_default": true,
+      "sources": [
+        {
+          "id": "1e7b6b8e-ca87-46a8-b96d-00057f435615",
+          "path": "/Users/samtakot/devs/learnings/llm-eng/homework/test_code/cardviewer/docs",
+          "type": "folder",
+          "deck_count": 1,
+          "decks": [
+            {
+              "title": "StyleCLIP: Text-Driven Manipulation of StyleGAN Imagery",
+              "status": "ok",
+              "description": "Обучающие карточки по статье StyleCLIP: три способа текстового управления изображениями StyleGAN с помощью CLIP — latent optimization, latent mapper и global directions."
+            }
+          ],
+          "added_at": ""
+        }
+      ]
+    },
+    {
+      "id": "7afbe185-a77c-4ad9-a9b0-0d3367fc01c8",
+      "name": "TestTopic",
+      "is_default": false,
+      "sources": [
+        {
+          "id": "73c4c740-3612-4dd1-be7c-7434eaf2c7a2",
+          "path": "/tmp/test_add_card.txt",
+          "type": "file",
+          "deck_count": 1,
+          "decks": [
+            {
+              "title": "test_add_card.txt",
+              "status": "missing",
+              "description": ""
+            }
+          ],
+          "added_at": ""
+        },
+        {
+          "id": "479258f8-4724-4bae-8025-d2065ef1cd42",
+          "path": "/Users/samtakot/devs/other/cards/AI/LllmEngineer/01_NLP_found_cards.txt",
+          "type": "file",
+          "deck_count": 1,
+          "decks": [
+            {
+              "title": "NLP Foundations — практика (предобработка, TF-IDF, загрузка данных)",
+              "status": "ok",
+              "description": "Карточки по практическому ноутбуку NLP_found_practic.\n Темы: загрузка датасета с HuggingFace, очистка текста,\n векторизация TF-IDF для классификации тональности отзывов."
+            }
+          ],
+          "added_at": ""
+        }
+      ]
+    }
+  ],
+  "default_topic_id": "60d41fed-7665-4e6e-bfcf-daf76157056a"
+}

@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Card Viewer — Library</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --surface: #1e293b;
+            --card-bg: #1e293b;
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent: #38bdf8;
+            --accent-light: #7dd3fc;
+            --accent-dark: #0284c7;
+            --purple: #a78bfa;
+            --green: #22c55e;
+            --red: #ef4444;
+            --orange: #f59e0b;
+            --border: #334155;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            padding-right: 2rem;
+        }
+
+        /* Header */
+        header {
+            background: linear-gradient(135deg, #0284c7, #7c3aed);
+            padding: 1.5rem 2rem;
+            box-shadow: 0 4px 20px rgba(56, 189, 248, 0.3);
+        }
+        header h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+
+        .container {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 1.5rem 2rem;
+        }
+
+        /* Add Source Button */
+        .add-source-btn {
+            position: fixed;
+            bottom: 1rem;
+            right: 1rem;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #0284c7, #7c3aed);
+            color: white;
+            font-size: 1.75rem;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 4px 16px rgba(56, 189, 248, 0.4);
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .add-source-btn:hover {
+            transform: scale(1.15) rotate(90deg);
+            box-shadow: 0 6px 24px rgba(56, 189, 248, 0.6);
+        }
+
+        /* Add Source Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.active { display: flex !important; }
+        .modal {
+            background: var(--surface);
+            border-radius: 12px;
+            padding: 2rem;
+            width: 90%;
+            max-width: 420px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+        .modal h2 { margin-bottom: 1rem; }
+        .modal input, .modal select {
+            width: 100%;
+            padding: 0.6rem 0.8rem;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--bg);
+            color: var(--text);
+            font-size: 0.95rem;
+            margin-bottom: 0.8rem;
+        }
+        .modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; }
+        .btn {
+            padding: 0.5rem 1.2rem;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+            transition: opacity 0.2s, transform 0.2s;
+        }
+        .btn:hover { opacity: 0.85; }
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent-dark), #7c3aed);
+            color: white;
+            box-shadow: 0 2px 8px rgba(56, 189, 248, 0.3);
+        }
+        .btn-primary:hover {
+            transform: scale(1.05) translateY(-1px);
+            box-shadow: 0 4px 16px rgba(56, 189, 248, 0.5);
+        }
+        .btn-secondary { background: #334155; color: var(--text); }
+        .btn-danger { background: var(--red); color: white; font-size: 0.8rem; padding: 0.3rem 0.6rem; }
+
+        /* Topics */
+        .topic-section {
+            margin-bottom: 2rem;
+            animation: fadeInUp 0.4s ease-out;
+        }
+        .topic-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 1rem 0;
+            border-bottom: 2px solid var(--border);
+            margin-bottom: 1rem;
+        }
+        .topic-header h2 {
+            font-size: 1.25rem;
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            transition: color 0.2s, text-decoration 0.2s;
+        }
+        .topic-header h2:hover {
+            color: var(--accent);
+            text-decoration: underline;
+        }
+        .badge-default {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: white;
+            padding: 0.15rem 0.6rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+        }
+
+        /* Source Cards */
+        .sources-list { display: flex; flex-direction: column; gap: 0.75rem; overflow-x: hidden; }
+        .source-card {
+            background: var(--surface);
+            color: var(--text);
+            border-radius: 12px;
+            padding: 1rem 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border);
+            transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+            animation: fadeInUp 0.3s ease-out;
+        }
+        .source-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(56, 189, 248, 0.25);
+            border-color: var(--accent);
+        }
+        .source-icon { font-size: 1.5rem; flex-shrink: 0; }
+        .source-info { flex: 1; min-width: 0; max-width: calc(100% - 200px); }
+        .source-title { font-weight: 600; font-size: 0.95rem; }
+        .source-path { color: var(--text-muted); font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .source-meta { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.25rem; }
+        .status-badge {
+            font-size: 0.75rem;
+            padding: 0.1rem 0.5rem;
+            border-radius: 999px;
+            font-weight: 600;
+            margin-left: 0.25rem;
+        }
+        .status-ok { background: #15803d; color: #dcfce7; }
+        .status-missing { background: #991b1b; color: #fecaca; }
+
+        /* Open Deck button */
+        .source-info > .open-btn {
+            font-size: 0.75rem;
+            padding: 0.2rem 0.6rem;
+            margin-top: 0.3rem;
+        }
+
+        /* Toast */
+        .toast-container { position: fixed; top: 1rem; right: 1rem; z-index: 200; display: flex; flex-direction: column; gap: 0.5rem; }
+        .toast {
+            padding: 0.75rem 1.25rem;
+            border-radius: 8px;
+            color: white;
+            font-weight: 600;
+            font-size: 0.9rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            animation: slideIn 0.3s ease-out, fadeOut 0.3s ease-in 2.7s forwards;
+        }
+        .toast-success { background: #15803d; }
+        .toast-error { background: #991b1b; }
+
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+
+        /* Empty state */
+        .empty-state { text-align: center; padding: 3rem 1rem; color: var(--text-muted); }
+        .empty-state p { font-size: 1.1rem; }
+
+        /* Modal animation */
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(15px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .modal {
+            animation: fadeInUp 0.3s ease-out;
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 2rem 1rem;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            border-top: 1px solid var(--border);
+            margin-top: 2rem;
+        }
+
+        /* Deck list */
+        .deck-list { margin-top: 0.5rem; }
+        .deck-item { font-size: 0.85rem; color: #64748b; }
+
+        /* Responsive layout */
+        @media (max-width: 600px) {
+            .source-card {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .source-info {
+                max-width: none;
+            }
+            .btn-danger {
+                width: 100%;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container" style="padding-top: 0; display: flex; justify-content: space-between; align-items: center;">
+            <h1>Card Viewer Library</h1>
+            <button class="btn btn-primary" onclick="openTopicModal()" title="Create New Topic">+ New Topic</button>
+        </div>
+    </header>
+
+    <main class="container">
+        <div id="library-content"></div>
+    </main>
+
+    <button class="add-source-btn" onclick="openAddModal()" title="Add Source">+</button>
+
+    <div class="modal-overlay" id="add-modal">
+        <div class="modal">
+            <h2>Add Source</h2>
+            <input type="text" id="source-path-input" placeholder="Path to .txt file or folder...">
+            <select id="topic-select"></select>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeAddModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="handleAddSource()">Add</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="topic-modal">
+        <div class="modal">
+            <h2>Create New Topic</h2>
+            <input type="text" id="topic-name-input" placeholder="Topic name...">
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeTopicModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="handleCreateTopic()">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast-container" id="toast-container"></div>
+
+    <footer>
+        <p>Card Viewer — Manage your flashcard deck library locally.</p>
+    </footer>
+
+    <script>
+        // Initial library data from Flask (server-side rendered)
+        const libraryData = {{ library | tojson }};
+
+        let currentData = JSON.parse(JSON.stringify(libraryData));
+
+        // Render the full library
+        function renderLibrary() {
+            const container = document.getElementById('library-content');
+            if (!currentData.topics || currentData.topics.length === 0) {
+                container.innerHTML = '<div class="empty-state"><p>No sources yet. Click + to add one.</p></div>';
+                return;
+            }
+
+            let html = '';
+            for (const topic of currentData.topics) {
+                html += '<div class="topic-section">';
+                html += '<div class="topic-header">';
+                html += `<h2>${escapeHtml(topic.name)}</h2>`;
+                if (topic.is_default) {
+                    html += '<span class="badge-default">Default</span>';
+                }
+                if (!topic.is_default) {
+                    html += `<button class="btn btn-danger" onclick="handleDeleteTopic('${topic.id}')">Delete Topic</button>`;
+                }
+                html += '</div>';
+
+                if (topic.sources.length === 0) {
+                    html += '<p style="color: var(--text-muted); font-size: 0.9rem;">No sources in this topic.</p>';
+                } else {
+                    html += '<div class="sources-list">';
+                    for (const source of topic.sources) {
+                        const icon = source.type === 'folder' ? '📁' : '📄';
+                        const shortPath = shortenPath(source.path);
+                        let statusClass = '';
+                        let statusText = '';
+                        if (source.decks.length > 0) {
+                            const allOk = source.decks.every(d => d.status === 'ok');
+                            const allMissing = source.decks.every(d => d.status === 'missing');
+                            if (allOk) {
+                                statusClass = 'status-ok';
+                                statusText = 'OK';
+                            } else if (allMissing) {
+                                statusClass = 'status-missing';
+                                statusText = 'Missing';
+                            } else {
+                                statusClass = 'status-missing';
+                                statusText = 'Partial';
+                            }
+                        }
+
+                        html += '<div class="source-card" onclick="viewDeck(\'' + source.id + '\')" style="cursor:pointer;">';
+                        html += `<span class="source-icon">${icon}</span>`;
+                        html += '<div class="source-info">';
+
+                        const title = source.decks.length > 0 ? escapeHtml(source.decks[0].title) : 'Empty deck';
+                        html += `<div class="source-title" onclick="event.stopPropagation(); toggleDescription('${source.id}')" style="cursor: pointer;">${title}</div>`;
+
+                        // Deck description (accordion)
+                        if (source.decks.length > 0 && source.decks[0].description) {
+                            html += `<div id="desc-${source.id}" style="display:none; margin-top: 0.5rem; white-space: pre-wrap; padding: 0.5rem; background: var(--surface); border-radius: 6px; font-size: 0.85rem; color: var(--text-muted);">`;
+                            html += `<strong>Description:</strong> ${escapeHtml(source.decks[0].description)}`;
+                            html += `</div>`;
+                        }
+
+                        // Open deck button (click-to-navigate for all sources with decks)
+                        if (source.decks.length > 0) {
+                            html += `<button class="btn btn-secondary open-btn" onclick="event.stopPropagation(); viewDeck('${source.id}')">Open Deck</button>`;
+                        }
+
+                        html += `<div class="source-path">${shortPath}</div>`;
+                        if (statusClass) {
+                            html += `<div class="source-meta"><span class="status-badge ${statusClass}">${statusText}</span></div>`;
+                        }
+
+                        // Move source dropdown
+                        html += '<div class="source-meta" style="margin-top: 0.5rem;">';
+                        html += '<select id="move-' + source.id + '" style="font-size: 0.8rem; padding: 0.2rem 0.4rem; border-radius: 6px; background: var(--bg); color: var(--text-muted); border: 1px solid var(--border);">';
+                        for (const t of currentData.topics) {
+                            if (t.id !== topic.id) {
+                                html += `<option value="${t.id}">${escapeHtml(t.name)}</option>`;
+                            }
+                        }
+                        html += '</select>';
+                        html += `<button class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.2rem 0.6rem;" onclick="handleMoveSource('${source.id}', '${topic.id}')">Move</button>`;
+                        html += '</div>';
+
+                        // Show deck list
+                        if (source.decks.length > 1) {
+                            html += '<div class="deck-list">';
+                            for (const deck of source.decks) {
+                                const dStatus = deck.status === 'ok' ? '' : ' 🚫';
+                                html += `<div class="deck-item" onclick="viewDeck('${source.id}')" style="cursor:pointer;">${escapeHtml(deck.title)}${dStatus}</div>`;
+                            }
+                            html += '</div>';
+                        }
+                        html += '</div>'; // source-info
+                        html += `<button class="btn btn-danger" onclick="event.stopPropagation(); handleRemoveSource('${source.id}')">Remove</button>`;
+                        html += '</div>'; // source-card
+                    }
+                    html += '</div>'; // sources-list
+                }
+
+                html += '</div>'; // topic-section
+            }
+            container.innerHTML = html;
+        }
+
+        function shortenPath(path) {
+            if (!path || path.length <= 60) return path;
+            const parts = path.split('/');
+            if (parts.length > 3) {
+                return '.../' + parts.slice(-2).join('/');
+            }
+            return path;
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            const div = document.createElement('div');
+            div.textContent = str.replace(/\\n/g, '\n');
+            return div.innerHTML;
+        }
+
+        // Add Source Modal
+        function openAddModal() {
+            document.getElementById('add-modal').classList.add('active');
+            // Populate topic dropdown
+            const select = document.getElementById('topic-select');
+            select.innerHTML = '';
+            if (currentData.topics && currentData.topics.length > 0) {
+                for (const topic of currentData.topics) {
+                    const opt = document.createElement('option');
+                    opt.value = topic.id;
+                    opt.textContent = topic.name;
+                    if (topic.is_default) opt.selected = true;
+                    select.appendChild(opt);
+                }
+            } else {
+                const opt = document.createElement('option');
+                opt.value = '';
+                opt.textContent = 'No topics available';
+                select.appendChild(opt);
+            }
+            document.getElementById('source-path-input').value = '';
+        }
+
+        function closeAddModal() {
+            document.getElementById('add-modal').classList.remove('active');
+        }
+
+        async function handleAddSource() {
+            const pathInput = document.getElementById('source-path-input').value.trim();
+            const topicSelect = document.getElementById('topic-select');
+            const topicId = topicSelect.value;
+
+            if (!pathInput) {
+                showToast('Please enter a file or folder path.', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/sources/add', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: pathInput, topic_id: topicId }),
+                });
+
+                if (response.ok) {
+                    currentData = await response.json();
+                    renderLibrary();
+                    closeAddModal();
+                    showToast('Source added successfully!', 'success');
+                } else {
+                    const errData = await response.json().catch(() => ({}));
+                    const msg = errData.error || 'Failed to add source';
+                    showToast(msg, 'error');
+                }
+            } catch (err) {
+                showToast('Network error: ' + err.message, 'error');
+            }
+        }
+
+        // Topic Modal
+        function openTopicModal() {
+            document.getElementById('topic-modal').classList.add('active');
+            document.getElementById('topic-name-input').value = '';
+        }
+
+        function closeTopicModal() {
+            document.getElementById('topic-modal').classList.remove('active');
+        }
+
+        async function handleCreateTopic() {
+            const nameInput = document.getElementById('topic-name-input').value.trim();
+            if (!nameInput) {
+                showToast('Topic name cannot be empty.', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/topics/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: nameInput }),
+                });
+
+                if (response.ok) {
+                    currentData = await response.json();
+                    renderLibrary();
+                    closeTopicModal();
+                    showToast('Topic created successfully!', 'success');
+                } else {
+                    const errData = await response.json().catch(() => ({}));
+                    const msg = errData.error || 'Failed to create topic';
+                    showToast(msg, 'error');
+                }
+            } catch (err) {
+                showToast('Network error: ' + err.message, 'error');
+            }
+        }
+
+        async function handleDeleteTopic(topicId) {
+            if (!confirm('Delete this topic and move its sources to default?')) return;
+
+            try {
+                const response = await fetch(`/api/topics/${topicId}`, {
+                    method: 'DELETE',
+                });
+
+                if (response.ok) {
+                    currentData = await response.json();
+                    renderLibrary();
+                    showToast('Topic deleted.', 'success');
+                } else {
+                    const errData = await response.json().catch(() => ({}));
+                    showToast(errData.error || 'Failed to delete topic', 'error');
+                }
+            } catch (err) {
+                showToast('Network error: ' + err.message, 'error');
+            }
+        }
+
+        async function handleMoveSource(sourceId, currentTopicId) {
+            const select = document.getElementById('move-' + sourceId);
+            const targetTopicId = select.value;
+
+            if (!targetTopicId || targetTopicId === currentTopicId) {
+                showToast('Please select a different topic.', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/sources/move', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ source_id: sourceId, target_topic_id: targetTopicId }),
+                });
+
+                if (response.ok) {
+                    currentData = await response.json();
+                    renderLibrary();
+                    showToast('Source moved successfully.', 'success');
+                } else {
+                    const errData = await response.json().catch(() => ({}));
+                    showToast(errData.error || 'Failed to move source', 'error');
+                }
+            } catch (err) {
+                showToast('Network error: ' + err.message, 'error');
+            }
+        }
+
+        function toggleDescription(sourceId) {
+            const descEl = document.getElementById('desc-' + sourceId);
+            if (descEl) {
+                if (descEl.style.display === 'none') {
+                    descEl.style.display = 'block';
+                } else {
+                    descEl.style.display = 'none';
+                }
+            }
+        }
+
+        function viewDeck(sourceId) {
+            window.location.href = '/deck/' + sourceId;
+        }
+
+        async function handleRemoveSource(sourceId) {
+            if (!confirm('Remove this source?')) return;
+
+            try {
+                const response = await fetch(`/api/sources/${sourceId}`, {
+                    method: 'DELETE',
+                });
+
+                if (response.ok) {
+                    currentData = await response.json();
+                    renderLibrary();
+                    showToast('Source removed.', 'success');
+                } else {
+                    const errData = await response.json().catch(() => ({}));
+                    showToast(errData.error || 'Failed to remove source', 'error');
+                }
+            } catch (err) {
+                showToast('Network error: ' + err.message, 'error');
+            }
+        }
+
+        // Toast notifications
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(() => {
+                if (toast.parentNode) toast.parentNode.removeChild(toast);
+            }, 3000);
+        }
+
+        // Initial render on page load
+        document.addEventListener('DOMContentLoaded', renderLibrary);
+    </script>
+</body>
+</html>

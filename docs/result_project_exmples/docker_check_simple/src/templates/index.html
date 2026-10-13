@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Temperature Converter</h1>
+<form method="POST" action="/">
+    <input type="text" name="temperature" id="temp-input" placeholder="Enter temperature">
+    <select name="direction" id="direction-select">
+        <option value="C_TO_F">°C → °F</option>
+        <option value="F_TO_C">°F → °C</option>
+    </select>
+    <button type="submit">Перевести</button>
+</form>
+<div id="result">
+    {% if error %}
+        <p class="error">{{ error }}</p>
+    {% elif result %}
+        <p class="result">{{ result }}</p>
+    {% else %}
+        <p>Enter a temperature and click Convert.</p>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Card Viewer — {{ title }}</title>
+    <style>
+        /* ---- Shared variables (inlined for the deck viewer) ---- */
+        :root {
+            --bg: #0f172a;
+            --surface: #1e293b;
+            --card-surface: #0f172a;
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent: #38bdf8;      /* sky-400 */
+            --accent-light: #7dd3fc; /* sky-300 */
+            --accent-dark: #0284c7;  /* sky-600 */
+            --purple: #a78bfa;       /* purple accent */
+            --green: #22c55e;
+            --red: #ef4444;
+            --orange: #f59e0b;
+            --border: #334155;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        /* ---- Header bar ---- */
+        header {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            z-index: 100;
+            background: linear-gradient(135deg, #0284c7, #7c3aed);
+            padding: 0.8rem 1.5rem;
+            box-shadow: 0 4px 20px rgba(56, 189, 248, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        header .deck-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: white;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 65%;
+        }
+
+        header .btn-back {
+            background: rgba(255,255,255,0.15);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.3);
+            padding: 0.4rem 1rem;
+            border-radius: 999px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 600;
+            transition: background 0.2s, transform 0.2s;
+        }
+
+        header .btn-back:hover {
+            background: rgba(255,255,255,0.25);
+            transform: scale(1.05);
+        }
+
+        /* Line-wrap toggle in header */
+        #line-wrap-toggle label {
+            font-size: 0.8rem;
+            color: rgba(255,255,255,0.9);
+            cursor: pointer;
+            user-select: none;
+        }
+
+        #line-wrap-toggle input[type="checkbox"] {
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+
+        /* ---- Main card area (centered) ---- */
+        main {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 5rem 1.5rem calc(7rem + 80px);
+            min-height: 100vh;
+            overflow-y: auto;
+        }
+
+        .card-container {
+            max-width: 700px;
+            width: 100%;
+            background: var(--surface);
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(56, 189, 248, 0.25);
+            padding: 2.5rem 2rem;
+            margin-bottom: 2rem;
+            text-align: center;
+            position: relative;
+            transition: box-shadow 0.3s ease;
+            overflow: hidden;
+        }
+
+        .card-container:hover {
+            box-shadow: 0 12px 48px rgba(56, 189, 248, 0.2);
+        }
+
+        /* Question area */
+        .question-area {
+            font-size: 1.35rem;
+            line-height: 1.7;
+            margin-bottom: 1.5rem;
+            word-break: break-word;
+        }
+
+        /* Answer area (initially hidden, smooth reveal) */
+        .answer-area {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.35s ease, opacity 0.35s ease;
+            opacity: 0;
+            text-align: left;
+            background: var(--card-surface);
+            border-left: 4px solid var(--accent);
+            padding: 1.5rem 2rem;
+            margin-bottom: 1.5rem;
+            border-radius: 8px;
+        }
+
+        .answer-area.visible {
+            max-height: 2000px;
+            opacity: 1;
+        }
+
+        .answer-area.hidden {
+            display: none !important;
+        }
+
+        .answer-area pre {
+            white-space: pre-wrap;
+            word-break: break-word;
+            margin: 0;
+        }
+
+        .answer-area code {
+            font-family: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            background: rgba(255,255,255,0.05);
+            padding: 0.1rem 0.3rem;
+            border-radius: 4px;
+        }
+
+        /* Tags */
+        .tags-area {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+            justify-content: center;
+            margin-top: 1rem;
+        }
+
+        .tag-badge {
+            background: rgba(56, 189, 248, 0.2);
+            color: var(--accent-light);
+            padding: 0.2rem 0.7rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        /* Card counter */
+        .card-counter {
+            text-align: center;
+            margin-bottom: 1rem;
+        }
+
+        .card-counter span {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text);
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .progress-bar-container {
+            width: 100%;
+            height: 4px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 2px;
+            margin-top: 0.5rem;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), var(--purple), var(--accent-light));
+            background-size: 200% 100%;
+            border-radius: 2px;
+            transition: width 0.4s ease;
+            animation: shimmer 3s linear infinite;
+        }
+
+        @keyframes shimmer {
+            0% { background-position: 0% 50%; }
+            100% { background-position: 200% 50%; }
+        }
+
+        /* ---- Navigation bar (fixed bottom) ---- */
+        footer {
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            z-index: 100;
+            background: var(--surface);
+            border-top: 1px solid var(--border);
+            padding: 0.8rem 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+        }
+
+        .nav-btn {
+            background: linear-gradient(135deg, var(--accent-dark), #6d28d9);
+            color: white;
+            border: none;
+            padding: 0.6rem 1.2rem;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+            transition: transform 0.15s, box-shadow 0.15s;
+            min-width: 44px;
+            min-height: 44px;
+        }
+
+        .nav-btn:hover {
+            transform: scale(1.08) translateY(-2px);
+            box-shadow: 0 6px 20px rgba(56, 189, 248, 0.4);
+        }
+
+        .nav-btn:active {
+            transform: scale(0.98) translateY(0);
+        }
+
+        .nav-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .jump-input {
+            width: 80px;
+            padding: 0.5rem 0.7rem;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--bg);
+            color: var(--text);
+            font-size: 0.9rem;
+            text-align: center;
+        }
+
+        .jump-input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px rgba(56,189,248,0.3);
+        }
+
+        /* ---- Deck completed screen ---- */
+        .finished-screen {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            gap: 1.5rem;
+            padding: 2rem;
+        }
+
+        .finished-screen.visible { display: flex; }
+
+        .finished-screen h2 {
+            font-size: 2.2rem;
+            color: #4ade80;
+            animation: fadeInUp 0.5s ease-out;
+        }
+
+        .finished-screen p {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+        }
+
+        .finished-btns {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .finished-btns .nav-btn {
+            min-width: 120px;
+        }
+
+        /* ---- Empty state ---- */
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: var(--text-muted);
+        }
+
+        .empty-state p { font-size: 1.2rem; margin-bottom: 1rem; }
+
+        /* ---- Animations ---- */
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(25px) scale(0.98); }
+            to   { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        @keyframes slideInRight {
+            from { opacity: 0; transform: translateX(40px); }
+            to   { opacity: 1; transform: translateX(0); }
+        }
+
+        @keyframes slideInLeft {
+            from { opacity: 0; transform: translateX(-40px); }
+            to   { opacity: 1; transform: translateX(0); }
+        }
+
+        .animate-in { animation: fadeInUp 0.35s ease-out; }
+
+        @keyframes shakeX {
+            0%, 100% { transform: translateX(0); }
+            25%      { transform: translateX(-4px); }
+            75%      { transform: translateX(4px); }
+        }
+
+        .shake { animation: shakeX 0.3s ease; }
+
+        /* ---- Responsive ---- */
+        @media (max-width: 600px) {
+            .card-container { padding: 1.5rem 1rem; margin: 0 0.5rem; }
+            .question-area  { font-size: 1.1rem; }
+            footer          { flex-wrap: wrap; gap: 0.4rem; padding: 0.6rem; }
+            .nav-btn        { padding: 0.5rem 0.8rem; font-size: 0.85rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header>
+        <div class="deck-title">{{ title }}</div>
+        <div style="display:flex;align-items:center;gap:1rem;">
+            <div id="line-wrap-toggle">
+                <label for="wrap-toggle-input">Wrap code</label>
+                <input type="checkbox" id="wrap-toggle-input" onchange="toggleLineWrap(this.checked);">
+            </div>
+            <a href="/" class="btn-back">Back to Library</a>
+        </div>
+    </header>
+
+    <!-- Main card area -->
+    <main>
+        <div id="card-area" class="card-container" data-card-count="{{ card_count }}">
+            <div id="card-content">
+                <!-- Filled dynamically by JS -->
+            </div>
+            {% if description %}
+            <div id="deck-description" style="text-align:center;margin-bottom:1rem;padding:0 1rem;color:var(--text-muted);font-size:0.95rem;line-height:1.6;">
+                {{ description }}
+            </div>
+            {% endif %}
+            <div id="finished-content" class="finished-screen">
+                <h2>🎉 Колода пройдена!</h2>
+                <p>Great job! You've reviewed all {{ card_count }} cards.</p>
+                <div class="finished-btns">
+                    <a href="/" class="nav-btn" style="display:inline-block;text-decoration:none;">Back to Library</a>
+                    <button class="nav-btn" onclick="startOver();">Review again</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Navigation bar (fixed bottom) -->
+    <footer id="nav-bar">
+        <button class="nav-btn" onclick="prevCard();" title="Previous card (←)">◀ Назад</button>
+        <button class="nav-btn" id="answer-btn" onclick="if(answerVisible) { hideAnswer(); } else { showAnswer(); }">Показать ответ</button>
+        <button class="nav-btn" id="copy-text-btn" onclick="copyCardText();" title="Copy card text (Ctrl+C)">📋</button>
+        <button class="nav-btn" onclick="nextCard();" title="Next card (→)">Дальше ▶</button>
+        <input
+            type="number"
+            class="jump-input"
+            id="jump-input"
+            min="1"
+            placeholder="1/{{ card_count }}"
+            aria-label="Jump to card number"
+        />
+    </footer>
+
+    <!-- Card data from Flask -->
+    <script>
+        const DECK_DATA = {{ cards | tojson }};
+        const TOTAL_CARDS = {{ card_count }};
+
+        let currentIndex = 0;
+        let answerVisible = false;
+        let lineWrapEnabled = localStorage.getItem('lineWrapEnabled') === 'true';
+
+        // ---- Core rendering ----
+        function renderCard(direction) {
+            const contentDiv = document.getElementById('card-content');
+            const finishedDiv = document.getElementById('finished-content');
+            const navBar      = document.getElementById('nav-bar');
+
+            // Check if deck is completed
+            if (currentIndex >= DECK_DATA.length) {
+                contentDiv.style.display = 'none';
+                finishedDiv.classList.add('visible');
+                navBar.style.display = 'none';
+                return;
+            }
+
+            contentDiv.style.display = '';
+            finishedDiv.classList.remove('visible');
+            navBar.style.display = '';
+
+            const card = DECK_DATA[currentIndex];
+            if (!card) {
+                // Out of bounds (empty deck or unexpected)
+                contentDiv.innerHTML = '<div class="empty-state"><p>No cards in this deck.</p></div>';
+                return;
+            }
+
+            let html = '<div class="animate-in">';
+
+            // Card counter
+            html += '<div class="card-counter">';
+            html += '<span>' + (currentIndex + 1) + ' / ' + TOTAL_CARDS + '</span>';
+            html += '<div class="progress-bar-container">';
+            const pct = TOTAL_CARDS > 0 ? ((currentIndex + 1) / TOTAL_CARDS * 100).toFixed(1) : 0;
+            html += '<div class="progress-bar-fill" style="width:' + pct + '%"></div>';
+            html += '</div></div>';
+
+            // Question
+            html += '<div class="question-area">' + escapeHtml(card.question) + '</div>';
+
+            // Answer (only if answerVisible)
+            html += '<div class="answer-area' + (answerVisible ? ' visible' : ' hidden') + '">';
+            html += '<strong>Answer:</strong>' + renderAnswer(card.answer || '');
+            html += '</div>';
+
+            // Tags
+            if (card.tags && card.tags.length > 0) {
+                html += '<div class="tags-area">';
+                for (let i = 0; i < card.tags.length; i++) {
+                    html += '<span class="tag-badge">#' + escapeHtml(card.tags[i]) + '</span>';
+                }
+                html += '</div>';
+            }
+
+            html += '</div>';
+            contentDiv.innerHTML = html;
+
+            // Apply direction-based animation
+            if (direction === 'forward') {
+                contentDiv.style.animation = 'slideInRight 0.35s ease-out';
+            } else if (direction === 'backward') {
+                contentDiv.style.animation = 'slideInLeft 0.35s ease-out';
+            } else {
+                contentDiv.style.animation = 'fadeInUp 0.35s ease-out';
+            }
+
+            // Apply line-wrap preference to new code blocks
+            setTimeout(applyLineWrap, 10);
+
+            // Update answer button text
+            const ansBtn = document.getElementById('answer-btn');
+            if (answerVisible) {
+                ansBtn.textContent = 'Скрыть ответ';
+            } else {
+                ansBtn.textContent = 'Показать ответ';
+            }
+
+            // Disable "Дальше" on last card when answer is shown
+            const nextBtn = document.querySelectorAll('.nav-btn')[2]; // third button
+            if (currentIndex === DECK_DATA.length - 1 && answerVisible) {
+                nextBtn.disabled = true;
+                nextBtn.style.opacity = '0.4';
+            } else {
+                nextBtn.disabled = false;
+                nextBtn.style.opacity = '';
+            }
+
+            // Update jump input placeholder to current card number
+            const jumpInput = document.getElementById('jump-input');
+            jumpInput.value = currentIndex + 1;
+        }
+
+        // ---- Line-wrap toggle functions ----
+        function toggleLineWrap(enabled) {
+            lineWrapEnabled = enabled;
+            localStorage.setItem('lineWrapEnabled', enabled.toString());
+            applyLineWrap();
+        }
+
+        function applyLineWrap() {
+            document.querySelectorAll('.answer-area code').forEach(function(codeEl) {
+                if (lineWrapEnabled) {
+                    codeEl.style.whiteSpace = 'pre-wrap';
+                    codeEl.style.wordBreak = 'break-word';
+                } else {
+                    codeEl.style.whiteSpace = 'pre';
+                    codeEl.style.wordBreak = 'normal';
+                }
+            });
+        }
+
+        // ---- Copy card text to clipboard ----
+        async function copyCardText() {
+            if (currentIndex >= DECK_DATA.length) return;
+            const card = DECK_DATA[currentIndex];
+            let text = 'Q: ' + (card.question || '') + '\n\n';
+            if (answerVisible && card.answer) {
+                text += 'A: ' + card.answer + '\n';
+            }
+            if (card.tags && card.tags.length > 0) {
+                text += '#' + card.tags.join(' #') + '\n';
+            }
+
+            try {
+                await navigator.clipboard.writeText(text);
+                const btn = document.getElementById('copy-text-btn');
+                if (btn) {
+                    btn.textContent = '✅';
+                    setTimeout(() => { btn.textContent = '📋'; }, 1500);
+                }
+            } catch (err) {
+                console.error('Copy failed:', err);
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+            }
+        }
+
+        // ---- Navigation functions ----
+        function showAnswer() {
+            answerVisible = true;
+            renderCard();
+        }
+
+        function hideAnswer() {
+            answerVisible = false;
+            renderCard();
+        }
+
+        function nextCard() {
+            currentIndex++;
+            answerVisible = false;
+            renderCard('forward');
+        }
+
+        function prevCard() {
+            currentIndex--;
+            if (currentIndex < 0) currentIndex = 0;
+            answerVisible = false;
+            renderCard('backward');
+        }
+
+        function jumpTo(cardNum) {
+            const n = parseInt(cardNum, 10);
+            if (isNaN(n) || n < 1 || n > TOTAL_CARDS) {
+                const input = document.getElementById('jump-input');
+                input.style.borderColor = 'var(--red)';
+                input.classList.add('shake');
+                let errMsg = document.getElementById('jump-error-msg');
+                if (!errMsg) {
+                    errMsg = document.createElement('div');
+                    errMsg.id = 'jump-error-msg';
+                    errMsg.style.cssText = 'position:absolute; bottom:-1.5rem; left:0; right:0; text-align:center; color:var(--red); font-size:0.8rem;';
+                    input.parentElement.appendChild(errMsg);
+                }
+                errMsg.textContent = `Card not found (1-${TOTAL_CARDS})`;
+                setTimeout(() => {
+                    input.style.borderColor = '';
+                    input.classList.remove('shake');
+                    errMsg.textContent = '';
+                }, 3000);
+                return;
+            }
+            currentIndex = n - 1;
+            answerVisible = false;
+            renderCard();
+        }
+
+        function startOver() {
+            currentIndex = 0;
+            answerVisible = false;
+            renderCard();
+        }
+
+        // ---- Escape HTML helper ----
+        function escapeHtml(str) {
+            if (!str) return '';
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        // ---- Render answer with fenced code block support ----
+        function renderAnswer(text) {
+            if (!text) return '';
+
+            var parts = text.split('```');
+            var result = '';
+
+            for (var i = 0; i < parts.length; i++) {
+                if (i % 2 === 0) {
+                    result += escapeHtml(parts[i]);
+                } else {
+                    result += '<pre><code class="hljs">\n' + parts[i] + '\n</code></pre>';
+                }
+            }
+
+            return result;
+        }
+
+        // ---- Keyboard event listener (skip when typing in jump input) ----
+        document.addEventListener('keydown', function(event) {
+            const jumpInput = document.getElementById('jump-input');
+            if (document.activeElement === jumpInput) return;
+
+            switch (event.key) {
+                case 'ArrowLeft':
+                    event.preventDefault();
+                    prevCard();
+                    break;
+                case 'ArrowRight':
+                    event.preventDefault();
+                    if (!answerVisible) {
+                        showAnswer();
+                    } else {
+                        nextCard();
+                    }
+                    break;
+                case ' ':
+                    event.preventDefault();
+                    if (!answerVisible) {
+                        showAnswer();
+                    } else {
+                        nextCard();
+                    }
+                    break;
+                case 'Escape':
+                    event.preventDefault();
+                    hideAnswer();
+                    break;
+            }
+        });
+
+        // ---- Jump-to-card handler (Enter key on input) ----
+        document.getElementById('jump-input').addEventListener('keydown', function(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                jumpTo(this.value);
+            }
+        });
+
+        // ---- Initial render ----
+        // Restore line-wrap preference from localStorage
+        const savedWrap = localStorage.getItem('lineWrapEnabled');
+        lineWrapEnabled = savedWrap === 'true';
+        document.getElementById('wrap-toggle-input').checked = lineWrapEnabled;
+        applyLineWrap();
+
+        renderCard();
+    </script>
+
+</body>
+</html>

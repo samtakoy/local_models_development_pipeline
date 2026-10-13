@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Конвертер температур</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="page-wrapper">
+        <div class="card" id="temp-card">
+            <!-- Карточка: #temp-card — JS меняет класс для цвета -->
+            <h1 class="card-title">Конвертер температур</h1>
+            <p class="card-subtitle">Введите температуру и нажмите «Перевести»</p>
+
+            <div class="form-container">
+                <!-- Поле ввода температуры -->
+                <div class="input-group">
+                    <input type="text" id="temp-input" placeholder="Например: 36.6" autocomplete="off">
+                </div>
+
+                <!-- Индикатор направления -->
+                <div class="direction-indicator" id="direction-display"><span>°C → °F</span></div>
+
+                <!-- Кнопка переключения направления ⇄ -->
+                <button type="button" id="toggle-direction" class="btn-toggle" title="Переключить направление">⇄</button>
+
+                <!-- Кнопка «Перевести» -->
+                <button id="convert-btn" class="btn-primary">Перевести</button>
+                <!-- error-area moved inside form-container -->
+                <div id="error-area" class="error-area" style="display: none;">
+                    <div class="error-text" id="error-text"></div>
+                </div>
+            </div>
+
+            <!-- Область результата (под формой) -->
+            <div id="result-area" class="result-area" style="display: none;">
+                <div class="result-label">Результат</div>
+                <div class="result-value" id="result-value"></div>
+            </div>
+
+            <!-- Секция подсказок-примеров -->
+            <div class="examples-section" id="examples-section">
+                <div class="examples-title">Примеры:</div>
+                <div class="example-buttons">
+                    <button type="button" class="btn-example" data-value="0">Вода замерзает 0 °C</button>
+                    <button type="button" class="btn-example" data-value="36.6">Тело 36,6 °C</button>
+                    <button type="button" class="btn-example" data-value="100">Вода кипит 100 °C</button>
+                </div>
+            </div>
+
+
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

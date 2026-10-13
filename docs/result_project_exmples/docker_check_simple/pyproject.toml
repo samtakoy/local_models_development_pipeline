@@ -1,0 +1,16 @@
+[project]
+name = "temperature-converter"
+version = "0.1.0"
+description = "Local web Temperature Converter application"
+requires-python = ">=3.10"
+dependencies = ["flask"]
+
+[dependency-groups]
+dev = ["pytest", "pytest-flask"]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
