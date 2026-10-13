@@ -7,6 +7,12 @@ RUN apt-get update \
         curl procps lsof git net-tools file psmisc jq sqlite3 unzip \
     && rm -rf /var/lib/apt/lists/*
 
+# Берёт Node.js из официального образа: node, npm и npx для серверов MCP
+COPY --from=node:24.13.1-slim /usr/local/bin/node /usr/local/bin/node
+COPY --from=node:24.13.1-slim /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
+
 # Берёт программу uv из официального образа uv
 COPY --from=ghcr.io/astral-sh/uv:0.11.26 /uv /uvx /bin/
 
