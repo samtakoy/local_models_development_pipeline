@@ -32,6 +32,9 @@ CONTEXT_BUCKET_TOKENS = 20_000
 # Значение в таблице, когда данных нет.
 NO_VALUE = "—"
 
+# Разделитель в имени журнала помощника: <журнал агента>.<имя помощника>.
+HELPER_JOURNAL_SEPARATOR = "."
+
 
 @dataclass(frozen = True)
 class RunTotals:
@@ -141,11 +144,12 @@ def load_run_statistics(*, run_dir: Path) -> list[dict[str, Any]]:
     return [json.loads(path.read_text(encoding = "utf-8")) for path in paths]
 
 
-def agent_totals(*, statistics: dict[str, Any]) -> RunTotals:
+def agent_totals(*, statistics: dict[str, Any], run_statistics: list[dict[str, Any]]) -> RunTotals:
     """
-    Считает итоги одного агента.
+    Считает итоги одного агента. Время — вместе с помощниками агента, остальное — только самого агента.
 
         statistics: статистика агента из файла.
+        run_statistics: статистика агентов прогона: в ней ищутся помощники агента.
 
     Возвращает: Итоги агента.
     """
@@ -163,7 +167,7 @@ def agent_totals(*, statistics: dict[str, Any]) -> RunTotals:
 
     return RunTotals(
         agents = 1,
-        seconds = round(statistics["elapsed_seconds"]),
+        seconds = round(agent_seconds(statistics = statistics, run_statistics = run_statistics)),
         model_requests = statistics["model_requests"]["count"],
         input_tokens = statistics["model_requests"]["input_tokens"],
         output_tokens = statistics["model_requests"]["output_tokens"],
@@ -243,7 +247,9 @@ def totals_by_role(*, run_statistics: list[dict[str, Any]]) -> dict[str, list[Ru
     """
     by_role: dict[str, list[RunTotals]] = {}
     for statistics in run_statistics:
-        by_role.setdefault(statistics["role"], []).append(agent_totals(statistics = statistics))
+        by_role.setdefault(statistics["role"], []).append(
+            agent_totals(statistics = statistics, run_statistics = run_statistics)
+        )
 
     return by_role
 
@@ -255,6 +261,34 @@ def run_seconds(*, run_statistics: list[dict[str, Any]]) -> float:
         run_statistics: статистика агентов прогона.
 
     Возвращает: Время прогона, секунды.
+    """
+    return _span_seconds(run_statistics = run_statistics)
+
+
+def agent_seconds(*, statistics: dict[str, Any], run_statistics: list[dict[str, Any]]) -> float:
+    """
+    Считает время агента вместе с помощниками: от старта первого из них до конца последнего. Помощник работает
+    внутри агента (вызов инструмента) или до него (прохождение сценариев до оценщика).
+
+        statistics: статистика агента.
+        run_statistics: статистика агентов прогона: помощники — агенты с журналом
+            <журнал агента><HELPER_JOURNAL_SEPARATOR>...
+
+    Возвращает: Время агента, секунды.
+    """
+    helper_prefix = statistics["journal"] + HELPER_JOURNAL_SEPARATOR
+    helpers = [helper for helper in run_statistics if helper["journal"].startswith(helper_prefix)]
+
+    return _span_seconds(run_statistics = [statistics, *helpers])
+
+
+def _span_seconds(*, run_statistics: list[dict[str, Any]]) -> float:
+    """
+    Считает время от старта первого агента до конца последнего.
+
+        run_statistics: статистика агентов.
+
+    Возвращает: Время, секунды.
     """
     starts = [datetime.fromisoformat(statistics["started_at"]) for statistics in run_statistics]
     ends = [
@@ -496,7 +530,10 @@ def run_report(*, run_dir: Path) -> str:
     if not run_statistics:
         return f"В {run_dir} нет файлов статистики *{STATISTICS_FILE_SUFFIX}"
 
-    agents = {statistics["journal"]: [agent_totals(statistics = statistics)] for statistics in run_statistics}
+    agents = {
+        statistics["journal"]: [agent_totals(statistics = statistics, run_statistics = run_statistics)]
+        for statistics in run_statistics
+    }
     roles = totals_by_role(run_statistics = run_statistics)
     all_agents = [totals[0] for totals in agents.values()]
     agents_with_problems = {

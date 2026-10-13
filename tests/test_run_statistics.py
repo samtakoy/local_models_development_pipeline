@@ -5,7 +5,7 @@ from pathlib import Path
 from langchain_core.messages import AIMessage, ToolMessage
 
 from codeteam.app.run_statistics import RUN_REPORT_FILE_NAME, WarmupCost, agent_totals, load_run_statistics, max_context, \
-    run_report, run_seconds, speed_by_context, sum_totals, tokens_per_second, tool_error_percent, totals_by_role, \
+    agent_seconds, run_report, run_seconds, speed_by_context, sum_totals, tokens_per_second, tool_error_percent, totals_by_role, \
     tool_phase_counts, unknown_tool_calls, unused_tools_by_role, warmup_cost, window_overflows, write_run_report
 from codeteam.core.agent.statistics import REPEATED_RESULT_STOP_COUNTER, SERVER_ERROR_RETRY_COUNTER, \
     STATISTICS_FILE_SUFFIX, WORK_PHASE, AgentStatistics
@@ -52,7 +52,9 @@ def test_totals_by_agent_role_and_run(tmp_path: Path) -> None:
 
     run_statistics = load_run_statistics(run_dir = tmp_path)
     roles = {role: sum_totals(totals = totals) for role, totals in totals_by_role(run_statistics = run_statistics).items()}
-    run_total = sum_totals(totals = [agent_totals(statistics = statistics) for statistics in run_statistics])
+    run_total = sum_totals(totals = [
+        agent_totals(statistics = statistics, run_statistics = run_statistics) for statistics in run_statistics
+    ])
 
     assert [statistics["journal"] for statistics in run_statistics] == ["05_developer_r1", "06_developer_review_r1", "07_developer_r2"]
     assert list(roles) == ["developer", "developer_review"]
@@ -77,7 +79,8 @@ def test_loop_to_draft_is_not_counted_as_limit(tmp_path: Path) -> None:
     statistics.count_in_phase(name = REPEATED_RESULT_STOP_COUNTER, phase = WORK_PHASE)
     statistics.write(path = tmp_path / f"01_bro_check_r1{STATISTICS_FILE_SUFFIX}")
 
-    totals = agent_totals(statistics = load_run_statistics(run_dir = tmp_path)[0])
+    run_statistics = load_run_statistics(run_dir = tmp_path)
+    totals = agent_totals(statistics = run_statistics[0], run_statistics = run_statistics)
 
     assert (totals.limit_notices, totals.loops_to_draft, totals.loops_to_reset) == (0, 1, 0)
 
@@ -101,6 +104,34 @@ def test_run_seconds_from_first_start_to_last_end() -> None:
     ]
 
     assert run_seconds(run_statistics = run_statistics) == 160.0
+
+
+def test_agent_seconds_with_helpers_inside_and_before() -> None:
+    """
+    Время агента — вместе с помощниками: помощник внутри агента время не меняет, помощник до агента добавляет
+    своё время; чужие агенты не учитываются.
+    """
+    developer = {"journal": "06_developer_r1", "started_at": "2026-10-11T10:00:00", "elapsed_seconds": 100.0}
+    developer_helper = {
+        "journal": "06_developer_r1.bro_check_r1",
+        "started_at": "2026-10-11T10:00:30",
+        "elapsed_seconds": 20.0,
+    }
+    scenarios_helper = {
+        "journal": "24_web_scenarios_tester_r1.bro_check_r1",
+        "started_at": "2026-10-11T11:00:00",
+        "elapsed_seconds": 300.0,
+    }
+    scenarios_tester = {
+        "journal": "24_web_scenarios_tester_r1",
+        "started_at": "2026-10-11T11:10:00",
+        "elapsed_seconds": 60.0,
+    }
+    other_agent = {"journal": "06_developer_r10", "started_at": "2026-10-11T09:00:00", "elapsed_seconds": 10.0}
+    run_statistics = [developer, developer_helper, scenarios_helper, scenarios_tester, other_agent]
+
+    assert agent_seconds(statistics = developer, run_statistics = run_statistics) == 100.0
+    assert agent_seconds(statistics = scenarios_tester, run_statistics = run_statistics) == 660.0
 
 
 def test_report_file_in_run_dir(tmp_path: Path) -> None:
@@ -160,7 +191,8 @@ def test_speed_and_error_percent_of_agent(tmp_path: Path) -> None:
     Скорость агента — выходные токены на время генерации; процент ошибок — ошибки на вызовы.
     """
     _write_agent(run_dir = tmp_path, role_name = "developer", journal_name = "05_developer_r1", input_tokens = 100, tool_errors = 1)
-    totals = agent_totals(statistics = load_run_statistics(run_dir = tmp_path)[0])
+    run_statistics = load_run_statistics(run_dir = tmp_path)
+    totals = agent_totals(statistics = run_statistics[0], run_statistics = run_statistics)
 
     assert tool_error_percent(totals = totals) == 50.0
     # в записанном запросе нет данных о времени генерации
