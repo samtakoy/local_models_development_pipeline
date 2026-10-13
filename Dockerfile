@@ -11,11 +11,14 @@ WORKDIR /app
 COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
 
+# Окружение python вне /app: подключённая папка проекта его не закрывает
+ENV UV_PROJECT_ENVIRONMENT=/venvs/project
+
 # Ставит зависимости ровно по uv.lock, без группы dev
 RUN uv sync --frozen --no-dev
 
 # Делает команды окружения (codeteam) доступными по имени
-ENV PATH="/app/.venv/bin:$PATH"
+ENV PATH="/venvs/project/bin:$PATH"
 
 # Команда по умолчанию при запуске контейнера
 CMD ["codeteam", "--help"]
