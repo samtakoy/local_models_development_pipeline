@@ -85,7 +85,8 @@ def run_agent(
         config = OllamaConfig(
             base_url = settings.ollama_base_url,
             model = role.model_name,
-            context_window = settings.agent_ctx_window
+            context_window = settings.agent_ctx_window,
+            max_output_tokens = settings.max_output_tokens,
         ),
         # выключенное размышление — параметры выборки режима без размышления
         generation_mode = (

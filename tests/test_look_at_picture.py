@@ -55,6 +55,7 @@ def _caller_context(*, project_dir: Path, vision_model: str | None) -> CallerCon
         ollama_base_url = "http://127.0.0.1:11434",
         agent_model = "qwen3.5:9b",
         agent_ctx_window = 32000,
+        max_output_tokens = 32000,
         runs_dir = project_dir / "runs",
         prompts_db_dir = project_dir / "prompts_db",
         vision_model = vision_model,

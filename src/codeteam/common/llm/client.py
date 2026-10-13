@@ -29,11 +29,13 @@ class OllamaConfig:
         base_url: адрес сервера без /v1.
         model: имя модели как его знает сервер.
         context_window: окно контекста модели в токенах (num_ctx); без него ollama берёт 32768.
+        max_output_tokens: предел токенов одного ответа модели вместе с размышлением (num_predict).
     """
 
     base_url: str
     model: str
     context_window: int
+    max_output_tokens: int
 
 
 class ChatOllamaWithSampling(ChatOllama):
@@ -98,6 +100,7 @@ def build_chat_model(
         base_url = config.base_url,
         model = config.model,
         num_ctx = config.context_window,
+        num_predict = config.max_output_tokens,
         reasoning = ollama_think(level = level),
         client_kwargs = {"timeout": REQUEST_TIMEOUT_SECONDS},
         sync_client_kwargs = {"transport": httpx.HTTPTransport(retries = MAX_RETRIES)},

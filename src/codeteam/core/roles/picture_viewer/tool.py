@@ -65,6 +65,7 @@ def build_describe_picture_tool(caller_context: CallerContext) -> BaseTool | Non
             base_url = settings.ollama_base_url,
             model = settings.vision_model,
             context_window = settings.vision_ctx_window,
+            max_output_tokens = settings.max_output_tokens,
         ),
         generation_mode = GenerationMode.THINKING,
         reasoning_level = ReasoningLevel.NONE,

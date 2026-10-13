@@ -129,6 +129,7 @@ async def run_probe(*, model: str, url: str, task: str) -> None:
             base_url = settings.ollama_base_url,
             model = model,
             context_window = settings.agent_ctx_window,
+            max_output_tokens = settings.max_output_tokens,
         ),
         generation_mode = GenerationMode.THINKING,
         reasoning_level = ReasoningLevel.LOW,

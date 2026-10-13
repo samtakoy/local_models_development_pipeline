@@ -30,7 +30,12 @@ def test_chat_model_without_reasoning(generation_mode: GenerationMode) -> None:
     Клиент модели с уровнем NONE не просит размышления в любом режиме.
     """
     chat_model = build_chat_model(
-        config = OllamaConfig(base_url = "http://127.0.0.1:11434", model = "qwen3.5:9b", context_window = 1000),
+        config = OllamaConfig(
+            base_url = "http://127.0.0.1:11434",
+            model = "qwen3.5:9b",
+            context_window = 1000,
+            max_output_tokens = 1000,
+        ),
         generation_mode = generation_mode,
         reasoning_level = ReasoningLevel.NONE,
     )

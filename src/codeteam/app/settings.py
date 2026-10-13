@@ -20,6 +20,8 @@ class Settings:
 
         ollama_base_url: адрес сервера ollama без /v1.
         agent_model: модель агентов команды; AGENT_MODEL.
+        max_output_tokens: предел токенов одного ответа модели вместе с размышлением: обрывает зациклившееся
+            размышление; MAX_OUTPUT_TOKENS, не задана — 32000.
         runs_dir: каталог папок прогонов: журналы запусков агентов; относительный путь считается
             от папки файла .env.
         prompts_db_dir: папка базы промптов: копии версий файлов промптов; относительный путь считается
@@ -41,6 +43,7 @@ class Settings:
     ollama_base_url: str
     agent_model: str
     agent_ctx_window: int
+    max_output_tokens: int
     runs_dir: Path
     prompts_db_dir: Path
     vision_model: str | None
@@ -67,6 +70,7 @@ def load_settings() -> Settings:
         ollama_base_url = _require(name = "OLLAMA_BASE_URL"),
         agent_model = _require(name = "AGENT_MODEL"),
         agent_ctx_window = agent_ctx_window,
+        max_output_tokens = int(os.getenv("MAX_OUTPUT_TOKENS", 32000)),
         runs_dir = dotenv_path.parent / _require(name = "CODETEAM_RUNS_DIR"),
         prompts_db_dir = dotenv_path.parent / _require(name = "CODETEAM_PROMPTS_DB_DIR"),
         vision_model = os.getenv("VISION_MODEL", "").strip() or None,
