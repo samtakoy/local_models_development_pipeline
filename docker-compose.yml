@@ -13,6 +13,11 @@ services:
       # Браузер Playwright MCP: Chromium из образа, без песочницы Chromium (в контейнере всё работает от root)
       PLAYWRIGHT_MCP_BROWSER: chromium
       PLAYWRIGHT_MCP_NO_SANDBOX: "true"
+      # Автор коммитов codeteam в проекте агентов
+      GIT_AUTHOR_NAME: codeteam
+      GIT_AUTHOR_EMAIL: codeteam@localhost
+      GIT_COMMITTER_NAME: codeteam
+      GIT_COMMITTER_EMAIL: codeteam@localhost
 
     volumes:
       # Папка codeteam: код, .env, прогоны
