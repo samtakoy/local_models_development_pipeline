@@ -21,3 +21,9 @@ services:
       - ${PROJECT:?задайте PROJECT - путь к проекту агентов}:${PROJECT}
       # Окружение python проекта агентов в безымянном томе: .venv на Mac не трогается
       - ${PROJECT}/.venv
+      # Кэш скачанных пакетов uv между запусками; только папка uv: рядом в /root/.cache лежит Chromium
+      - uv_cache:/root/.cache/uv
+
+# Именованные тома: хранит Docker, живут дольше контейнеров
+volumes:
+  uv_cache:
