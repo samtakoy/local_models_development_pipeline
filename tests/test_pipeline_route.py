@@ -270,8 +270,8 @@ def test_config_roles(tmp_path: Path) -> None:
         pipeline = "browser_check = true\nlibrary_docs = true\n",
     )
 
-    assert load_project_config(setup_dir = with_roles).roles == ("pm", "researcher")
-    assert load_project_config(setup_dir = without_roles).roles == DEFAULT_ROLES
+    assert load_project_config(setup_dir = with_roles, workspaces_dir = tmp_path).roles == ("pm", "researcher")
+    assert load_project_config(setup_dir = without_roles, workspaces_dir = tmp_path).roles == DEFAULT_ROLES
 
 
 @pytest.mark.parametrize(
@@ -291,7 +291,10 @@ def test_config_browser_check_error(tmp_path: Path, pipeline: str) -> None:
     или проверке по сценариям в списке ролей файл состава не читается.
     """
     with pytest.raises(ConfigError):
-        load_project_config(setup_dir = _write_set_file(setup_dir = tmp_path / "setup", pipeline = pipeline))
+        load_project_config(
+            setup_dir = _write_set_file(setup_dir = tmp_path / "setup", pipeline = pipeline),
+            workspaces_dir = tmp_path,
+        )
 
 
 @pytest.mark.parametrize(
@@ -307,7 +310,7 @@ def test_config_browser_check_off(tmp_path: Path, roles: str) -> None:
         pipeline = f"browser_check = false\nlibrary_docs = true\nroles = {roles}\n",
     )
 
-    assert load_project_config(setup_dir = setup_dir).browser_check is False
+    assert load_project_config(setup_dir = setup_dir, workspaces_dir = tmp_path).browser_check is False
 
 
 class FakeRoles:
@@ -452,3 +455,23 @@ def test_graph_resumes_from_saved_state(fake_roles: FakeRoles, project_dir: Path
     assert fake_roles.order == [
         "developer", "developer_review", "senior", "developer", "developer_review", "web_tester", "acceptance",
     ]
+
+
+@pytest.mark.parametrize(
+    ("project", "expected_path"),
+    [("demo", "workspaces/demo"), ("/tmp/project", "/tmp/project")],
+)
+def test_config_project_path(tmp_path: Path, project: str, expected_path: str) -> None:
+    """
+    Относительный путь проекта считается от папки рабочих проектов, полный остаётся как есть.
+    """
+    setup_dir = tmp_path / "setup"
+    setup_dir.mkdir()
+    (setup_dir / "set.toml").write_text(
+        f'project = "{project}"\n[task]\nquestion = "q"\n[pipeline]\nbrowser_check = true\nlibrary_docs = true\n',
+        encoding = "utf-8",
+    )
+
+    project_settings = load_project_config(setup_dir = str(setup_dir), workspaces_dir = tmp_path / "workspaces")
+
+    assert project_settings.path == str(tmp_path / expected_path)

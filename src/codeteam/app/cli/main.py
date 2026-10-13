@@ -25,7 +25,7 @@ def main():
     arguments = _parse_arguments()
     confirm_unprotected_run()
     settings = load_settings()
-    project = load_project_config(setup_dir = arguments.setup_dir)
+    project = load_project_config(setup_dir = arguments.setup_dir, workspaces_dir = settings.workspaces_dir)
     run_dir = settings.runs_dir / make_run_dir_name(model_name = settings.agent_model)
     logger.info(f"проект: {project.path}")
     logger.info(f"задача: {project.task}")

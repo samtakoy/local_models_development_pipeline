@@ -57,7 +57,7 @@ def main() -> None:
 
     arguments = parse_arguments()
     settings = load_settings()
-    project = load_project_config(setup_dir = arguments.setup_dir)
+    project = load_project_config(setup_dir = arguments.setup_dir, workspaces_dir = settings.workspaces_dir)
     project_dir = Path(project.path).resolve()
 
     run_dir = settings.runs_dir / f"{make_run_dir_name(model_name = arguments.model)}_bro_check"

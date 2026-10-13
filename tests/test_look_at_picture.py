@@ -58,6 +58,7 @@ def _caller_context(*, project_dir: Path, vision_model: str | None) -> CallerCon
         max_output_tokens = 32000,
         runs_dir = project_dir / "runs",
         prompts_db_dir = project_dir / "prompts_db",
+        workspaces_dir = project_dir / "workspaces",
         vision_model = vision_model,
         vision_ctx_window = 16000,
         browser_headless = True,

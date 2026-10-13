@@ -26,3 +26,6 @@ wheels/
 
 # Свой кэш npm: пакеты серверов MCP
 /.npm-cache/
+
+# Рабочие проекты агентов: короткий путь project в set.toml
+/workspaces/

@@ -11,7 +11,15 @@ from codeteam.core.roles.web_tester import WEB_TESTER_ROLE
 class ConfigError(ValueError):
     """Файл состава не собирается в прогон."""
 
-def load_project_config(setup_dir: str) -> ProjectSettings:
+def load_project_config(*, setup_dir: str, workspaces_dir: Path) -> ProjectSettings:
+    """
+    Читает файл состава set.toml из папки задачи.
+
+        setup_dir: папка задачи с файлом set.toml.
+        workspaces_dir: папка рабочих проектов: от неё считается относительный путь проекта.
+
+    Возвращает: Проект и задачу прогона; путь проекта полный.
+    """
     config_data = _read_toml(path = Path(setup_dir) / "set.toml")
     pipeline_data = config_data.get("pipeline", {})
     roles = _parse_roles(pipeline_data = pipeline_data)
@@ -25,7 +33,7 @@ def load_project_config(setup_dir: str) -> ProjectSettings:
         )
 
     return ProjectSettings(
-        path = config_data["project"],
+        path = str(workspaces_dir / config_data["project"]),
         task = config_data["task"]["question"],
         roles = roles,
         browser_check = browser_check,

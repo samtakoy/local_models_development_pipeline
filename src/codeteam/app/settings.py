@@ -26,6 +26,8 @@ class Settings:
             от папки файла .env.
         prompts_db_dir: папка базы промптов: копии версий файлов промптов; относительный путь считается
             от папки файла .env.
+        workspaces_dir: папка рабочих проектов агентов: от неё считается относительный путь проекта из set.toml;
+            CODETEAM_WORKSPACES_DIR, не задана — workspaces; относительный путь считается от папки файла .env.
         vision_model: модель, которая смотрит картинки для инструмента describe_picture; VISION_MODEL,
             не задана — инструмента нет.
         vision_ctx_window: окно контекста смотрящей модели в токенах; VISION_CTX_WINDOW, не задана — окно агентов.
@@ -46,6 +48,7 @@ class Settings:
     max_output_tokens: int
     runs_dir: Path
     prompts_db_dir: Path
+    workspaces_dir: Path
     vision_model: str | None
     vision_ctx_window: int
     browser_headless: bool
@@ -64,6 +67,7 @@ def load_settings() -> Settings:
     """
     dotenv_path = Path(find_dotenv(usecwd = True))
     load_dotenv(dotenv_path)
+    base_dir = dotenv_path.parent
     agent_ctx_window = int(os.getenv("AGENT_CTX_WINDOW", 120000))
 
     return Settings(
@@ -71,14 +75,15 @@ def load_settings() -> Settings:
         agent_model = _require(name = "AGENT_MODEL"),
         agent_ctx_window = agent_ctx_window,
         max_output_tokens = int(os.getenv("MAX_OUTPUT_TOKENS", 32000)),
-        runs_dir = dotenv_path.parent / _require(name = "CODETEAM_RUNS_DIR"),
-        prompts_db_dir = dotenv_path.parent / _require(name = "CODETEAM_PROMPTS_DB_DIR"),
+        runs_dir = base_dir / _require(name = "CODETEAM_RUNS_DIR"),
+        prompts_db_dir = base_dir / _require(name = "CODETEAM_PROMPTS_DB_DIR"),
+        workspaces_dir = base_dir / os.getenv("CODETEAM_WORKSPACES_DIR", "workspaces"),
         vision_model = os.getenv("VISION_MODEL", "").strip() or None,
         vision_ctx_window = int(os.getenv("VISION_CTX_WINDOW", agent_ctx_window)),
         browser_headless = os.getenv("BROWSER_HEADLESS", "true").strip().lower() != "false",
         context7_api_key = os.getenv("CONTEXT7_API_KEY", "").strip() or None,
         context7_check_key_at_start = os.getenv("CONTEXT7_CHECK_KEY_AT_START", "false").strip().lower() == "true",
-        npm_cache_dir = dotenv_path.parent / NPM_CACHE_DIR_NAME,
+        npm_cache_dir = base_dir / NPM_CACHE_DIR_NAME,
         playwright_mcp_environment = {
             name: value for name, value in os.environ.items() if name.startswith(PLAYWRIGHT_MCP_ENVIRONMENT_PREFIX)
         },

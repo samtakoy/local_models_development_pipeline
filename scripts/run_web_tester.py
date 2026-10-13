@@ -53,7 +53,7 @@ def main() -> None:
     arguments = parse_arguments()
     confirm_unprotected_run()
     settings = load_settings()
-    project = load_project_config(setup_dir = arguments.setup_dir)
+    project = load_project_config(setup_dir = arguments.setup_dir, workspaces_dir = settings.workspaces_dir)
     if not project.browser_check:
         raise SystemExit(f"в {arguments.setup_dir}/set.toml проверка в браузере выключена: browser_check = false")
     project_dir = Path(project.path).resolve()
