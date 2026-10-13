@@ -11,6 +11,9 @@ wheels/
 
 .idea
 
+# Служебные файлы Finder на macOS
+.DS_Store
+
 .env
 /docs/flashcards/
 
