@@ -22,13 +22,24 @@ services:
     volumes:
       # Папка codeteam: код, .env, прогоны
       - .:/app
-      # Проект агентов по тому же пути, что на Mac: путь из переменной PROJECT
-      - ${PROJECT:?задайте PROJECT - путь к проекту агентов}:${PROJECT}
-      # Окружение python проекта агентов в безымянном томе: .venv на Mac не трогается
-      - ${PROJECT}/.venv
+      # Проект агентов в томе docker по тому же пути, что на Mac: путь из переменной PROJECT.
+      # В папку Mac песочница Landlock писать не даёт (Docker Desktop), в том — даёт
+      - project:${PROJECT:?задайте PROJECT - путь к проекту агентов}
       # Кэш скачанных пакетов uv между запусками; только папка uv: рядом в /root/.cache лежит Chromium
       - uv_cache:/root/.cache/uv
 
+  # Копирует проект агентов между папкой Mac и томом: аргументы запуска — аргументы rsync
+  sync:
+    build: .
+    image: codeteam
+    entrypoint: ["rsync"]
+    volumes:
+      # Проект агентов на Mac
+      - ${PROJECT:?задайте PROJECT - путь к проекту агентов}:/host_project
+      # Тот же том, что у codeteam
+      - project:${PROJECT}
+
 # Именованные тома: хранит Docker, живут дольше контейнеров
 volumes:
+  project:
   uv_cache:
