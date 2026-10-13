@@ -1,9 +1,0 @@
-project = "/Users/samtakot/devs/learnings/llm-eng/homework/test_code/cards"
-
-[task]
-question = """Добавить команду stats: по каждой колоде показать число карточек, сколько из них к повторению
-сегодня и сколько ни разу не повторялись; в конце — итог по всей библиотеке. Покрыть тестами."""
-
-[pipeline]
-browser_check = true
-library_docs = true

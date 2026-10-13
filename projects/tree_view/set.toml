@@ -1,8 +1,0 @@
-project = "/Users/samtakot/devs/learnings/llm-eng/homework/test_code/tree-view-proto"
-
-[task]
-question = "Опиши архитектуру проекта верхнеуровнево."
-
-[pipeline]
-browser_check = true
-library_docs = true

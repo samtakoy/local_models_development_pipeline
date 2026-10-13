@@ -1,4 +1,4 @@
-project = "/Users/samtakot/devs/learnings/llm-eng/homework/test_code/cardviewer"
+project = "cardviewer"
 
 [task]
 question = """Нужно сделать локальное веб-приложение для просмотра обучающих карточек.

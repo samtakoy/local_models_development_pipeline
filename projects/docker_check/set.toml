@@ -1,4 +1,4 @@
-project = "/Users/samtakot/devs/learnings/llm-eng/homework/test_code/docker_check"
+project = "docker_check"
 
 [task]
 question = """Локальное веб-приложение «Конвертер температур».
