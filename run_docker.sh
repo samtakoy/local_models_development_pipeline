@@ -9,6 +9,10 @@ cd "$(dirname "$0")"
 
 setup_dir="$1"
 
+# Собирает образ codeteam: при первом запуске — целиком, дальше — только изменённые шаги
+echo "сборка образа codeteam: первый раз — несколько минут"
+docker build -q -t codeteam . > /dev/null
+
 # Путь проекта, который видит codeteam в контейнере: считает сам codeteam по set.toml и настройкам
 PROJECT_CONTAINER_DIR=$(docker run --rm -v "$PWD":/app --entrypoint python codeteam -c "
 import sys
