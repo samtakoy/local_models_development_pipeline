@@ -10,6 +10,9 @@ services:
     environment:
       # Ollama на Mac, адрес из контейнера
       OLLAMA_BASE_URL: http://host.docker.internal:11434
+      # Браузер Playwright MCP: Chromium из образа, без песочницы Chromium (в контейнере всё работает от root)
+      PLAYWRIGHT_MCP_BROWSER: chromium
+      PLAYWRIGHT_MCP_NO_SANDBOX: "true"
 
     volumes:
       # Папка codeteam: код, .env, прогоны

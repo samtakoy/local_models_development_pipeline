@@ -9,6 +9,9 @@ from dotenv import find_dotenv, load_dotenv
 # Папка своего кэша npm рядом с файлом .env: в неё npx скачивает пакеты серверов MCP.
 NPM_CACHE_DIR_NAME = ".npm-cache"
 
+# Начало имён переменных окружения, которые передаются серверу Playwright MCP.
+PLAYWRIGHT_MCP_ENVIRONMENT_PREFIX = "PLAYWRIGHT_MCP_"
+
 
 @dataclass(frozen = True)
 class Settings:
@@ -31,6 +34,8 @@ class Settings:
             CONTEXT7_CHECK_KEY_AT_START, не задана — без проверки.
         npm_cache_dir: свой кэш npm, куда npx скачивает пакеты серверов MCP: папка NPM_CACHE_DIR_NAME рядом
             с файлом .env.
+        playwright_mcp_environment: переменные окружения сервера Playwright MCP: переменные процесса
+            с началом имени PLAYWRIGHT_MCP_ENVIRONMENT_PREFIX.
     """
 
     ollama_base_url: str
@@ -44,6 +49,7 @@ class Settings:
     context7_api_key: str | None
     context7_check_key_at_start: bool
     npm_cache_dir: Path
+    playwright_mcp_environment: dict[str, str]
 
 
 def load_settings() -> Settings:
@@ -69,6 +75,9 @@ def load_settings() -> Settings:
         context7_api_key = os.getenv("CONTEXT7_API_KEY", "").strip() or None,
         context7_check_key_at_start = os.getenv("CONTEXT7_CHECK_KEY_AT_START", "false").strip().lower() == "true",
         npm_cache_dir = dotenv_path.parent / NPM_CACHE_DIR_NAME,
+        playwright_mcp_environment = {
+            name: value for name, value in os.environ.items() if name.startswith(PLAYWRIGHT_MCP_ENVIRONMENT_PREFIX)
+        },
     )
 
 

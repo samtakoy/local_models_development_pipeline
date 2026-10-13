@@ -61,19 +61,20 @@ def playwright_server(caller_context: CallerContext) -> McpServer:
         command = NPX_COMMAND,
         args = args,
         cwd = project_dir,
-        env = {},
+        env = dict(caller_context.cfg.settings.playwright_mcp_environment),
         check_call = partial(check_playwright_filename, project_dir = project_dir),
         excluded_tool_names = PLAYWRIGHT_EXCLUDED_TOOL_NAMES,
     )
 
 
-def warm_up_browser(*, work_dir: Path, npm_cache_dir: Path) -> None:
+def warm_up_browser(*, work_dir: Path, npm_cache_dir: Path, environment: dict[str, str]) -> None:
     """
     Скачивает Playwright MCP в свой кэш npm, запускает сервер и открывает в браузере пустую страницу.
     Ошибку поднимает PipelineError.
 
         work_dir: рабочая папка сервера и папка его файлов; создаётся, если её нет.
         npm_cache_dir: свой кэш npm.
+        environment: переменные окружения сервера Playwright MCP.
     """
     logger.info(f"[браузер] прогрев {PLAYWRIGHT_MCP_PACKAGE}: скачивание и запуск браузера")
     download_command = [
@@ -109,7 +110,7 @@ def warm_up_browser(*, work_dir: Path, npm_cache_dir: Path) -> None:
             package_args = (*PLAYWRIGHT_ARGS, "--output-dir", str(work_dir), "--headless"),
         ),
         cwd = work_dir,
-        env = {},
+        env = dict(environment),
         check_call = None,
         excluded_tool_names = PLAYWRIGHT_EXCLUDED_TOOL_NAMES,
     )

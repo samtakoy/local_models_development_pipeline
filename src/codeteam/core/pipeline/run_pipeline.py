@@ -51,7 +51,11 @@ def run_pipeline(
         _check_resume_state(resume_state = resume_state, roles = project.roles)
 
     if project.browser_check:
-        warm_up_browser(work_dir = run_dir / BROWSER_WARM_UP_DIR_NAME, npm_cache_dir = settings.npm_cache_dir)
+        warm_up_browser(
+            work_dir = run_dir / BROWSER_WARM_UP_DIR_NAME,
+            npm_cache_dir = settings.npm_cache_dir,
+            environment = settings.playwright_mcp_environment,
+        )
 
     if project.library_docs and any(role_name in project.roles for role_name in LIBRARY_DOCS_ROLE_NAMES):
         warm_up_documentation(

@@ -63,6 +63,7 @@ def _caller_context(*, project_dir: Path, vision_model: str | None) -> CallerCon
         context7_api_key = None,
         context7_check_key_at_start = False,
         npm_cache_dir = project_dir / ".npm-cache",
+        playwright_mcp_environment = {},
     )
 
     return CallerContext(
