@@ -78,7 +78,11 @@ def main() -> None:
     logger.info(f"проект: {project_dir}")
     logger.info(f"прогон: {run_dir}")
     try:
-        warm_up_browser(work_dir = run_dir / BROWSER_WARM_UP_DIR_NAME)
+        warm_up_browser(
+            work_dir = run_dir / BROWSER_WARM_UP_DIR_NAME,
+            npm_cache_dir = settings.npm_cache_dir,
+            environment = settings.playwright_mcp_environment,
+        )
     except PipelineError as error:
         raise SystemExit(str(error)) from error
 
@@ -90,6 +94,7 @@ def main() -> None:
                 model_name = arguments.model,
                 roles = project.roles,
                 browser_check = project.browser_check,
+                library_docs = False,
                 settings = settings,
             )
         }
