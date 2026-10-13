@@ -13,6 +13,10 @@ COPY --from=node:24.13.1-slim /usr/local/lib/node_modules /usr/local/lib/node_mo
 RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 
+# Ставит Chromium и его системные библиотеки той версией Playwright, что входит в Playwright MCP
+RUN npx -y --package=@playwright/mcp@0.0.83 playwright install --with-deps chromium \
+    && rm -rf /var/lib/apt/lists/* /root/.npm
+
 # Берёт программу uv из официального образа uv
 COPY --from=ghcr.io/astral-sh/uv:0.11.26 /uv /uvx /bin/
 
