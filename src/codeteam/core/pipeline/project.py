@@ -2,6 +2,7 @@
 советник по документации."""
 
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass(frozen = True)
@@ -10,6 +11,7 @@ class ProjectSettings:
     Настройки проекта.
 
         path: папка проекта.
+        start_dir: папка начального содержимого проекта: копируется в папку проекта, если её нет или она пустая.
         task: задача пользователя.
         roles: последовательность ролей пайплайна.
         browser_check: проверка приложения в браузере: веб-тестировщик и инструмент check_in_browser.
@@ -17,6 +19,7 @@ class ProjectSettings:
     """
 
     path: str
+    start_dir: Path
     task: str
     roles: tuple[str, ...]
     browser_check: bool

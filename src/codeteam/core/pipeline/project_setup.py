@@ -33,19 +33,22 @@ class UncommittedChangesError(RuntimeError):
     """В репозитории проекта есть незакоммиченные правки."""
 
 
-def prepare_project(*, project_dir: Path, run_name: str, archive_private_dirs: bool) -> None:
+def prepare_project(*, project_dir: Path, start_dir: Path, run_name: str, archive_private_dirs: bool) -> None:
     """
     Готовит папку проекта к прогону.
 
+    Заполняет папку проекта из папки начального содержимого, если папки проекта нет или она пустая.
     Репозитория нет — создаёт его и коммитит исходное состояние проекта. Репозиторий есть —
     проверяет, что незакоммиченных правок нет. Дописывает в .gitignore строки GITIGNORE_LINES.
     Переносит прежнее содержимое папки личных папок в архив прогона, если это задано.
 
         project_dir: папка проекта.
+        start_dir: папка начального содержимого проекта.
         run_name: имя прогона: имя папки архива.
         archive_private_dirs: перенести прежние личные папки в архив; False - при продолжении прогона,
             состояние которого ссылается на них.
     """
+    fill_from_start_dir(project_dir = project_dir, start_dir = start_dir)
     fresh_repository = not is_repository(project_dir = project_dir)
     if fresh_repository:
         init_repository(project_dir = project_dir)
@@ -65,6 +68,24 @@ def prepare_project(*, project_dir: Path, run_name: str, archive_private_dirs: b
 
     if archive_private_dirs:
         _archive_private_root(project_dir = project_dir, run_name = run_name)
+
+
+def fill_from_start_dir(*, project_dir: Path, start_dir: Path) -> None:
+    """
+    Копирует содержимое папки начального содержимого в папку проекта, если папки проекта нет или она пустая,
+    а папка начального содержимого есть.
+
+        project_dir: папка проекта.
+        start_dir: папка начального содержимого проекта.
+    """
+    if not start_dir.is_dir():
+        return
+
+    if project_dir.exists() and any(project_dir.iterdir()):
+        return
+
+    shutil.copytree(start_dir, project_dir, dirs_exist_ok = True)
+    logger.info(f"[проект] папка {project_dir} заполнена из {start_dir}")
 
 
 def _add_gitignore_lines(*, project_dir: Path) -> bool:

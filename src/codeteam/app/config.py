@@ -8,6 +8,10 @@ from codeteam.core.roles.web_scenarios_tester import WEB_SCENARIOS_TESTER_ROLE
 from codeteam.core.roles.web_tester import WEB_TESTER_ROLE
 
 
+# Папка начального содержимого проекта в папке задачи, рядом с set.toml.
+START_DIR_NAME = "start_folder"
+
+
 class ConfigError(ValueError):
     """Файл состава не собирается в прогон."""
 
@@ -34,6 +38,7 @@ def load_project_config(*, setup_dir: str, workspaces_dir: Path) -> ProjectSetti
 
     return ProjectSettings(
         path = str(workspaces_dir / config_data["project"]),
+        start_dir = Path(setup_dir) / START_DIR_NAME,
         task = config_data["task"]["question"],
         roles = roles,
         browser_check = browser_check,

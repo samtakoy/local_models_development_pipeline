@@ -29,3 +29,5 @@ wheels/
 
 # Рабочие проекты агентов: короткий путь project в set.toml
 /workspaces/
+/projects/
+

@@ -67,6 +67,7 @@ def run_pipeline(
 
     prepare_project(
         project_dir = Path(project.path).resolve(),
+        start_dir = project.start_dir,
         run_name = run_dir.name,
         archive_private_dirs = resume_state is None,
     )
