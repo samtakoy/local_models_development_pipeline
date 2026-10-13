@@ -24,6 +24,10 @@ case "$PROJECT_CONTAINER_DIR" in
 esac
 mkdir -p "$PROJECT_HOST_DIR"
 export PROJECT_CONTAINER_DIR PROJECT_HOST_DIR
+
+# Часовой пояс машины: контейнер показывает время так же, как она
+TZ=$(readlink /etc/localtime | sed 's|.*zoneinfo/||')
+export TZ
 echo "проект агентов: $PROJECT_HOST_DIR"
 
 # Копирует проект с Mac в том: том становится точной копией; .venv не переносится, прежний .venv тома удаляется

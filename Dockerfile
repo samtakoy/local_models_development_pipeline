@@ -4,7 +4,7 @@ FROM python:3.13.9-slim
 # Ставит программы, которыми пользуются агенты и codeteam
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        curl procps lsof git net-tools file psmisc jq sqlite3 unzip rsync \
+        curl procps lsof git net-tools iproute2 file psmisc jq sqlite3 unzip rsync \
     && rm -rf /var/lib/apt/lists/*
 
 # Берёт Node.js из официального образа: node, npm и npx для серверов MCP
