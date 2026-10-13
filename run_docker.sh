@@ -2,6 +2,7 @@
 # Запускает codeteam в контейнере на задаче из папки задачи с set.toml.
 # Проект агентов работает в томе docker: перед прогоном копируется туда с Mac, после прогона — обратно.
 # Запуск: ./run_docker.sh <папка задачи> [аргументы codeteam], например ./run_docker.sh projects/cardviewer
+# Забрать результат из тома на Mac без прогона: ./run_docker.sh <папка задачи> --pull
 set -e
 
 # Папка codeteam: в ней docker-compose.yml, от неё считается путь папки задачи
@@ -27,12 +28,33 @@ case "$PROJECT_CONTAINER_DIR" in
     *) PROJECT_HOST_DIR="$PROJECT_CONTAINER_DIR" ;;
 esac
 mkdir -p "$PROJECT_HOST_DIR"
-export PROJECT_CONTAINER_DIR PROJECT_HOST_DIR
+
+# Том проекта в Docker: свой у каждого проекта — имя папки и отпечаток её полного пути
+project_name=$(basename "$PROJECT_HOST_DIR" | tr -c 'a-zA-Z0-9_.\n-' '_')
+path_print=$(printf '%s' "$PROJECT_HOST_DIR" | shasum | cut -c1-8)
+PROJECT_VOLUME="codeteam_project_${project_name}_${path_print}"
+export PROJECT_CONTAINER_DIR PROJECT_HOST_DIR PROJECT_VOLUME
 
 # Часовой пояс машины: контейнер показывает время так же, как она
 TZ=$(readlink /etc/localtime | sed 's|.*zoneinfo/||')
 export TZ
-echo "проект агентов: $PROJECT_HOST_DIR"
+echo "проект агентов: $PROJECT_HOST_DIR, том: $PROJECT_VOLUME"
+
+# Копирует результат из тома на Mac: папка становится точной копией тома; свой .venv на Mac не трогается
+copy_to_host() {
+    docker compose run --rm sync -a --delete --exclude /.venv /volume_project/ /host_project/
+}
+
+# --pull: только забрать результат из тома на Mac, без прогона — когда прошлый запуск не успел скопировать его сам
+if [ "$2" = "--pull" ]; then
+    if ! docker volume inspect "$PROJECT_VOLUME" > /dev/null 2>&1; then
+        echo "тома $PROJECT_VOLUME нет: этот проект в Docker ещё не запускался"
+        exit 1
+    fi
+    copy_to_host
+    echo "результат скопирован в $PROJECT_HOST_DIR"
+    exit 0
+fi
 
 # Копирует проект с Mac в том: том становится точной копией; .venv не переносится, прежний .venv тома удаляется
 docker compose run --rm sync -a --delete --delete-excluded --exclude /.venv /host_project/ /volume_project/
@@ -43,7 +65,6 @@ trap ':' INT
 docker compose run --rm codeteam "$@" || status=$?
 trap - INT
 
-# Копирует результат из тома на Mac: папка становится точной копией тома; свой .venv на Mac не трогается
-docker compose run --rm sync -a --delete --exclude /.venv /volume_project/ /host_project/
+copy_to_host
 
 exit $status

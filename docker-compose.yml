@@ -43,5 +43,7 @@ services:
 
 # Именованные тома: хранит Docker, живут дольше контейнеров
 volumes:
+  # Том проекта агентов: свой у каждого проекта, имя задаёт run_docker.sh
   project:
+    name: ${PROJECT_VOLUME:?запускайте через run_docker.sh}
   uv_cache:
