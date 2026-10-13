@@ -77,7 +77,7 @@ def load_settings() -> Settings:
     dotenv_path = Path(find_dotenv(usecwd = True))
     load_dotenv(dotenv_path)
     base_dir = dotenv_path.parent
-    agent_ctx_window = int(os.getenv("AGENT_CTX_WINDOW", 120000))
+    agent_ctx_window = int(os.getenv("AGENT_CTX_WINDOW", 125000))
 
     return Settings(
         ollama_base_url = _require(name = "OLLAMA_BASE_URL"),
