@@ -47,6 +47,10 @@ def main():
     except PipelineError as error:
         logger.error(f"прогон остановлен: {error}")
         sys.exit(1)
+    except KeyboardInterrupt:
+        # остановка по Ctrl+C: код возврата 130
+        logger.error("прогон остановлен пользователем")
+        sys.exit(130)
     finally:
         # отчёт статистики пишется и после остановки прогона: по уже отработавшим агентам
         logger.info(f"статистика прогона: {write_run_report(run_dir = run_dir)}")
