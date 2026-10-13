@@ -22,6 +22,12 @@ class Settings:
         agent_model: модель агентов команды; AGENT_MODEL.
         max_output_tokens: предел токенов одного ответа модели вместе с размышлением: обрывает зациклившееся
             размышление; MAX_OUTPUT_TOKENS, не задана — 32000.
+        history_token_limit: мягкий лимит входных токенов агента: сверх него агент переходит к фазе черновика;
+            HISTORY_TOKEN_LIMIT, не задана — 60000.
+        history_token_hard_limit: жёсткий лимит входных токенов агента: фаза черновика включается и во время
+            записи ответа; HISTORY_TOKEN_HARD_LIMIT, не задана — 90000.
+        response_token_reserve: запас токенов окна модели на её ответ: потолок фазы черновика — окно агентов
+            без этого запаса; RESPONSE_TOKEN_RESERVE, не задана — 16000.
         runs_dir: каталог папок прогонов: журналы запусков агентов; относительный путь считается
             от папки файла .env.
         prompts_db_dir: папка базы промптов: копии версий файлов промптов; относительный путь считается
@@ -46,6 +52,9 @@ class Settings:
     agent_model: str
     agent_ctx_window: int
     max_output_tokens: int
+    history_token_limit: int
+    history_token_hard_limit: int
+    response_token_reserve: int
     runs_dir: Path
     prompts_db_dir: Path
     workspaces_dir: Path
@@ -75,6 +84,9 @@ def load_settings() -> Settings:
         agent_model = _require(name = "AGENT_MODEL"),
         agent_ctx_window = agent_ctx_window,
         max_output_tokens = int(os.getenv("MAX_OUTPUT_TOKENS", 32000)),
+        history_token_limit = int(os.getenv("HISTORY_TOKEN_LIMIT", 60000)),
+        history_token_hard_limit = int(os.getenv("HISTORY_TOKEN_HARD_LIMIT", 90000)),
+        response_token_reserve = int(os.getenv("RESPONSE_TOKEN_RESERVE", 16000)),
         runs_dir = base_dir / _require(name = "CODETEAM_RUNS_DIR"),
         prompts_db_dir = base_dir / _require(name = "CODETEAM_PROMPTS_DB_DIR"),
         workspaces_dir = base_dir / os.getenv("CODETEAM_WORKSPACES_DIR", "workspaces"),

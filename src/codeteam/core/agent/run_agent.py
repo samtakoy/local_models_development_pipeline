@@ -30,9 +30,6 @@ from codeteam.core.tools.shell import BASH_TOOL_NAME, START_SERVICE_TOOL_NAME, S
     build_stop_process_tool
 
 
-# Запас токенов окна модели на её ответ.
-RESPONSE_TOKEN_RESERVE = 16000
-
 # Предел шагов графа агента, одинаковый для любого места запуска: без явного значения агент, запущенный
 # из инструмента другого агента, получает предел вызова инструмента — 25 шагов.
 AGENT_RECURSION_LIMIT = 10000
@@ -238,10 +235,10 @@ def run_agent(
                     *project_docs_reads,
                     *_input_reads(project_dir = project_dir, input_dirs = input_dirs),
                 ],
-                history_token_limit = 60000,
+                history_token_limit = settings.history_token_limit,
                 soft_limit_extra_steps = 2,
-                history_token_hard_limit = 90000,
-                context_window_limit = settings.agent_ctx_window - RESPONSE_TOKEN_RESERVE,
+                history_token_hard_limit = settings.history_token_hard_limit,
+                context_window_limit = settings.agent_ctx_window - settings.response_token_reserve,
                 max_resets = 10,
                 limit_notice = limit_notice,
                 reinit_notice = reinit_notice,
