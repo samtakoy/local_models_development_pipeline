@@ -1,0 +1,12 @@
+project = "/Users/samtakot/devs/learnings/llm-eng/homework/test_code/docker_check"
+
+[task]
+question = """Локальное веб-приложение «Конвертер температур».
+На главной странице поле ввода числа, выбор направления (°C → °F или °F → °C) и кнопка «Перевести».
+После нажатия под формой показывается результат с точностью до одного знака.
+Если ввели не число — понятное сообщение об ошибке, и приложение не падает."""
+
+[pipeline]
+browser_check = true
+library_docs = true
+roles = ["pm", "researcher", "architect", "architect_review", "senior", "developer", "developer_review", "tester", "web_scenarios", "web_scenarios_tester", "acceptance"]
